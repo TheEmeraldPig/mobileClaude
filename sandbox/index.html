@@ -7,73 +7,39 @@
 <style>
   :root {
     color-scheme: dark;
-    --bg: #101216; --panel: #1b1f27; --line: #2c3340; --fg: #e8ecf2; --muted: #8a94a6; --accent: #f2b84b;
-    --btn: 64px;
+    --bg: #101216; --fg: #e8ecf2; --muted: #8a94a6; --line: #2c3340;
+    --stick: 110px;
   }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
   [hidden] { display: none !important; }
-  #app { display: flex; flex-direction: column; height: 100%; }
-  #top { display: flex; gap: 5px; padding: 5px max(8px, env(safe-area-inset-right, 0px)) 5px max(8px, env(safe-area-inset-left, 0px)); align-items: center; overflow-x: auto; background: var(--panel); border-bottom: 1px solid var(--line); }
-  #top button, #hover, #settings button { font: inherit; font-weight: 600; border-radius: 8px; cursor: pointer; }
-  .tool { padding: 5px 10px; border: 2px solid transparent; color: #111; font-size: 13px !important; flex: none; }
-  .tool.active { border-color: var(--fg); }
-  #gear { margin-left: auto; padding: 5px 10px; background: var(--line); color: var(--fg); border: 0; font-size: 13px !important; flex: none; }
-  #stage { flex: 1; position: relative; min-height: 0; overflow: hidden; }
-  #view { position: absolute; left: 0; top: 0; display: block; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #stage { position: relative; width: 100%; height: 100%; overflow: hidden; }
+  #view { position: absolute; inset: 0; display: block; }
 
-  /* HUD: levitation energy */
-  #hud { position: absolute; top: 8px; left: max(8px, env(safe-area-inset-left, 0px)); display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
+  #hud { position: absolute; top: max(10px, env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
   #energy { width: 120px; height: 10px; border-radius: 5px; background: rgba(255,255,255,.08); border: 1px solid var(--line); overflow: hidden; }
   #energy i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #8a6cff, #c9a7ff); }
   #energy.low i { background: #f07a6a; }
 
-  /* Touch controls, overlaid on the world */
-  #controls { position: absolute; inset: 0; pointer-events: none; }
-  #stick { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); width: calc(var(--btn) * 2); height: calc(var(--btn) * 2); border-radius: 50%; background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.15); pointer-events: auto; touch-action: none; }
-  #knob { position: absolute; left: 50%; top: 50%; width: var(--btn); height: var(--btn); margin: calc(var(--btn) / -2) 0 0 calc(var(--btn) / -2); border-radius: 50%; background: rgba(232,236,242,.35); }
-  #hover { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); width: calc(var(--btn) * 1.3); height: calc(var(--btn) * 1.3); border-radius: 50%; border: 2px solid rgba(201,167,255,.5); background: rgba(138,108,255,.2); color: var(--fg); font-size: calc(var(--btn) * 0.2); pointer-events: auto; touch-action: none; }
-  #hover.down { background: rgba(138,108,255,.6); }
+  #hint { position: absolute; top: max(10px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); max-width: 50%; text-align: right; font-size: 12px; color: var(--muted); pointer-events: none; transition: opacity 1s; }
 
-  /* Ask for landscape on tall screens */
+  #stick { position: absolute; width: var(--stick); height: var(--stick); margin: calc(var(--stick) / -2) 0 0 calc(var(--stick) / -2); border-radius: 50%; background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.15); touch-action: none; transition: border-color .2s, background .2s; }
+  #stick.moving { border-color: #c9a7ff; background: rgba(138,108,255,.2); }
+  #knob { position: absolute; left: 50%; top: 50%; width: 50%; height: 50%; margin: -25% 0 0 -25%; border-radius: 50%; background: rgba(232,236,242,.35); pointer-events: none; }
+
   #rotate { position: fixed; inset: 0; z-index: 5; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; background: var(--bg); }
   #rotate .phone { width: 46px; height: 80px; border: 3px solid var(--fg); border-radius: 8px; animation: turn 2s ease-in-out infinite; }
   @keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
   @media (prefers-reduced-motion: reduce) { #rotate .phone { animation: none; transform: rotate(-90deg); } }
   #rotate button { padding: 8px 14px; background: var(--line); color: var(--fg); border: 0; border-radius: 8px; font: inherit; }
   @media (orientation: portrait) { body:not(.anyway) #rotate { display: flex; } }
-  #settings { position: absolute; right: 8px; top: 8px; width: min(300px, calc(100% - 16px)); box-sizing: border-box; padding: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.5); z-index: 2; }
-  #settings h2 { margin: 0; font-size: 15px; }
-  #settings label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
-  #settings label span { display: flex; justify-content: space-between; }
-  #settings label b { color: var(--fg); font-variant-numeric: tabular-nums; }
-  #settings .row { display: flex; align-items: center; gap: 8px; color: var(--fg); }
-  #settings input[type=range] { width: 100%; accent-color: var(--accent); }
-  #close { padding: 8px; background: var(--accent); color: #111; border: 0; }
-  .hint { font-size: 12px; color: var(--muted); margin: 0; }
 </style>
 </head>
 <body>
-<div id="app">
-  <div id="top"><button id="gear" aria-label="Settings">⚙ Settings</button></div>
-  <div id="stage">
-    <canvas id="view"></canvas>
-    <div id="settings" hidden>
-      <h2>Settings</h2>
-      <label for="s-cell"><span>Pixel size <b id="v-cell"></b></span><input id="s-cell" type="range" min="1" max="8" step="1"></label>
-      <label for="s-brush"><span>Brush size <b id="v-brush"></b></span><input id="s-brush" type="range" min="1" max="12" step="1"></label>
-      <label for="s-speed"><span>Player speed <b id="v-speed"></b></span><input id="s-speed" type="range" min="1" max="6" step="0.5"></label>
-      <label for="s-lev"><span>Levitation time <b id="v-lev"></b></span><input id="s-lev" type="range" min="1" max="15" step="0.5"></label>
-      <label for="s-btn"><span>Control size <b id="v-btn"></b></span><input id="s-btn" type="range" min="36" max="80" step="4"></label>
-      <label class="row" for="s-pad"><input id="s-pad" type="checkbox"> Show touch controls</label>
-      <p class="hint">Keyboard: A/D or arrows to move. Hold W, Up or Space to levitate.</p>
-      <button id="close">Done</button>
-    </div>
-    <div id="hud">Levitation <div id="energy"><i></i></div></div>
-    <div id="controls">
-      <div id="stick" aria-label="Movement stick"><div id="knob"></div></div>
-      <button id="hover" aria-label="Levitate">LEVITATE</button>
-    </div>
-  </div>
+<div id="stage">
+  <canvas id="view"></canvas>
+  <div id="hud">Levitation <div id="energy"><i></i></div></div>
+  <div id="hint">Push the stick up to levitate. Touch anywhere to look around. Hold the stick still to move it.</div>
+  <div id="stick" aria-label="Movement stick"><div id="knob"></div></div>
 </div>
 <div id="rotate">
   <div class="phone"></div>
@@ -82,118 +48,87 @@
 </div>
 <script>
 const EMPTY = 0, SAND = 1, WATER = 2, STONE = 3;
-const TYPES = [
-  { id: SAND,  name: 'Sand',  color: '#e2c26b' },
-  { id: WATER, name: 'Water', color: '#3b8ee8' },
-  { id: STONE, name: 'Stone', color: '#8d93a0' },
-  { id: EMPTY, name: 'Erase', color: '#d6dae2' },
-];
-const RGB = { [SAND]: [226, 194, 107], [WATER]: [59, 142, 232], [STONE]: [141, 147, 160] };
-
-// ---- Settings (saved per browser) ----
-const settings = { cell: 3, brush: 4, speed: 2.5, lev: 5, btn: 52, pad: true };
-try { Object.assign(settings, JSON.parse(localStorage.getItem('sandbox-settings') || '{}')); } catch (e) {}
-const save = () => { try { localStorage.setItem('sandbox-settings', JSON.stringify(settings)); } catch (e) {} };
-
-// ---- World ----
-let W = 0, H = 0, cell = settings.cell, grid = new Uint8Array(0);
-let current = SAND;
+const CELL = 2;                    // screen px per world pixel
+const BG = [16, 18, 22];
+const RGB = { [SAND]: [226, 194, 107], [WATER]: [59, 142, 232], [STONE]: [120, 126, 140] };
 
 const stage = document.getElementById('stage');
 const view = document.getElementById('view');
 const vctx = view.getContext('2d');
 const off = document.createElement('canvas');
 const octx = off.getContext('2d');
-let img = null;
 
-// Player position/size are in screen px; the world is in cells.
-const player = { x: 40, y: 0, w: 10, h: 20, vx: 0, vy: 0, onGround: false, inWater: false, face: 1, energy: 1, lifting: false };
+let SW = 0, SH = 0;                // screen size in px
+let VW = 0, VH = 0, img = null;    // visible area in cells
 
-// Rebuild the grid for the current stage size / pixel size, keeping content anchored to the bottom.
-function rebuild(newCell) {
-  const oldW = W, oldH = H, old = grid, oldCell = cell;
-  cell = newCell;
-  const sw = stage.clientWidth, sh = stage.clientHeight;
-  W = Math.max(10, Math.floor(sw / cell));
-  H = Math.max(10, Math.floor(sh / cell));
-  grid = new Uint8Array(W * H);
-  if (old.length) {
-    const r = oldCell / cell; // new cells per old cell
-    for (let y = 0; y < H; y++) {
-      const oy = oldH - 1 - Math.floor((H - 1 - y) / r);
-      if (oy < 0 || oy >= oldH) continue;
-      for (let x = 0; x < W; x++) {
-        const ox = Math.floor(x / r);
-        if (ox < oldW) grid[y * W + x] = old[oy * oldW + ox];
+// ---- World generation ----
+const big = Math.max(innerWidth, innerHeight);
+const W = Math.round(big / CELL * 3), H = Math.round(big / CELL * 1.5);
+const grid = new Uint8Array(W * H);
+const shade = new Int8Array(W * H);
+for (let i = 0; i < shade.length; i++) shade[i] = (Math.random() * 20 - 10) | 0;
+
+function noise1D(scale) {
+  const pts = Array.from({ length: Math.ceil(W / scale) + 2 }, () => Math.random() * 2 - 1);
+  return x => {
+    const f = x / scale, i = Math.floor(f), t = (1 - Math.cos((f - i) * Math.PI)) / 2;
+    return pts[i] * (1 - t) + pts[i + 1] * t;
+  };
+}
+function generate() {
+  const hills = noise1D(220), bumps = noise1D(60), grit = noise1D(14), depth = noise1D(40);
+  const surface = new Int32Array(W);
+  for (let x = 0; x < W; x++) {
+    const s = Math.floor(H * 0.45 + hills(x) * H * 0.2 + bumps(x) * H * 0.05 + grit(x) * H * 0.012);
+    surface[x] = s;
+    const sandDepth = 6 + Math.floor((depth(x) + 1) * 6);
+    for (let y = Math.max(0, s); y < H; y++) grid[y * W + x] = y < s + sandDepth ? SAND : STONE;
+  }
+  // Caves: random worms carved through the ground
+  for (let k = 0; k < W / 90; k++) {
+    let x = Math.random() * W, y = H * 0.55 + Math.random() * H * 0.4, a = Math.random() * Math.PI * 2;
+    const len = 80 + Math.random() * 200;
+    for (let s = 0; s < len; s++) {
+      a += (Math.random() - 0.5) * 0.5;
+      x += Math.cos(a) * 2; y += Math.sin(a) * 1.2;
+      const r = 4 + Math.random() * 5;
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const cx = (x + dx) | 0, cy = (y + dy) | 0;
+        if (dx * dx + dy * dy <= r * r && cx >= 0 && cx < W && cy >= 0 && cy < H) grid[cy * W + cx] = EMPTY;
       }
     }
-    // keep the player at the same spot relative to the bottom
-    player.y = H * cell - (oldH * oldCell - player.y);
   }
-  off.width = W; off.height = H;
-  img = octx.createImageData(W, H);
-  const dpr = window.devicePixelRatio || 1;
-  view.width = W * cell * dpr; view.height = H * cell * dpr;
-  view.style.width = W * cell + 'px'; view.style.height = H * cell + 'px';
-  view.style.left = Math.floor((sw - W * cell) / 2) + 'px';
-  vctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  vctx.imageSmoothingEnabled = false;
-  player.x = Math.min(Math.max(0, player.x), W * cell - player.w);
-  unstick();
+  // Lakes in the valleys
+  const waterLevel = Math.floor(H * 0.5);
+  for (let x = 0; x < W; x++)
+    for (let y = waterLevel; y < surface[x] && y < H; y++) if (grid[y * W + x] === EMPTY) grid[y * W + x] = WATER;
+  // Spawn the player on dry ground near the middle
+  let sx = W >> 1;
+  for (let d = 0; d < W / 2; d++) { if (surface[sx + d] < waterLevel) { sx += d; break; } if (surface[sx - d] < waterLevel) { sx -= d; break; } }
+  player.x = sx * CELL; player.y = (surface[sx] - 15) * CELL;
 }
 
-function seedWorld() {
-  // A little starting terrain so the player has something to stand on
-  for (let x = 0; x < W; x++) {
-    const ground = Math.floor(H * 0.85 + Math.sin(x / W * 6) * H * 0.04);
-    for (let y = ground; y < H; y++) grid[y * W + x] = y > ground + 3 ? STONE : SAND;
-  }
-  player.x = W * cell * 0.2; player.y = 0;
-}
+// ---- Player (screen px units) ----
+const player = { x: 0, y: 0, w: 10, h: 20, vx: 0, vy: 0, onGround: false, inWater: false, face: 1, energy: 1, lifting: false };
+const LEV_SECONDS = 5, SPEED = 2.5;
 
-// ---- Toolbar ----
-const topBar = document.getElementById('top');
-const gear = document.getElementById('gear');
-for (const t of TYPES) {
-  const b = document.createElement('button');
-  b.className = 'tool' + (t.id === current ? ' active' : '');
-  b.textContent = t.name;
-  b.style.background = t.color;
-  b.onclick = () => {
-    current = t.id;
-    topBar.querySelectorAll('.tool').forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
-  };
-  topBar.insertBefore(b, gear);
+let px0 = 0, px1 = -1, py0 = 0, py1 = -1;
+function updatePlayerCells() {
+  px0 = Math.floor(player.x / CELL); px1 = Math.floor((player.x + player.w - 0.01) / CELL);
+  py0 = Math.floor(player.y / CELL); py1 = Math.floor((player.y + player.h - 0.01) / CELL);
 }
-const clearBtn = document.createElement('button');
-clearBtn.className = 'tool'; clearBtn.textContent = 'Clear'; clearBtn.style.background = '#f07a6a';
-clearBtn.onclick = () => grid.fill(EMPTY);
-topBar.insertBefore(clearBtn, gear);
+const inPlayer = (x, y) => x >= px0 && x <= px1 && y >= py0 && y <= py1;
+const isSolid = t => t === SAND || t === STONE;
 
-// ---- Settings panel ----
-const panel = document.getElementById('settings');
-const pad = document.getElementById('controls');
-gear.onclick = () => panel.hidden = !panel.hidden;
-document.getElementById('close').onclick = () => panel.hidden = true;
-document.getElementById('anyway').onclick = () => { document.body.classList.add('anyway'); rebuild(cell); };
-const fmt = { cell: v => v + 'px', brush: v => v, speed: v => v, lev: v => v + 's', btn: v => v + 'px' };
-for (const key of ['cell', 'brush', 'speed', 'lev', 'btn']) {
-  const input = document.getElementById('s-' + key), out = document.getElementById('v-' + key);
-  input.value = settings[key]; out.textContent = fmt[key](settings[key]);
-  input.oninput = () => {
-    settings[key] = +input.value; out.textContent = fmt[key](settings[key]); save();
-    if (key === 'cell') rebuild(settings.cell);
-    if (key === 'btn') applyPad();
-  };
+function hits(x, y) {
+  const x0 = Math.floor(x / CELL), x1 = Math.floor((x + player.w - 0.01) / CELL);
+  const y0 = Math.floor(y / CELL), y1 = Math.floor((y + player.h - 0.01) / CELL);
+  if (x0 < 0 || x1 >= W || y1 >= H) return true;
+  for (let cy = Math.max(0, y0); cy <= y1; cy++)
+    for (let cx = x0; cx <= x1; cx++) if (isSolid(grid[cy * W + cx])) return true;
+  return false;
 }
-const padToggle = document.getElementById('s-pad');
-padToggle.checked = settings.pad;
-padToggle.onchange = () => { settings.pad = padToggle.checked; save(); applyPad(); };
-function applyPad() {
-  pad.hidden = !settings.pad;
-  document.documentElement.style.setProperty('--btn', settings.btn + 'px');
-}
+function unstick() { for (let i = 0; i < H * CELL && hits(player.x, player.y); i++) player.y -= 1; }
 
 // ---- Input ----
 const keys = { left: false, right: false, lev: false };
@@ -202,91 +137,97 @@ addEventListener('keydown', e => { if (keyMap[e.key]) { keys[keyMap[e.key]] = tr
 addEventListener('keyup', e => { if (keyMap[e.key]) keys[keyMap[e.key]] = false; });
 addEventListener('contextmenu', e => e.preventDefault());
 
-// Left stick: x axis moves (analog), pushing up also levitates
+// Joystick: x moves, pushing up levitates. Hold it still for a moment to drag it somewhere else.
 const stick = document.getElementById('stick'), knob = document.getElementById('knob');
-let stickX = 0, stickUp = false, stickId = null;
+let stickPos = { x: 0.14, y: 0.75 };            // fraction of the screen
+try { Object.assign(stickPos, JSON.parse(localStorage.getItem('sandbox-stick') || '{}')); } catch (e) {}
+function placeStick() { stick.style.left = stickPos.x * 100 + '%'; stick.style.top = stickPos.y * 100 + '%'; }
+placeStick();
+
+let stickX = 0, stickUp = false, stickId = null, holdTimer = 0, movingStick = false, travelled = 0;
 function moveStick(e) {
   const r = stick.getBoundingClientRect(), rad = r.width / 2;
   let dx = e.clientX - (r.left + rad), dy = e.clientY - (r.top + rad);
+  travelled = Math.max(travelled, Math.hypot(dx, dy));
+  if (movingStick) {
+    stickPos.x = Math.min(0.95, Math.max(0.05, e.clientX / SW));
+    stickPos.y = Math.min(0.95, Math.max(0.1, e.clientY / SH));
+    placeStick(); return;
+  }
   const len = Math.hypot(dx, dy);
   if (len > rad) { dx *= rad / len; dy *= rad / len; }
   knob.style.transform = `translate(${dx}px, ${dy}px)`;
   stickX = Math.abs(dx / rad) < 0.15 ? 0 : dx / rad;
-  stickUp = dy / rad < -0.55;
+  stickUp = dy / rad < -0.5;
 }
-function releaseStick() { stickId = null; stickX = 0; stickUp = false; knob.style.transform = ''; }
-stick.addEventListener('pointerdown', e => { e.preventDefault(); stickId = e.pointerId; stick.setPointerCapture(e.pointerId); moveStick(e); });
+function releaseStick(e) {
+  if (e.pointerId !== stickId) return;
+  clearTimeout(holdTimer);
+  if (movingStick) { try { localStorage.setItem('sandbox-stick', JSON.stringify(stickPos)); } catch (err) {} }
+  stickId = null; stickX = 0; stickUp = false; movingStick = false;
+  stick.classList.remove('moving'); knob.style.transform = '';
+}
+stick.addEventListener('pointerdown', e => {
+  e.preventDefault(); e.stopPropagation();
+  stickId = e.pointerId; travelled = 0; stick.setPointerCapture(e.pointerId); moveStick(e);
+  holdTimer = setTimeout(() => {
+    if (stickId !== null && travelled < 12) { movingStick = true; stickX = 0; stickUp = false; knob.style.transform = ''; stick.classList.add('moving'); }
+  }, 600);
+});
 stick.addEventListener('pointermove', e => { if (e.pointerId === stickId) moveStick(e); });
 stick.addEventListener('pointerup', releaseStick);
 stick.addEventListener('pointercancel', releaseStick);
 
-// Right button: hold to levitate
-const hoverBtn = document.getElementById('hover');
-let hoverHeld = false;
-const hoverOn = e => { e.preventDefault(); hoverHeld = true; hoverBtn.classList.add('down'); hoverBtn.setPointerCapture(e.pointerId); };
-const hoverOff = () => { hoverHeld = false; hoverBtn.classList.remove('down'); };
-hoverBtn.addEventListener('pointerdown', hoverOn);
-hoverBtn.addEventListener('pointerup', hoverOff);
-hoverBtn.addEventListener('pointercancel', hoverOff);
-
-let drawing = false, cx = 0, cy = 0;
-function toCell(e) {
-  const r = view.getBoundingClientRect();
-  cx = Math.floor((e.clientX - r.left) / cell);
-  cy = Math.floor((e.clientY - r.top) / cell);
+// Touching anywhere else peeks the camera toward the finger, up to half a screen each way
+let peekId = null; const peek = { x: 0, y: 0 };
+function setPeek(e) {
+  peek.x = Math.max(-SW / 2, Math.min(SW / 2, e.clientX - SW / 2));
+  peek.y = Math.max(-SH / 2, Math.min(SH / 2, e.clientY - SH / 2));
 }
-view.addEventListener('pointerdown', e => { panel.hidden = true; drawing = true; toCell(e); view.setPointerCapture(e.pointerId); });
-view.addEventListener('pointermove', e => { if (drawing) toCell(e); });
-view.addEventListener('pointerup', () => drawing = false);
-view.addEventListener('pointercancel', () => drawing = false);
+view.addEventListener('pointerdown', e => { if (peekId === null) { peekId = e.pointerId; view.setPointerCapture(e.pointerId); setPeek(e); } });
+view.addEventListener('pointermove', e => { if (e.pointerId === peekId) setPeek(e); });
+const endPeek = e => { if (e.pointerId === peekId) { peekId = null; peek.x = peek.y = 0; } };
+view.addEventListener('pointerup', endPeek);
+view.addEventListener('pointercancel', endPeek);
 
-function paint() {
-  const br = settings.brush;
-  for (let dy = -br; dy <= br; dy++)
-    for (let dx = -br; dx <= br; dx++) {
-      if (dx * dx + dy * dy > br * br) continue;
-      const x = cx + dx, y = cy + dy;
-      if (x < 0 || x >= W || y < 0 || y >= H || inPlayer(x, y)) continue;
-      if ((current === SAND || current === WATER) && Math.random() < 0.5) continue;
-      grid[y * W + x] = current;
-    }
+document.getElementById('anyway').onclick = () => { document.body.classList.add('anyway'); resize(); };
+setTimeout(() => document.getElementById('hint').style.opacity = 0, 7000);
+
+// ---- Camera ----
+const cam = { x: 0, y: 0 };
+function camTarget() {
+  const tx = player.x + player.w / 2 - SW / 2 + peek.x;
+  const ty = player.y + player.h / 2 - SH / 2 + peek.y;
+  return {
+    x: Math.max(0, Math.min(W * CELL - SW, tx)),
+    y: Math.max(0, Math.min(H * CELL - SH, ty)),
+  };
 }
 
-// ---- Player ----
-let px0 = 0, px1 = -1, py0 = 0, py1 = -1; // player's cell rectangle, used by the sim as solid
-function updatePlayerCells() {
-  px0 = Math.floor(player.x / cell); px1 = Math.floor((player.x + player.w - 0.01) / cell);
-  py0 = Math.floor(player.y / cell); py1 = Math.floor((player.y + player.h - 0.01) / cell);
-}
-const inPlayer = (x, y) => x >= px0 && x <= px1 && y >= py0 && y <= py1;
-const isSolid = t => t === SAND || t === STONE;
-
-function hits(x, y) {
-  const x0 = Math.floor(x / cell), x1 = Math.floor((x + player.w - 0.01) / cell);
-  const y0 = Math.floor(y / cell), y1 = Math.floor((y + player.h - 0.01) / cell);
-  if (x0 < 0 || x1 >= W || y1 >= H) return true;
-  for (let cy = Math.max(0, y0); cy <= y1; cy++)
-    for (let cx = x0; cx <= x1; cx++) if (isSolid(grid[cy * W + cx])) return true;
-  return false;
-}
-function unstick() {
-  for (let i = 0; i < H * cell && hits(player.x, player.y); i++) player.y -= 1;
+function resize() {
+  SW = stage.clientWidth; SH = stage.clientHeight;
+  const dpr = devicePixelRatio || 1;
+  view.width = SW * dpr; view.height = SH * dpr;
+  vctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  vctx.imageSmoothingEnabled = false;
+  VW = Math.ceil(SW / CELL) + 2; VH = Math.ceil(SH / CELL) + 2;
+  off.width = VW; off.height = VH;
+  img = octx.createImageData(VW, VH);
 }
 
+// ---- Player physics ----
 function updatePlayer() {
   const p = player;
-  const mx = cx => { const c = Math.floor((p.x + p.w / 2) / cell), r = Math.floor((p.y + p.h / 2) / cell); return grid[r * W + c]; };
-  p.inWater = mx() === WATER;
-  const speed = settings.speed * (p.inWater ? 0.6 : 1);
+  const c = Math.floor((p.x + p.w / 2) / CELL), r = Math.floor((p.y + p.h / 2) / CELL);
+  p.inWater = r >= 0 && grid[r * W + c] === WATER;
   const dir = Math.max(-1, Math.min(1, (keys.right ? 1 : 0) - (keys.left ? 1 : 0) + stickX));
   if (dir) p.face = Math.sign(dir);
-  p.vx += (dir * speed - p.vx) * 0.35;
+  p.vx += (dir * SPEED * (p.inWater ? 0.6 : 1) - p.vx) * 0.35;
 
-  // Levitation: full bar lasts settings.lev seconds, refills on the ground in about 2s
-  const wantLift = keys.lev || hoverHeld || stickUp;
-  p.lifting = wantLift && p.energy > 0;
+  // A full bar lasts LEV_SECONDS of levitation and refills on the ground in about 2s
+  p.lifting = (keys.lev || stickUp) && p.energy > 0;
   if (p.lifting) {
-    p.energy = Math.max(0, p.energy - 1 / (settings.lev * 60));
+    p.energy = Math.max(0, p.energy - 1 / (LEV_SECONDS * 60));
     p.vy += (-2.2 - p.vy) * 0.15;
   } else {
     p.vy += p.inWater ? 0.15 : 0.45;
@@ -294,8 +235,7 @@ function updatePlayer() {
     if (p.onGround) p.energy = Math.min(1, p.energy + 1 / 120);
   }
 
-  // Horizontal: move 1px at a time, stepping up small ledges
-  const stepUp = Math.max(cell * 2, 6);
+  const stepUp = 6;
   let dx = p.vx;
   while (Math.abs(dx) > 0) {
     const s = Math.sign(dx) * Math.min(1, Math.abs(dx));
@@ -307,7 +247,6 @@ function updatePlayer() {
     }
     dx -= s;
   }
-  // Vertical
   let dy = p.vy; p.onGround = false;
   while (Math.abs(dy) > 0) {
     const s = Math.sign(dy) * Math.min(1, Math.abs(dy));
@@ -315,40 +254,24 @@ function updatePlayer() {
     else { if (s > 0) p.onGround = true; p.vy = 0; break; }
     dy -= s;
   }
-  if (p.y > H * cell) { p.y = 0; } // fell out somehow, drop back in from the top
+  if (p.y < -p.h * 4) { p.y = -p.h * 4; p.vy = 0; }  // soft ceiling above the world
   updatePlayerCells();
 }
 
-function drawPlayer() {
-  const p = player, x = Math.round(p.x), y = Math.round(p.y);
-  vctx.fillStyle = '#3fbf7f'; vctx.fillRect(x, y + 7, p.w, p.h - 11);    // body
-  vctx.fillStyle = '#2b5fa8'; vctx.fillRect(x + 1, y + p.h - 4, 3, 4);   // legs
-  vctx.fillRect(x + p.w - 4, y + p.h - 4, 3, 4);
-  vctx.fillStyle = '#f1c9a5'; vctx.fillRect(x + 1, y, p.w - 2, 7);       // head
-  vctx.fillStyle = '#111';                                                 // eye
-  vctx.fillRect(p.face > 0 ? x + p.w - 4 : x + 2, y + 2, 2, 2);
-  if (p.lifting) {                                                         // glow under the feet
-    vctx.fillStyle = `rgba(201,167,255,${0.4 + Math.random() * 0.4})`;
-    vctx.fillRect(x - 1, y + p.h + 1, p.w + 2, 2);
-    vctx.fillRect(x + 2, y + p.h + 4, p.w - 4, 1);
-  }
-}
-
-const energyEl = document.getElementById('energy'), energyFill = energyEl.firstElementChild;
-function drawHud() {
-  energyFill.style.width = (player.energy * 100).toFixed(1) + '%';
-  energyEl.classList.toggle('low', player.energy < 0.2);
-}
-
-// ---- Sand / water sim ----
+// ---- Sand / water sim (only around the camera) ----
 const get = (x, y) => (x < 0 || x >= W || y < 0 || y >= H || inPlayer(x, y)) ? STONE : grid[y * W + x];
-function swap(a, b) { const t = grid[a]; grid[a] = grid[b]; grid[b] = t; }
-
+function swap(a, b) {
+  let t = grid[a]; grid[a] = grid[b]; grid[b] = t;
+  t = shade[a]; shade[a] = shade[b]; shade[b] = t;
+}
 function step() {
-  for (let y = H - 2; y >= 0; y--) {
+  const m = 60;
+  const x0 = Math.max(0, Math.floor(cam.x / CELL) - m), x1 = Math.min(W - 1, Math.floor(cam.x / CELL) + VW + m);
+  const y0 = Math.max(0, Math.floor(cam.y / CELL) - m), y1 = Math.min(H - 2, Math.floor(cam.y / CELL) + VH + m);
+  for (let y = y1; y >= y0; y--) {
     const ltr = Math.random() < 0.5;
-    for (let i = 0; i < W; i++) {
-      const x = ltr ? i : W - 1 - i;
+    for (let i = x0; i <= x1; i++) {
+      const x = ltr ? i : x1 - (i - x0);
       const idx = y * W + x;
       const t = grid[idx];
       if (t === SAND) {
@@ -375,33 +298,66 @@ function step() {
   }
 }
 
+// ---- Rendering ----
 function render() {
   const data = img.data;
-  for (let i = 0; i < grid.length; i++) {
-    const c = RGB[grid[i]], o = i * 4;
-    if (c) { data[o] = c[0]; data[o + 1] = c[1]; data[o + 2] = c[2]; }
-    else { data[o] = 16; data[o + 1] = 18; data[o + 2] = 22; }
-    data[o + 3] = 255;
+  const ox = Math.floor(cam.x / CELL), oy = Math.floor(cam.y / CELL);
+  for (let vy = 0; vy < VH; vy++) {
+    const y = oy + vy;
+    for (let vx = 0; vx < VW; vx++) {
+      const x = ox + vx, o = (vy * VW + vx) * 4;
+      let c = BG, s = 0;
+      if (x >= 0 && x < W && y >= 0 && y < H) {
+        const i = y * W + x, t = grid[i];
+        if (t) { c = RGB[t]; s = shade[i]; }
+      } else if (y >= H) c = RGB[STONE];
+      data[o] = c[0] + s; data[o + 1] = c[1] + s; data[o + 2] = c[2] + s; data[o + 3] = 255;
+    }
   }
   octx.putImageData(img, 0, 0);
-  vctx.drawImage(off, 0, 0, W * cell, H * cell);
+  const fx = cam.x - ox * CELL, fy = cam.y - oy * CELL;
+  vctx.drawImage(off, -fx, -fy, VW * CELL, VH * CELL);
   drawPlayer();
 }
 
+function drawPlayer() {
+  const p = player, x = Math.round(p.x - cam.x), y = Math.round(p.y - cam.y);
+  vctx.fillStyle = '#3fbf7f'; vctx.fillRect(x, y + 7, p.w, p.h - 11);    // body
+  vctx.fillStyle = '#2b5fa8'; vctx.fillRect(x + 1, y + p.h - 4, 3, 4);   // legs
+  vctx.fillRect(x + p.w - 4, y + p.h - 4, 3, 4);
+  vctx.fillStyle = '#f1c9a5'; vctx.fillRect(x + 1, y, p.w - 2, 7);       // head
+  vctx.fillStyle = '#111';                                                 // eye
+  vctx.fillRect(p.face > 0 ? x + p.w - 4 : x + 2, y + 2, 2, 2);
+  if (p.lifting) {                                                         // glow under the feet
+    vctx.fillStyle = `rgba(201,167,255,${0.4 + Math.random() * 0.4})`;
+    vctx.fillRect(x - 1, y + p.h + 1, p.w + 2, 2);
+    vctx.fillRect(x + 2, y + p.h + 4, p.w - 4, 1);
+  }
+}
+
+const energyEl = document.getElementById('energy'), energyFill = energyEl.firstElementChild;
+function drawHud() {
+  energyFill.style.width = (player.energy * 100).toFixed(1) + '%';
+  energyEl.classList.toggle('low', player.energy < 0.2);
+}
+
 function loop() {
-  if (drawing) paint();
   updatePlayer();
+  const t = camTarget();
+  cam.x += (t.x - cam.x) * 0.1;
+  cam.y += (t.y - cam.y) * 0.1;
   step();
   render();
   drawHud();
   requestAnimationFrame(loop);
 }
 
-addEventListener('resize', () => rebuild(cell));
-pad.hidden = !settings.pad;
-document.documentElement.style.setProperty('--btn', settings.btn + 'px');
-rebuild(settings.cell);
-seedWorld();
+addEventListener('resize', resize);
+resize();
+generate();
+unstick();
+updatePlayerCells();
+Object.assign(cam, camTarget());
 loop();
 </script>
 </body>
