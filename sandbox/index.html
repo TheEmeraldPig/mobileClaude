@@ -88,16 +88,28 @@
   #knob { position: absolute; left: 50%; top: 50%; width: 46%; height: 46%; margin: -23% 0 0 -23%; background: linear-gradient(135deg, var(--l) 0 30%, var(--b) 30% 75%, var(--s) 75%); opacity: .75; pointer-events: none; }
 
   /* Menus */
-  .modal { position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: max(14px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(14px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: rgba(14, 10, 32, .62); }
+  .modal { position: absolute; inset: 0; z-index: 7; display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: max(14px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(14px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: rgba(14, 10, 32, .62); }
   .sheet { --hi: var(--panel-hi); --lo: var(--panel-lo); width: min(500px, calc(100% - 12px)); max-height: calc(100% - 12px); overflow-y: auto; box-sizing: border-box; padding: 16px 18px 20px; background: var(--panel); display: grid; gap: 16px; }
   .head { display: flex; align-items: center; gap: 12px; }
   h1, h2 { font-family: var(--display); font-weight: 700; margin: 0; text-transform: uppercase; letter-spacing: .03em; text-shadow: var(--px) var(--px) 0 var(--o); }
   .head h2 { flex: 1; font-size: 18px; color: var(--l); }
   .label { font-family: var(--display); font-size: 11px; color: var(--t); text-shadow: 2px 2px 0 var(--o); }
   .section { display: grid; gap: 10px; align-content: start; }
-  .slots { display: grid; grid-template-columns: repeat(5, minmax(0, 58px)); gap: 12px; }
+  .slots { display: grid; grid-template-columns: repeat(5, minmax(0, 48px)); gap: 10px; }
   .slot { --hi: #0a0817; --lo: var(--panel-hi); aspect-ratio: 1; background: var(--panel-lo); }
-  .empty-note { margin: 0; font-size: 14px; color: var(--muted); }
+  .empty-note { margin: 0; font-size: 14px; color: var(--muted); min-height: 1.3em; }
+  .slot { position: relative; padding: 0; display: grid; place-items: center; }
+  .slot img { width: 66%; height: 66%; image-rendering: pixelated; pointer-events: none; }
+  .slot .n { position: absolute; right: 5px; bottom: 3px; font-size: 12px; font-weight: 700; text-shadow: 2px 2px 0 var(--o); pointer-events: none; }
+  .slot .k { position: absolute; left: 6px; top: 3px; font-family: var(--display); font-size: 9px; color: var(--muted); pointer-events: none; }
+  .slot.sel { --lo: var(--t); --hi: var(--t); background: #2c2550; }
+  .slot.picked { --lo: var(--b); --hi: var(--l); background: var(--slate); }
+  #hotbar { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(14px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 10px; padding: 8px; background: rgba(19, 16, 39, .78); }
+  #hotbar .slot { width: 50px; height: 50px; }
+  .dbg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; }
+  .dbg-grid .btn { display: flex; align-items: center; gap: 10px; padding: 8px 12px; text-align: left; }
+  .dbg-grid img { width: 24px; height: 24px; image-rendering: pixelated; }
+  .dbg-grid small { display: block; font-size: 11px; color: var(--l); font-weight: 400; }
   .row { display: flex; gap: 14px; flex-wrap: wrap; }
   .row .btn { flex: 1; min-width: 120px; }
   .settings-grid { display: grid; gap: 20px; }
@@ -122,7 +134,7 @@
   .menu-col .btn svg { width: 20px; height: 20px; flex: none; }
   .menu-col .tip { font-size: 12px; color: var(--muted); text-shadow: 2px 2px 0 var(--o); text-align: center; }
 
-  .at-main #hud, .at-main #invBtn, .at-main #stick, .at-main #hint { visibility: hidden; }
+  .at-main #hud, .at-main #invBtn, .at-main #stick, .at-main #hint, .at-main #hotbar { visibility: hidden; }
   #rotate { position: fixed; inset: 0; z-index: 9; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; background: var(--panel); font-family: var(--display); font-size: 13px; color: var(--l); }
   #rotate .phone { width: 42px; height: 72px; background: var(--b); box-shadow: inset 6px 6px 0 var(--l), inset -6px -6px 0 var(--s), 0 -3px 0 var(--o), 0 3px 0 var(--o), -3px 0 0 var(--o), 3px 0 0 var(--o); animation: turn 2s steps(4) infinite; }
   @keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
@@ -134,18 +146,22 @@
 <div id="stage" class="at-main">
   <canvas id="view"></canvas>
   <div id="hud">Levitation <div id="energy" class="px"><i></i></div></div>
-  <div id="hint">Push the stick up to levitate. Touch anywhere to look around. The bag opens your inventory and settings.</div>
+  <div id="hint">Push the stick up to levitate. Pick a hotbar slot, then touch the world to use it. With no slot picked, touch to look around.</div>
   <button id="invBtn" class="btn alt right" aria-label="Inventory"><svg viewBox="0 0 10 10" shape-rendering="crispEdges"><rect x="3" y="0" width="4" height="1" fill="var(--o)"/><rect x="2" y="1" width="1" height="2" fill="var(--o)"/><rect x="7" y="1" width="1" height="2" fill="var(--o)"/><rect x="1" y="3" width="8" height="7" fill="var(--o)"/><rect x="2" y="3" width="6" height="6" fill="var(--l)"/><rect x="3" y="4" width="5" height="5" fill="var(--b)"/><rect x="2" y="8" width="6" height="1" fill="var(--s)"/><rect x="4" y="5" width="2" height="2" fill="var(--t)"/></svg></button>
   <div id="stick" class="pxcircle" aria-label="Movement stick"><div id="knob" class="pxcircle"></div></div>
 
   <div id="invMenu" class="modal" hidden>
     <div class="sheet px" role="dialog" aria-label="Inventory">
       <div class="head"><h2>Inventory</h2><button class="btn alt square close" aria-label="Close"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="0" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="2" height="2"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/></svg></button></div>
-      <div class="slots" id="slots"></div>
-      <p class="empty-note">Nothing collected yet.</p>
+      <div class="label">Hotbar</div>
+      <div class="slots" id="invHot"></div>
+      <div class="label">Backpack</div>
+      <div class="slots" id="invPack"></div>
+      <p class="empty-note" id="invInfo">Tap an item, then tap another slot to move it.</p>
       <div class="row">
         <button class="btn" id="openSettings"><svg viewBox="0 0 7 7" fill="currentColor"><rect x="3" y="0" width="1" height="7"/><rect x="0" y="3" width="7" height="1"/><rect x="1" y="1" width="5" height="5"/><rect x="3" y="3" width="1" height="1" fill="var(--o)"/></svg> Settings</button>
         <button class="btn alt" id="toMain"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="2" y="0" width="2" height="1"/><rect x="1" y="1" width="4" height="1"/><rect x="0" y="2" width="6" height="1"/><rect x="1" y="3" width="4" height="3"/><rect x="2" y="4" width="2" height="2" fill="var(--o)"/></svg> Main menu</button>
+        <button class="btn alt" id="openDebug">Debug</button>
       </div>
     </div>
   </div>
@@ -177,6 +193,18 @@
       </div>
     </div>
   </div>
+
+  <div id="dbgMenu" class="modal" hidden>
+    <div class="sheet settings px" role="dialog" aria-label="Debug">
+      <div class="head"><button class="btn alt square" id="dbgBack" aria-label="Back to inventory"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="2" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="0" y="2" width="6" height="2"/><rect x="1" y="4" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/></svg></button><h2>Debug</h2><button class="btn alt square close" aria-label="Close"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="0" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="2" height="2"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/></svg></button></div>
+      <div class="label">Give item</div>
+      <div class="dbg-grid" id="dbgItems"></div>
+      <div class="row"><button class="btn alt" id="dbgEnergy">Fill energy</button><button class="btn alt" id="dbgClear">Clear inventory</button></div>
+      <p class="note" id="dbgInfo">Tap an item to add it to your inventory.</p>
+    </div>
+  </div>
+
+  <div id="hotbar"></div>
 
   <div id="mainMenu">
     <div class="brand">
@@ -335,11 +363,17 @@ const sfx = {
   click: () => tone(900, 700, 0.05, 0.06, 'square'),
   open: () => { tone(520, 780, 0.08, 0.08, 'triangle'); },
   close: () => { tone(700, 450, 0.08, 0.08, 'triangle'); },
+  dig: () => noise(0.06, 300 + Math.random() * 300, 0.18),
+  slurp: () => noise(0.08, 900 + Math.random() * 400, 0.12, 400),
+  place: () => noise(0.04, 1400 + Math.random() * 400, 0.08),
+  gem: () => { tone(660, 990, 0.12, 0.1, 'triangle'); setTimeout(() => tone(990, 1480, 0.18, 0.08, 'triangle'), 90); },
+  boom: () => { tone(120, 30, 0.6, 0.6); noise(0.7, 600, 0.6, 80); },
+  give: () => tone(800, 1200, 0.07, 0.07, 'square'),
 };
 function updateHum() {
   if (!actx) return;
   const t = actx.currentTime, p = player;
-  humGain.gain.setTargetAtTime(p.lifting ? 0.07 : 0, t, 0.06);
+  humGain.gain.setTargetAtTime(p.lifting && !menuOpen() ? 0.07 : 0, t, 0.06);
   humOsc.frequency.setTargetAtTime(170 + p.energy * 170 + Math.sin(t * 14) * 6, t, 0.05);
 }
 function setSound(on) {
@@ -378,6 +412,7 @@ addEventListener('keydown', e => {
     return;
   }
   if (e.code === 'Escape') { closeMenus(); return; }
+  if (/^Digit[1-5]$/.test(e.code) && !Object.values(prefs.binds).includes(e.code) && !menuOpen()) { selectSlot(+e.code[5] - 1); return; }
   if (e.code === prefs.binds.inv && !e.repeat && mainMenu.hidden) { invMenu.hidden ? openInv() : closeMenus(); e.preventDefault(); return; }
   held.add(e.code);
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space'].includes(e.code) || Object.values(prefs.binds).includes(e.code)) e.preventDefault();
@@ -430,9 +465,17 @@ function setPeek(e) {
   peek.x = Math.max(-SW / 2, Math.min(SW / 2, e.clientX - SW / 2));
   peek.y = Math.max(-SH / 2, Math.min(SH / 2, e.clientY - SH / 2));
 }
-view.addEventListener('pointerdown', e => { if (peekId === null) { peekId = e.pointerId; view.setPointerCapture(e.pointerId); setPeek(e); } });
-view.addEventListener('pointermove', e => { if (e.pointerId === peekId) setPeek(e); });
-const endPeek = e => { if (e.pointerId === peekId) { peekId = null; peek.x = peek.y = 0; } };
+view.addEventListener('pointerdown', e => {
+  const it = selected >= 0 && inv[selected];
+  if (it && useId === null) {          // holding an item: touching the world uses it
+    useId = e.pointerId; view.setPointerCapture(e.pointerId); setAim(e);
+    if (ITEMS[it.id].once) useOnce();
+    return;
+  }
+  if (peekId === null) { peekId = e.pointerId; view.setPointerCapture(e.pointerId); setPeek(e); }
+});
+view.addEventListener('pointermove', e => { if (e.pointerId === peekId) setPeek(e); if (e.pointerId === useId) setAim(e); });
+const endPeek = e => { if (e.pointerId === peekId) { peekId = null; peek.x = peek.y = 0; } if (e.pointerId === useId) useId = null; };
 view.addEventListener('pointerup', endPeek);
 view.addEventListener('pointercancel', endPeek);
 
@@ -441,13 +484,14 @@ const invMenu = document.getElementById('invMenu'), setMenu = document.getElemen
 const mainMenu = document.getElementById('mainMenu');
 const invBtn = document.getElementById('invBtn');
 let settingsFrom = 'inv', started = false;
-const menuOpen = () => !invMenu.hidden || !setMenu.hidden || !mainMenu.hidden;
-function openInv() { setMenu.hidden = true; invMenu.hidden = false; held.clear(); sfx.open(); }
+const dbgMenu = document.getElementById('dbgMenu');
+const menuOpen = () => !invMenu.hidden || !setMenu.hidden || !mainMenu.hidden || !dbgMenu.hidden;
+function openInv() { setMenu.hidden = dbgMenu.hidden = true; invMenu.hidden = false; held.clear(); picked = -1; renderInv(); sfx.open(); }
 function openSettings(from) { settingsFrom = from; invMenu.hidden = true; setMenu.hidden = false; sfx.click(); }
 function closeMenus() {
   if (!mainMenu.hidden) { if (!setMenu.hidden) { setMenu.hidden = true; sfx.close(); } return; }
-  if (invMenu.hidden && setMenu.hidden) return;
-  invMenu.hidden = setMenu.hidden = true; sfx.close();
+  if (invMenu.hidden && setMenu.hidden && dbgMenu.hidden) return;
+  invMenu.hidden = setMenu.hidden = dbgMenu.hidden = true; sfx.close();
   if (listening) { listening.classList.remove('listening'); listening = null; renderBinds(); }
 }
 function showMain() { invMenu.hidden = setMenu.hidden = true; mainMenu.hidden = false; stage.classList.add('at-main'); held.clear(); sfx.close(); }
@@ -462,11 +506,11 @@ document.getElementById('mainSettings').onclick = () => openSettings('main');
 document.getElementById('setBack').onclick = () => { if (settingsFrom === 'main') { setMenu.hidden = true; sfx.close(); } else openInv(); };
 document.getElementById('toMain').onclick = showMain;
 document.getElementById('playBtn').onclick = play;
-document.getElementById('newWorld').onclick = () => { ensureAudio(); generate(); unstick(); updatePlayerCells(); play(); };
+document.getElementById('newWorld').onclick = () => { ensureAudio(); generate(); unstick(); updatePlayerCells(); starterKit(); play(); };
+document.getElementById('openDebug').onclick = () => { invMenu.hidden = true; dbgMenu.hidden = false; sfx.click(); };
+document.getElementById('dbgBack').onclick = openInv;
 document.querySelectorAll('.modal .close').forEach(b => b.onclick = closeMenus);
 document.querySelectorAll('.modal').forEach(m => m.addEventListener('pointerdown', e => { if (e.target === m) closeMenus(); }));
-const slots = document.getElementById('slots');
-for (let i = 0; i < 10; i++) slots.appendChild(Object.assign(document.createElement('div'), { className: 'slot px' }));
 
 // Field of view: 5 levels, 3 is normal. Visible area scales with the level (level / 3).
 let zoom = 1;
@@ -523,6 +567,183 @@ addEventListener('pointerdown', goFullscreen, true);
 
 document.getElementById('anyway').onclick = () => { document.body.classList.add('anyway'); resize(); };
 document.getElementById('hint').hidden = true;
+
+
+// ---- Items, inventory and hotbar ----
+// Icons are 8x8 pixel maps drawn with the same palette as the world and the mote.
+const ICOL = {
+  O: [34, 28, 64], S: [200, 206, 218], s: [130, 136, 150], H: [150, 100, 60], h: [110, 70, 40],
+  M: [170, 176, 190], m: [110, 116, 130], W: [59, 142, 232], w: [140, 196, 250],
+  Y: [226, 194, 107], y: [190, 158, 80], G: [120, 126, 140], g: [90, 96, 110],
+  B: [124, 98, 255], L: [196, 180, 255], D: [90, 67, 214], T: [255, 222, 120], K: [60, 58, 70], k: [100, 98, 112], R: [240, 122, 106],
+};
+const ITEMS = {
+  pickaxe: { name: 'Pickaxe', tool: true, desc: 'Digs sand and stone', icon: [
+    '.SSSSSs.', 'S..hH..s', '...hH...', '...hH...', '...hH...', '...hH...', '...hH...', '...hh...'] },
+  bucket: { name: 'Bucket', tool: true, desc: 'Scoops up water', icon: [
+    '..O..O..', '.O....O.', 'OMMMMMMO', 'OMwWWWmO', '.MWWWWm.', '.MMMMmm.', '..Mmmm..', '........'] },
+  sand: { name: 'Sand', place: SAND, desc: 'Place sand', icon: [
+    'OOOOOOOO', 'OYYyYYYO', 'OYyYYYyO', 'OYYYyYYO', 'OyYYYYYO', 'OYYyYyYO', 'OYYYYYyO', 'OOOOOOOO'] },
+  stone: { name: 'Stone', place: STONE, desc: 'Place stone', icon: [
+    'OOOOOOOO', 'OGGgGGGO', 'OGgGGGgO', 'OGGGgGGO', 'OgGGGGGO', 'OGGgGgGO', 'OGGGGGgO', 'OOOOOOOO'] },
+  water: { name: 'Water', place: WATER, desc: 'Pour water', icon: [
+    '...OO...', '..OwWO..', '..OwWO..', '.OwWWWO.', 'OwWWWWWO', 'OWWWWWWO', '.OWWWWO.', '..OOOO..'] },
+  gem: { name: 'Energy gem', once: true, desc: 'Refills levitation', icon: [
+    '...OO...', '..OLLO..', '.OLBBBO.', 'OBLBBBDO', '.OBBBDO.', '..OBDO..', '...OO...', '........'] },
+  bomb: { name: 'Bomb', once: true, desc: 'Blasts a hole', icon: [
+    '.....T..', '....T...', '..OOOh..', '.OKKKKO.', 'OKkKKKKO', 'OKKKKKKO', '.OKKKKO.', '..OOOO..'] },
+};
+const GIVE = { pickaxe: 1, bucket: 1, sand: 200, stone: 200, water: 200, gem: 5, bomb: 5 };
+const STACK = 999;
+for (const [id, it] of Object.entries(ITEMS)) {
+  const c = document.createElement('canvas'); c.width = c.height = 8;
+  const x = c.getContext('2d'), d = x.createImageData(8, 8);
+  it.icon.forEach((r, y) => [...r].forEach((ch, xx) => {
+    if (ch === '.') return; const o = (y * 8 + xx) * 4, col = ICOL[ch];
+    d.data[o] = col[0]; d.data[o + 1] = col[1]; d.data[o + 2] = col[2]; d.data[o + 3] = 255;
+  }));
+  x.putImageData(d, 0, 0); it.src = c.toDataURL();
+}
+
+// Slots 0-4 are the hotbar, 5-14 the backpack
+const inv = new Array(15).fill(null);
+let selected = -1, picked = -1;
+function addItem(id, n) {
+  let left = n;
+  if (!ITEMS[id].tool) for (const s of inv) if (s && s.id === id && s.n < STACK) { const k = Math.min(left, STACK - s.n); s.n += k; left -= k; if (!left) break; }
+  while (left > 0) {
+    const i = inv.indexOf(null); if (i < 0) break;
+    const k = ITEMS[id].tool ? 1 : Math.min(left, STACK);
+    inv[i] = { id, n: k }; left -= k;
+  }
+  renderInv();
+  return n - left;
+}
+function takeSelected(n = 1) {
+  const s = inv[selected]; if (!s) return false;
+  s.n -= n; if (s.n <= 0) inv[selected] = null;
+  renderInv(); return true;
+}
+function starterKit() { inv.fill(null); addItem('pickaxe', 1); addItem('bucket', 1); addItem('bomb', 2); selected = -1; renderInv(); }
+
+function slotHTML(s, key) {
+  return (key ? `<span class="k">${key}</span>` : '') + (s ? `<img src="${ITEMS[s.id].src}" alt="${ITEMS[s.id].name}">` + (ITEMS[s.id].tool ? '' : `<span class="n">${s.n}</span>`) : '');
+}
+const hotbar = document.getElementById('hotbar'), invHot = document.getElementById('invHot'), invPack = document.getElementById('invPack');
+const invInfo = document.getElementById('invInfo');
+function mkSlot(parent, i, onTap) {
+  const b = document.createElement('button'); b.className = 'slot px'; b.dataset.i = i;
+  b.addEventListener('click', () => onTap(i)); parent.appendChild(b); return b;
+}
+const hotEls = [0, 1, 2, 3, 4].map(i => mkSlot(hotbar, i, selectSlot));
+hotbar.addEventListener('pointerdown', e => e.stopPropagation());
+const invEls = inv.map((_, i) => mkSlot(i < 5 ? invHot : invPack, i, tapInvSlot));
+function selectSlot(i) { selected = selected === i ? -1 : i; sfx.click(); renderInv(); }
+function tapInvSlot(i) {
+  if (picked < 0) { if (inv[i]) { picked = i; sfx.click(); } }
+  else { if (picked !== i) { [inv[picked], inv[i]] = [inv[i], inv[picked]]; sfx.place(); } picked = -1; }
+  renderInv();
+}
+function renderInv() {
+  hotEls.forEach((b, i) => {
+    b.innerHTML = slotHTML(inv[i], i + 1); b.classList.toggle('sel', i === selected);
+    b.setAttribute('aria-label', 'Hotbar ' + (i + 1) + (inv[i] ? ': ' + ITEMS[inv[i].id].name : ', empty'));
+  });
+  invEls.forEach((b, i) => {
+    b.innerHTML = slotHTML(inv[i], i < 5 ? i + 1 : 0); b.classList.toggle('picked', i === picked);
+    b.setAttribute('aria-label', (inv[i] ? ITEMS[inv[i].id].name : 'Empty slot'));
+  });
+  if (picked >= 0 && inv[picked]) { const it = ITEMS[inv[picked].id]; invInfo.textContent = `${it.name}: ${it.desc}. Tap another slot to move it.`; }
+  else invInfo.textContent = inv.some(Boolean) ? 'Tap an item, then tap another slot to move it.' : 'Nothing collected yet.';
+}
+
+// Debug menu: give any item
+const dbgItems = document.getElementById('dbgItems'), dbgInfo = document.getElementById('dbgInfo');
+for (const [id, it] of Object.entries(ITEMS)) {
+  const b = document.createElement('button'); b.className = 'btn alt';
+  b.innerHTML = `<img src="${it.src}" alt=""><span>${it.name}<small>+${GIVE[id]}</small></span>`;
+  b.onclick = () => { const got = addItem(id, GIVE[id]); sfx.give(); dbgInfo.textContent = got ? `Gave ${got} ${it.name}.` : 'Inventory is full.'; };
+  dbgItems.appendChild(b);
+}
+document.getElementById('dbgClear').onclick = () => { inv.fill(null); selected = -1; renderInv(); sfx.close(); dbgInfo.textContent = 'Inventory cleared.'; };
+document.getElementById('dbgEnergy').onclick = () => { player.energy = 1; sfx.gem(); dbgInfo.textContent = 'Levitation energy filled.'; };
+
+// Using items: aim is where the finger is, in world cells. Reach is limited around the mote.
+const REACH = 46;
+let useId = null, useTick = 0;
+const aim = { x: 0, y: 0, sx: 0, sy: 0 };
+function setAim(e) { aim.sx = e.clientX; aim.sy = e.clientY; }
+function aimCell() {
+  aim.x = Math.floor((cam.x + aim.sx / zoom) / CELL); aim.y = Math.floor((cam.y + aim.sy / zoom) / CELL);
+  const pcx = (player.x + player.w / 2) / CELL, pcy = (player.y + player.h / 2) / CELL;
+  return Math.hypot(aim.x - pcx, aim.y - pcy) <= REACH;
+}
+function eachInCircle(r, fn) {
+  for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    if (dx * dx + dy * dy > r * r) continue;
+    const x = aim.x + dx, y = aim.y + dy;
+    if (x >= 0 && x < W && y >= 0 && y < H) fn(x, y, y * W + x);
+  }
+}
+function useHeld() {
+  if (useId === null || selected < 0 || !inv[selected]) return;
+  const it = ITEMS[inv[selected].id];
+  if (it.once || !aimCell()) return;
+  useTick++;
+  if (inv[selected].id === 'pickaxe') {
+    let sand = 0, stone = 0;
+    eachInCircle(3, (x, y, i) => {
+      if (Math.random() > 0.35) return;
+      if (grid[i] === SAND) { sand++; grid[i] = EMPTY; } else if (grid[i] === STONE) { stone++; grid[i] = EMPTY; } else return;
+      if (Math.random() < 0.3) burst(1, x, y, RGB[sand ? SAND : STONE], 0.8, 0.8, 18);
+    });
+    if (sand) addItem('sand', sand); if (stone) addItem('stone', stone);
+    if ((sand || stone) && useTick % 5 === 0) sfx.dig();
+  } else if (inv[selected].id === 'bucket') {
+    let n = 0;
+    eachInCircle(3, (x, y, i) => { if (grid[i] === WATER && Math.random() < 0.5) { grid[i] = EMPTY; n++; } });
+    if (n) { addItem('water', n); if (useTick % 6 === 0) sfx.slurp(); }
+  } else if (it.place) {
+    let n = 0;
+    eachInCircle(2, (x, y, i) => {
+      if (grid[i] !== EMPTY || inPlayer(x, y) || !inv[selected] || Math.random() > 0.5) return;
+      grid[i] = it.place; shade[i] = (Math.random() * 20 - 10) | 0; n++; takeSelected(1);
+    });
+    if (n && useTick % 4 === 0) sfx.place();
+  }
+}
+function useOnce() {
+  const id = inv[selected].id;
+  if (id === 'gem') {
+    takeSelected(1); player.energy = 1; sfx.gem();
+    burst(14, (player.x + player.w / 2) / CELL, (player.y + player.h / 2) / CELL, GLOW, 1.2, 1.2, 30);
+  } else if (id === 'bomb') {
+    if (!aimCell()) return;
+    takeSelected(1); explode(aim.x, aim.y, 12);
+  }
+}
+function explode(cx, cy, r) {
+  for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    const d = dx * dx + dy * dy, x = cx + dx, y = cy + dy;
+    if (d > r * r || x < 0 || x >= W || y < 0 || y >= H) continue;
+    const i = y * W + x;
+    if (grid[i] && Math.random() < 0.15) burst(1, x, y, RGB[grid[i]], 2.4, 2.4, 40);
+    grid[i] = EMPTY;
+  }
+  burst(30, cx, cy, TIP, 3, 3, 26); burst(20, cx, cy, [240, 122, 106], 2.5, 2.5, 22);
+  const pcx = (player.x + player.w / 2) / CELL, pcy = (player.y + player.h / 2) / CELL, dist = Math.hypot(pcx - cx, pcy - cy);
+  if (dist < r * 2.5) { const f = (1 - dist / (r * 2.5)) * 9; player.vy -= f; player.vx += Math.sign(pcx - cx || 1) * f * 0.6; }
+  sfx.boom();
+}
+function drawAim(put, ox, oy) {
+  if (useId === null || selected < 0 || !inv[selected]) return;
+  const it = ITEMS[inv[selected].id]; if (inv[selected].id === 'gem') return;
+  const ok = aimCell(), r = inv[selected].id === 'bomb' ? 12 : it.place ? 2 : 3, c = ok ? TIP : [240, 122, 106];
+  for (let a = 0; a < 40; a++) {
+    const t = a / 40 * Math.PI * 2;
+    put(Math.round(aim.x + Math.cos(t) * (r + 1)) - ox, Math.round(aim.y + Math.sin(t) * (r + 1)) - oy, c);
+  }
+}
 
 // ---- Camera ----
 // cam is the world position (px) of the screen's top-left corner; the player stays dead centre
@@ -691,6 +912,7 @@ function render() {
     data[o] = c[0] + s; data[o + 1] = c[1] + s; data[o + 2] = c[2] + s;
   };
   drawPlayer(put, ox, oy);
+  drawAim(put, ox, oy);
   for (const q of parts) put(Math.floor(q.x) - ox, Math.floor(q.y) - oy, q.c);
   octx.putImageData(img, 0, 0);
   // Draw in world coordinates, scaled by zoom
@@ -800,13 +1022,13 @@ function drawHud() {
 
 function loop() {
   frame++;
-  updatePlayer();
-  updateParticles();
+  const paused = menuOpen();
+  if (!paused) { updatePlayer(); useHeld(); updateParticles(); }
   updateHum();
   peekS.x += (peek.x - peekS.x) * 0.04;
   peekS.y += (peek.y - peekS.y) * 0.04;
   placeCamera();
-  step();
+  if (!paused) step();
   render();
   drawHud();
   if (!mainMenu.hidden) drawMoteArt();
@@ -821,6 +1043,7 @@ updatePlayerCells();
 placeStick();
 renderSides();
 renderBinds();
+starterKit();
 setFov(Math.min(5, Math.max(1, Math.round(+prefs.fov) || 3)));
 setSound(prefs.sound !== false);
 placeCamera();
