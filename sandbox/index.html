@@ -83,6 +83,13 @@
   .pause-actions { display: grid; gap: 16px; }
   .pause-actions .btn { display: flex; align-items: center; gap: 10px; text-align: left; }
   .pause-actions .btn svg { width: 16px; height: 16px; flex: none; }
+  .seed-row { display: flex; gap: 14px; }
+  .px-input { --hi: #0a0817; --lo: var(--panel-hi); flex: 1; min-width: 0; border: 0; background: var(--panel-lo); color: var(--ink); font: inherit; font-size: 16px; padding: 9px 12px; outline: none; user-select: text; -webkit-user-select: text; }
+  .px-input:focus { --lo: var(--t); }
+  .px-input::placeholder { color: var(--muted); }
+  .seed-show { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; }
+  .seed-show .seed-value { flex: 1; min-width: 0; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; font-variant-numeric: tabular-nums; }
+  .seed-show .btn { padding: 4px 10px; font-size: 13px; }
   .keys { --hi: #0a0817; --lo: var(--panel-hi); background: var(--panel-lo); padding: 12px 14px; display: grid; gap: 8px; align-content: start; }
   .keys dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px; align-items: baseline; }
   .keys dt { font-size: 13px; color: var(--muted); }
@@ -240,6 +247,18 @@
     </div>
   </div>
 
+  <div id="seedMenu" class="modal" hidden>
+    <div class="sheet px" role="dialog" aria-label="New world">
+      <div class="head"><h2>New world</h2><button class="btn alt square" id="seedBack" aria-label="Cancel"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="0" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="2" height="2"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/></svg></button></div>
+      <div class="section">
+        <label class="label" for="seedInput">Seed</label>
+        <div class="seed-row"><input id="seedInput" class="px-input px" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="32" placeholder="Leave empty for a random world"><button class="btn alt" id="seedRandom">Random</button></div>
+        <p class="note">The same seed always makes the same world. Numbers or words both work.</p>
+      </div>
+      <button class="btn gold" id="seedGo">Create world</button>
+    </div>
+  </div>
+
   <div id="pauseMenu" class="modal" hidden>
     <div class="sheet settings px" role="dialog" aria-label="Paused">
       <div class="head"><h2>Paused</h2><button class="btn alt square close" aria-label="Resume"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="0" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="2" height="2"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/></svg></button></div>
@@ -247,6 +266,7 @@
         <div class="pause-actions">
           <button class="btn gold" id="resumeBtn"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="1" y="0" width="1" height="6"/><rect x="2" y="1" width="1" height="4"/><rect x="3" y="2" width="1" height="2"/></svg> Resume</button>
           <button class="btn" id="pauseSettings"><svg viewBox="0 0 7 7" fill="currentColor"><rect x="3" y="0" width="1" height="7"/><rect x="0" y="3" width="7" height="1"/><rect x="1" y="1" width="5" height="5"/><rect x="3" y="3" width="1" height="1" fill="var(--o)"/></svg> Settings</button>
+          <div class="seed-show"><span class="label">Seed</span><span class="seed-value"></span><button class="btn alt copy-seed">Copy</button></div>
           <button class="btn alt" id="pauseMain"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="2" y="0" width="2" height="1"/><rect x="1" y="1" width="4" height="1"/><rect x="0" y="2" width="6" height="1"/><rect x="1" y="3" width="4" height="3"/><rect x="2" y="4" width="2" height="2" fill="var(--o)"/></svg> Main menu</button>
         </div>
         <div class="keys px">
@@ -317,54 +337,179 @@ try {
 } catch (e) {}
 const savePrefs = () => { try { localStorage.setItem('sandbox-prefs', JSON.stringify(prefs)); } catch (e) {} };
 
-// ---- World generation ----
-// The window can report 0x0 if the page loads in the background, so fall back to the screen size
+// ---- World: seeded, endless left and right, loaded in chunks ----
+//
+// RULES FOR WORLD GENERATION (keep these when adding terrain features):
+//  1. Never use Math.random() in generation. Use hash01()/noise1() or a chunkRng() so the
+//     same seed always builds the same world on every device.
+//  2. Generation must only depend on the seed and world coordinates, never on screen size,
+//     load order or what is already loaded. A chunk must come out identical whenever it is built.
+//  3. Add a new feature as a function in GEN_PASSES. Each pass fills one chunk; features that
+//     cross chunk borders (like caves) must also check the neighbouring chunks' features,
+//     as carveCaves() does, and only write cells inside the chunk being built.
+//  4. Give every pass its own salt number for hash01/noise1/chunkRng so features don't correlate.
+//  5. World height (H) and chunk width (CW) are part of the world format: changing them,
+//     or changing a pass, changes every seed's world.
+//
+// The loaded area is a window of NCH chunks held in `grid`. The window slides as the mote
+// travels: chunks leaving are unloaded (saved compressed if they changed) and chunks entering
+// are restored from that save or generated fresh from the seed.
+const CW = 128;                    // chunk width in cells
+const H = 600;                     // world height in cells (fixed so seeds match on every device)
+// Enough chunks to cover the widest field of view plus a margin each side
 const big = Math.max(900, innerWidth, innerHeight, screen.width || 0, screen.height || 0);
-const W = Math.round(big / CELL * 3), H = Math.round(big / CELL * 1.5);
+const NCH = Math.ceil(2 * big / (0.9 * CELL) / CW) + 4;   // view + look-around reach + margin
+const W = NCH * CW;                // loaded window width in cells
 const grid = new Uint8Array(W * H);
 const shade = new Int8Array(W * H);
-for (let i = 0; i < shade.length; i++) shade[i] = (Math.random() * 20 - 10) | 0;
+const dirty = new Uint8Array(NCH); // chunk slot has changed since it was loaded
+const saved = new Map();           // world chunk index -> compressed cells of chunks that changed
+let baseChunk = 0;                 // world chunk index of window slot 0
+let seedText = '', seedN = 0;
 
-function noise1D(scale) {
-  const pts = Array.from({ length: Math.ceil(W / scale) + 2 }, () => Math.random() * 2 - 1);
-  return x => {
-    const f = x / scale, i = Math.floor(f), t = (1 - Math.cos((f - i) * Math.PI)) / 2;
-    return pts[i] * (1 - t) + pts[i + 1] * t;
-  };
+// Seeded hashing
+function seedFrom(text) {
+  const t = String(text).trim();
+  if (/^\d{1,9}$/.test(t)) return (+t) >>> 0;
+  let h = 2166136261;
+  for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 16777619);
+  return h >>> 0;
 }
-function generate() {
-  grid.fill(EMPTY); parts.length = 0;
-  Object.assign(player, { vx: 0, vy: 0, energy: 1, squash: 0 });
-  const hills = noise1D(220), bumps = noise1D(60), grit = noise1D(14), depth = noise1D(40);
-  const surface = new Int32Array(W);
-  for (let x = 0; x < W; x++) {
-    const s = Math.floor(H * 0.45 + hills(x) * H * 0.2 + bumps(x) * H * 0.05 + grit(x) * H * 0.012);
-    surface[x] = s;
-    const sandDepth = 6 + Math.floor((depth(x) + 1) * 6);
-    for (let y = Math.max(0, s); y < H; y++) grid[y * W + x] = y < s + sandDepth ? SAND : STONE;
-  }
-  // Caves: random worms carved through the ground
-  for (let k = 0; k < W / 90; k++) {
-    let x = Math.random() * W, y = H * 0.55 + Math.random() * H * 0.4, a = Math.random() * Math.PI * 2;
-    const len = 80 + Math.random() * 200;
-    for (let s = 0; s < len; s++) {
-      a += (Math.random() - 0.5) * 0.5;
-      x += Math.cos(a) * 2; y += Math.sin(a) * 1.2;
-      const r = 4 + Math.random() * 5;
-      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-        const cx = (x + dx) | 0, cy = (y + dy) | 0;
-        if (dx * dx + dy * dy <= r * r && cx >= 0 && cx < W && cy >= 0 && cy < H) grid[cy * W + cx] = EMPTY;
+function hash32(a, b, c) {
+  let h = seedN ^ Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul(b | 0, 0x165667b1) ^ Math.imul(c | 0, 0x1b873593);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b); h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+const hash01 = (a, b, c) => hash32(a, b, c) / 4294967296;
+// Smooth 1D value noise in -1..1, endless in both directions
+function noise1(x, scale, salt) {
+  const f = x / scale, i = Math.floor(f), t = (1 - Math.cos((f - i) * Math.PI)) / 2;
+  return (hash01(i, salt, 7) * 2 - 1) * (1 - t) + (hash01(i + 1, salt, 7) * 2 - 1) * t;
+}
+// A repeatable random sequence for one chunk and one feature
+function chunkRng(cx, salt) {
+  let a = hash32(cx, salt, 1234567);
+  return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+// Terrain shape, usable anywhere (spawn search uses it too)
+const WATER_LEVEL = Math.floor(H * 0.5);
+const surfaceAt = x => Math.floor(H * 0.45 + noise1(x, 220, 1) * H * 0.2 + noise1(x, 60, 2) * H * 0.05 + noise1(x, 14, 3) * H * 0.012);
+
+// Generation passes. Each gets the chunk buffer (CW x H, row-major), the world chunk index and its first world x.
+const GEN_PASSES = [
+  function groundPass(buf, cx, x0) {           // sand over stone
+    for (let lx = 0; lx < CW; lx++) {
+      const x = x0 + lx, s = surfaceAt(x), sandDepth = 6 + Math.floor((noise1(x, 40, 4) + 1) * 6);
+      for (let y = Math.max(0, s); y < H; y++) buf[y * CW + lx] = y < s + sandDepth ? SAND : STONE;
+    }
+  },
+  function carveCaves(buf, cx, x0) {           // worms that may start in nearby chunks
+    for (let c = cx - 5; c <= cx + 5; c++) {
+      const r = chunkRng(c, 5), worms = r() < 0.45 ? 2 : 1;
+      for (let k = 0; k < worms; k++) {
+        let x = c * CW + r() * CW, y = H * 0.55 + r() * H * 0.4, a = r() * Math.PI * 2;
+        const len = 80 + r() * 200;
+        for (let st = 0; st < len; st++) {
+          a += (r() - 0.5) * 0.5; x += Math.cos(a) * 2; y += Math.sin(a) * 1.2;
+          const rad = 4 + r() * 5;
+          if (x + rad < x0 || x - rad >= x0 + CW) continue;
+          for (let dy = -rad; dy <= rad; dy++) for (let dx = -rad; dx <= rad; dx++) {
+            const lx = Math.floor(x + dx) - x0, yy = Math.floor(y + dy);
+            if (dx * dx + dy * dy <= rad * rad && lx >= 0 && lx < CW && yy >= 0 && yy < H) buf[yy * CW + lx] = EMPTY;
+          }
+        }
       }
     }
+  },
+  function fillLakes(buf, cx, x0) {            // water in the valleys
+    for (let lx = 0; lx < CW; lx++) {
+      const s = surfaceAt(x0 + lx);
+      for (let y = WATER_LEVEL; y < s && y < H; y++) if (buf[y * CW + lx] === EMPTY) buf[y * CW + lx] = WATER;
+    }
+  },
+];
+function genChunk(cx) {
+  const buf = new Uint8Array(CW * H);
+  for (const pass of GEN_PASSES) pass(buf, cx, cx * CW);
+  return buf;
+}
+
+// Simple run-length compression for chunks that changed
+function packChunk(slot) {
+  const runs = []; let last = -1, n = 0;
+  for (let y = 0; y < H; y++) for (let lx = 0; lx < CW; lx++) {
+    const v = grid[y * W + slot * CW + lx];
+    if (v === last && n < 65535) n++; else { if (n) runs.push(last, n); last = v; n = 1; }
   }
-  // Lakes in the valleys
-  const waterLevel = Math.floor(H * 0.5);
-  for (let x = 0; x < W; x++)
-    for (let y = waterLevel; y < surface[x] && y < H; y++) if (grid[y * W + x] === EMPTY) grid[y * W + x] = WATER;
-  // Spawn the player on dry ground near the middle
-  let sx = W >> 1;
-  for (let d = 0; d < W / 2; d++) { if (surface[sx + d] < waterLevel) { sx += d; break; } if (surface[sx - d] < waterLevel) { sx -= d; break; } }
-  player.x = sx * CELL; player.y = (surface[sx] - 15) * CELL;
+  runs.push(last, n);
+  return Uint16Array.from(runs);
+}
+function unpackChunk(runs) {
+  const buf = new Uint8Array(CW * H); let o = 0;
+  for (let i = 0; i < runs.length; i += 2) { buf.fill(runs[i], o, o + runs[i + 1]); o += runs[i + 1]; }
+  return buf;
+}
+function loadSlot(slot) {
+  const cx = baseChunk + slot, buf = saved.has(cx) ? unpackChunk(saved.get(cx)) : genChunk(cx);
+  for (let y = 0; y < H; y++) {
+    const row = y * W + slot * CW;
+    grid.set(buf.subarray(y * CW, y * CW + CW), row);
+    for (let lx = 0; lx < CW; lx++) shade[row + lx] = (hash32(cx * CW + lx, y, 99) % 21) - 10;
+  }
+  dirty[slot] = 0;
+}
+function unloadSlot(slot) { if (dirty[slot]) saved.set(baseChunk + slot, packChunk(slot)); }
+
+// Slide the window by dc chunks (positive = to the right), keeping the mote's world position
+function shiftWindow(dc) {
+  if (!dc) return;
+  if (Math.abs(dc) >= NCH) {
+    for (let i = 0; i < NCH; i++) unloadSlot(i);
+    baseChunk += dc;
+    for (let i = 0; i < NCH; i++) loadSlot(i);
+  } else {
+    const keep = NCH - Math.abs(dc), cells = dc * CW;
+    if (dc > 0) for (let i = 0; i < dc; i++) unloadSlot(i); else for (let i = NCH + dc; i < NCH; i++) unloadSlot(i);
+    for (let y = 0; y < H; y++) {
+      const r = y * W;
+      if (dc > 0) { grid.copyWithin(r, r + cells, r + W); shade.copyWithin(r, r + cells, r + W); }
+      else { grid.copyWithin(r - cells, r, r + W + cells); shade.copyWithin(r - cells, r, r + W + cells); }
+    }
+    if (dc > 0) dirty.copyWithin(0, dc); else dirty.copyWithin(-dc, 0, keep);
+    baseChunk += dc;
+    if (dc > 0) for (let i = keep; i < NCH; i++) loadSlot(i); else for (let i = 0; i < -dc; i++) loadSlot(i);
+  }
+  const shift = dc * CW * CELL;
+  player.x -= shift; cam.x -= shift;
+  for (const q of parts) q.x -= dc * CW;
+  updatePlayerCells();
+}
+// Keep the mote in the middle chunks of the window
+function followPlayer() {
+  const slot = Math.floor(player.x / CELL / CW), mid = NCH >> 1;
+  if (Math.abs(slot - mid) >= 2) shiftWindow(slot - mid);
+}
+const worldX = localCellX => baseChunk * CW + localCellX;   // for showing coordinates
+
+function randomSeed() { return String(Math.floor(Math.random() * 900000000) + 100000000); }
+// Build a world from a seed and drop the mote on dry ground near world x = 0
+function createWorld(text) {
+  seedText = String(text || '').trim() || randomSeed();
+  seedN = seedFrom(seedText);
+  prefs.seed = seedText; savePrefs();
+  saved.clear(); parts.length = 0;
+  let sx = 0;
+  for (let d = 0; d < 20000; d++) {
+    if (surfaceAt(d) < WATER_LEVEL) { sx = d; break; }
+    if (surfaceAt(-d) < WATER_LEVEL) { sx = -d; break; }
+  }
+  baseChunk = Math.floor(sx / CW) - (NCH >> 1);
+  for (let i = 0; i < NCH; i++) loadSlot(i);
+  Object.assign(player, { vx: 0, vy: 0, energy: 1, squash: 0 });
+  player.x = (sx - baseChunk * CW) * CELL; player.y = (surfaceAt(sx) - 15) * CELL;
+  unstick(); updatePlayerCells();
+  document.querySelectorAll('.seed-value').forEach(el => el.textContent = seedText);
 }
 
 // ---- Player (world px units) ----
@@ -475,6 +620,7 @@ let listening = null;               // binding button waiting for a key
 
 addEventListener('keydown', e => {
   ensureAudio();
+  if (e.target instanceof HTMLInputElement) { if (e.code === 'Escape') closeMenus(); return; }
   if (listening) {
     e.preventDefault();
     if (e.code !== 'Escape') { prefs.binds[listening.dataset.act] = e.code; savePrefs(); sfx.click(); }
@@ -556,11 +702,11 @@ const invBtn = document.getElementById('invBtn');
 let settingsFrom = 'inv', started = false;
 const dbgMenu = document.getElementById('dbgMenu');
 const pauseMenu = document.getElementById('pauseMenu'), pauseBtn = document.getElementById('pauseBtn');
-const menuOpen = () => !invMenu.hidden || !setMenu.hidden || !mainMenu.hidden || !dbgMenu.hidden || !pauseMenu.hidden;
+const menuOpen = () => !invMenu.hidden || !setMenu.hidden || !mainMenu.hidden || !dbgMenu.hidden || !pauseMenu.hidden || !document.getElementById('seedMenu').hidden;
 function openInv() { setMenu.hidden = dbgMenu.hidden = true; invMenu.hidden = false; held.clear(); picked = -1; renderInv(); sfx.open(); }
 function openSettings(from) { settingsFrom = from; invMenu.hidden = pauseMenu.hidden = true; setMenu.hidden = false; sfx.click(); }
 function closeMenus() {
-  if (!mainMenu.hidden) { if (!setMenu.hidden) { setMenu.hidden = true; sfx.close(); } return; }
+  if (!mainMenu.hidden) { const sm = document.getElementById('seedMenu'); if (!setMenu.hidden || !sm.hidden) { setMenu.hidden = sm.hidden = true; sfx.close(); } return; }
   if (invMenu.hidden && setMenu.hidden && dbgMenu.hidden && pauseMenu.hidden) return;
   invMenu.hidden = setMenu.hidden = dbgMenu.hidden = pauseMenu.hidden = true; sfx.close();
   if (listening) { listening.classList.remove('listening'); listening = null; renderBinds(); }
@@ -616,7 +762,22 @@ document.getElementById('pauseSettings').onclick = () => openSettings('pause');
 document.getElementById('pauseMain').onclick = showMain;
 document.getElementById('toMain').onclick = showMain;
 document.getElementById('playBtn').onclick = play;
-document.getElementById('newWorld').onclick = () => { ensureAudio(); generate(); unstick(); updatePlayerCells(); starterKit(); play(); };
+// New world dialog: pick or type a seed
+const seedMenu = document.getElementById('seedMenu'), seedInput = document.getElementById('seedInput');
+document.getElementById('newWorld').onclick = () => { ensureAudio(); seedInput.value = ''; seedMenu.hidden = false; sfx.open(); };
+document.getElementById('seedRandom').onclick = () => { seedInput.value = randomSeed(); sfx.click(); };
+document.getElementById('seedBack').onclick = () => { seedMenu.hidden = true; sfx.close(); };
+document.getElementById('seedGo').onclick = () => { seedMenu.hidden = true; createWorld(seedInput.value); starterKit(); started = false; play(); };
+seedInput.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('seedGo').click(); });
+// Copy the current seed (falls back to selecting it if the clipboard is blocked)
+document.querySelectorAll('.copy-seed').forEach(b => b.onclick = () => {
+  const val = b.parentElement.querySelector('.seed-value');
+  const done = ok => { b.textContent = ok ? 'Copied' : 'Select'; setTimeout(() => b.textContent = 'Copy', 1500); };
+  try {
+    navigator.clipboard.writeText(seedText).then(() => { done(true); sfx.give(); }, () => { selectText(val); done(false); });
+  } catch (e) { selectText(val); done(false); }
+});
+function selectText(el) { const r = document.createRange(); r.selectNodeContents(el); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
 document.getElementById('openDebug').onclick = () => { invMenu.hidden = true; dbgMenu.hidden = false; sfx.click(); };
 document.getElementById('dbgBack').onclick = openInv;
 document.querySelectorAll('.modal .close').forEach(b => b.onclick = closeMenus);
@@ -1012,6 +1173,7 @@ function step() {
   const m = 60;
   const x0 = Math.max(0, Math.floor(cam.x / CELL) - m), x1 = Math.min(W - 1, Math.floor(cam.x / CELL) + VW + m);
   const y0 = Math.max(0, Math.floor(cam.y / CELL) - m), y1 = Math.min(H - 2, Math.floor(cam.y / CELL) + VH + m);
+  for (let c = Math.floor(x0 / CW); c <= Math.floor(x1 / CW); c++) dirty[c] = 1;   // simulated chunks get saved on unload
   for (let y = y1; y >= y0; y--) {
     const ltr = Math.random() < 0.5;
     for (let i = x0; i <= x1; i++) {
@@ -1198,7 +1360,7 @@ addEventListener('error', e => showError(e.error || e.message));
 function tick() {
   frame++;
   const paused = menuOpen();
-  if (!paused) { updatePlayer(); useHeld(); updateParticles(); }
+  if (!paused) { updatePlayer(); followPlayer(); useHeld(); updateParticles(); }
   updateHum();
   peekS.x += (peek.x - peekS.x) * 0.04;
   peekS.y += (peek.y - peekS.y) * 0.04;
@@ -1211,10 +1373,7 @@ function tick() {
 addEventListener('resize', resize);
 if (window.ResizeObserver) new ResizeObserver(() => { if (stage.clientWidth !== SW || stage.clientHeight !== SH) resize(); }).observe(stage);
 resize();
-generate();
-if (!isFinite(player.x) || !isFinite(player.y)) { player.x = W * CELL / 2; player.y = 0; }
-unstick();
-updatePlayerCells();
+createWorld(prefs.seed);
 placeStick();
 renderSides();
 renderBinds();
