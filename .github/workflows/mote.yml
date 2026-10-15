@@ -64,6 +64,7 @@ jobs:
       - name: Build the game library (.aar)
         working-directory: mote
         run: |
+          mkdir -p android/app/libs
           go install github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@v2.8.8
           ebitenmobile bind -target android -androidapi 23 -javapkg com.theemeraldpig.mote \
             -ldflags "-X github.com/TheEmeraldPig/mobileClaude/mote/game.Version=${{ github.run_number }}" \
