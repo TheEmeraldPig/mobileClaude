@@ -28,8 +28,15 @@
   #energy i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #8a6cff, #c9a7ff); }
   #energy.low i { background: #f07a6a; }
 
-  #hint { position: absolute; top: max(10px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); max-width: 50%; text-align: right; font-size: 12px; color: var(--muted); pointer-events: none; transition: opacity 1s; }
+  #hint { position: absolute; top: calc(max(8px, env(safe-area-inset-top, 0px)) + 46px); right: max(12px, env(safe-area-inset-right, 0px)); max-width: 50%; text-align: right; font-size: 12px; color: var(--muted); pointer-events: none; transition: opacity 1s; }
 
+  #gear { position: absolute; top: max(8px, env(safe-area-inset-top, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: rgba(27,31,39,.8); color: var(--fg); font-size: 18px; line-height: 1; cursor: pointer; }
+  #settings { position: absolute; top: calc(max(8px, env(safe-area-inset-top, 0px)) + 44px); right: max(10px, env(safe-area-inset-right, 0px)); padding: 12px; border-radius: 10px; background: #1b1f27; border: 1px solid var(--line); display: grid; gap: 8px; z-index: 3; }
+  #settings .label { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  #fov { display: flex; gap: 6px; }
+  #fov button { width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--line); color: var(--fg); font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
+  #fov button.active { background: #8a6cff; border-color: #c9a7ff; }
+  #settings .sub { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); }
   #stick { position: absolute; width: var(--stick); height: var(--stick); margin: calc(var(--stick) / -2) 0 0 calc(var(--stick) / -2); border-radius: 50%; background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.15); touch-action: none; transition: border-color .2s, background .2s; }
   #stick.moving { border-color: #c9a7ff; background: rgba(138,108,255,.2); }
   #knob { position: absolute; left: 50%; top: 50%; width: 50%; height: 50%; margin: -25% 0 0 -25%; border-radius: 50%; background: rgba(232,236,242,.35); pointer-events: none; }
@@ -46,7 +53,13 @@
 <div id="stage">
   <canvas id="view"></canvas>
   <div id="hud">Levitation <div id="energy"><i></i></div></div>
-  <div id="hint">Push the stick up to levitate. Touch anywhere to look around, pinch to zoom. Hold the stick still to move it.</div>
+  <div id="hint">Push the stick up to levitate. Touch anywhere to look around. ⚙ changes the field of view. Hold the stick still to move it.</div>
+  <button id="gear" aria-label="Settings">⚙</button>
+  <div id="settings" hidden>
+    <div class="label">Field of view</div>
+    <div id="fov"></div>
+    <div class="sub"><span>Closer</span><span>Normal is 3</span><span>Wider</span></div>
+  </div>
   <div id="stick" aria-label="Movement stick"><div id="knob"></div></div>
 </div>
 <div id="rotate">
@@ -186,44 +199,36 @@ stick.addEventListener('pointermove', e => { if (e.pointerId === stickId) moveSt
 stick.addEventListener('pointerup', releaseStick);
 stick.addEventListener('pointercancel', releaseStick);
 
-// One finger anywhere else peeks the camera toward it (up to half a screen each way).
-// Two fingers pinch or spread to zoom.
-const peek = { x: 0, y: 0 }, peekS = { x: 0, y: 0 }; // peekS eases toward peek, in screen px
-const touches = new Map();
-let pinchStart = 0, zoomStart = 1;
-let zoom = 1;
-try { zoom = +localStorage.getItem('sandbox-zoom') || 1; } catch (e) {}
-const ZOOM_MIN = 0.5, ZOOM_MAX = 3;
-function setZoom(z) {
-  zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
-  sizeView();
-  try { localStorage.setItem('sandbox-zoom', zoom); } catch (e) {}
-}
-const fingerGap = () => { const [a, b] = [...touches.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+// One finger anywhere else peeks the camera toward it (up to half a screen each way)
+let peekId = null; const peek = { x: 0, y: 0 }, peekS = { x: 0, y: 0 }; // peekS eases toward peek, in screen px
 function setPeek(e) {
   peek.x = Math.max(-SW / 2, Math.min(SW / 2, e.clientX - SW / 2));
   peek.y = Math.max(-SH / 2, Math.min(SH / 2, e.clientY - SH / 2));
 }
-view.addEventListener('pointerdown', e => {
-  view.setPointerCapture(e.pointerId);
-  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (touches.size === 1) setPeek(e);
-  if (touches.size === 2) { peek.x = peek.y = 0; pinchStart = fingerGap(); zoomStart = zoom; }
-});
-view.addEventListener('pointermove', e => {
-  if (!touches.has(e.pointerId)) return;
-  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (touches.size === 1) setPeek(e);
-  else if (touches.size === 2 && pinchStart > 0) setZoom(zoomStart * fingerGap() / pinchStart);
-});
-const endTouch = e => {
-  touches.delete(e.pointerId);
-  peek.x = peek.y = 0;   // after a pinch, the remaining finger doesn't peek until lifted
-  pinchStart = 0;
-};
-view.addEventListener('pointerup', endTouch);
-view.addEventListener('pointercancel', endTouch);
-view.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * 0.002)); }, { passive: false });
+view.addEventListener('pointerdown', e => { panel.hidden = true; if (peekId === null) { peekId = e.pointerId; view.setPointerCapture(e.pointerId); setPeek(e); } });
+view.addEventListener('pointermove', e => { if (e.pointerId === peekId) setPeek(e); });
+const endPeek = e => { if (e.pointerId === peekId) { peekId = null; peek.x = peek.y = 0; } };
+view.addEventListener('pointerup', endPeek);
+view.addEventListener('pointercancel', endPeek);
+
+// Field of view: 5 levels, 3 is normal. Visible area scales with the level (level / 3).
+let fov = 3, zoom = 1;
+try { fov = Math.min(5, Math.max(1, Math.round(+localStorage.getItem('sandbox-fov') || 3))); } catch (e) {}
+const panel = document.getElementById('settings'), fovRow = document.getElementById('fov');
+function setFov(n) {
+  fov = n; zoom = 3 / n;
+  if (SW) sizeView();
+  fovRow.querySelectorAll('button').forEach(b => b.classList.toggle('active', +b.dataset.n === n));
+  try { localStorage.setItem('sandbox-fov', n); } catch (e) {}
+}
+for (let n = 1; n <= 5; n++) {
+  const b = document.createElement('button');
+  b.textContent = n; b.dataset.n = n;
+  b.setAttribute('aria-label', 'Field of view ' + n + (n === 3 ? ' (normal)' : ''));
+  b.onclick = () => setFov(n);
+  fovRow.appendChild(b);
+}
+document.getElementById('gear').onclick = () => panel.hidden = !panel.hidden;
 
 // Go full screen on the first touch (browsers only allow it after a tap); not every phone supports it
 function goFullscreen() {
@@ -409,7 +414,7 @@ resize();
 generate();
 unstick();
 updatePlayerCells();
-sizeView();
+setFov(fov);
 placeCamera();
 loop();
 
