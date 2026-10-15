@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Pixel Sandbox</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; color: #eee; font-family: system-ui, sans-serif; overflow: hidden; touch-action: none; }
+  #bar { display: flex; gap: 6px; padding: 8px; flex-wrap: wrap; }
+  #bar button { padding: 8px 12px; border: 2px solid transparent; border-radius: 6px; color: #000; font-weight: 600; }
+  #bar button.active { border-color: #fff; }
+  canvas { display: block; width: 100%; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<canvas id="c"></canvas>
+<script>
+const W = 120, H = 160;
+const EMPTY = 0, SAND = 1, WATER = 2, STONE = 3;
+const TYPES = [
+  { id: SAND,  name: 'Sand',  color: '#e2c26b' },
+  { id: WATER, name: 'Water', color: '#3b8ee8' },
+  { id: STONE, name: 'Stone', color: '#888' },
+  { id: EMPTY, name: 'Erase', color: '#ddd' },
+];
+const RGB = { [SAND]: [226, 194, 107], [WATER]: [59, 142, 232], [STONE]: [136, 136, 136] };
+
+let grid = new Uint8Array(W * H);
+let current = SAND;
+let brush = 3;
+
+const canvas = document.getElementById('c');
+canvas.width = W; canvas.height = H;
+const ctx = canvas.getContext('2d');
+const img = ctx.createImageData(W, H);
+
+// Toolbar
+const bar = document.getElementById('bar');
+for (const t of TYPES) {
+  const b = document.createElement('button');
+  b.textContent = t.name;
+  b.style.background = t.color;
+  if (t.id === current) b.classList.add('active');
+  b.onclick = () => {
+    current = t.id;
+    bar.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+  };
+  bar.appendChild(b);
+}
+const clear = document.createElement('button');
+clear.textContent = 'Clear';
+clear.style.background = '#f66';
+clear.onclick = () => grid.fill(EMPTY);
+bar.appendChild(clear);
+
+// Fit canvas to screen keeping aspect ratio
+function resize() {
+  const availH = window.innerHeight - bar.offsetHeight;
+  const scale = Math.min(window.innerWidth / W, availH / H);
+  canvas.style.width = W * scale + 'px';
+  canvas.style.height = H * scale + 'px';
+  canvas.style.margin = '0 auto';
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Input
+let drawing = false, px = 0, py = 0;
+function toGrid(e) {
+  const r = canvas.getBoundingClientRect();
+  px = Math.floor((e.clientX - r.left) / r.width * W);
+  py = Math.floor((e.clientY - r.top) / r.height * H);
+}
+canvas.addEventListener('pointerdown', e => { drawing = true; toGrid(e); canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', e => { if (drawing) toGrid(e); });
+canvas.addEventListener('pointerup', () => drawing = false);
+canvas.addEventListener('pointercancel', () => drawing = false);
+
+function paint() {
+  for (let dy = -brush; dy <= brush; dy++)
+    for (let dx = -brush; dx <= brush; dx++) {
+      if (dx * dx + dy * dy > brush * brush) continue;
+      const x = px + dx, y = py + dy;
+      if (x < 0 || x >= W || y < 0 || y >= H) continue;
+      // Sprinkle sand/water so it looks less blocky
+      if ((current === SAND || current === WATER) && Math.random() < 0.5) continue;
+      grid[y * W + x] = current;
+    }
+}
+
+// Physics
+const get = (x, y) => (x < 0 || x >= W || y < 0 || y >= H) ? STONE : grid[y * W + x];
+function swap(a, b) { const t = grid[a]; grid[a] = grid[b]; grid[b] = t; }
+
+function step() {
+  // Bottom-up so falling particles move once per frame; alternate x direction to avoid bias
+  for (let y = H - 2; y >= 0; y--) {
+    const ltr = Math.random() < 0.5;
+    for (let i = 0; i < W; i++) {
+      const x = ltr ? i : W - 1 - i;
+      const idx = y * W + x;
+      const t = grid[idx];
+      if (t === SAND) {
+        const below = get(x, y + 1);
+        if (below === EMPTY || below === WATER) { swap(idx, idx + W); continue; }
+        const d = Math.random() < 0.5 ? -1 : 1;
+        for (const dx of [d, -d]) {
+          const n = get(x + dx, y + 1);
+          if (n === EMPTY || n === WATER) { swap(idx, idx + W + dx); break; }
+        }
+      } else if (t === WATER) {
+        if (get(x, y + 1) === EMPTY) { swap(idx, idx + W); continue; }
+        const d = Math.random() < 0.5 ? -1 : 1;
+        let moved = false;
+        for (const dx of [d, -d]) {
+          if (get(x + dx, y + 1) === EMPTY) { swap(idx, idx + W + dx); moved = true; break; }
+        }
+        if (moved) continue;
+        for (const dx of [d, -d]) {
+          if (get(x + dx, y) === EMPTY) { swap(idx, idx + dx); break; }
+        }
+      }
+    }
+  }
+}
+
+function render() {
+  const data = img.data;
+  for (let i = 0; i < grid.length; i++) {
+    const c = RGB[grid[i]];
+    const o = i * 4;
+    if (c) { data[o] = c[0]; data[o + 1] = c[1]; data[o + 2] = c[2]; }
+    else { data[o] = 20; data[o + 1] = 20; data[o + 2] = 24; }
+    data[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function loop() {
+  if (drawing) paint();
+  step();
+  render();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
