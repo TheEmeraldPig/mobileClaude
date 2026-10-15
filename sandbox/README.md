@@ -21,3 +21,10 @@ Every terrain addition must follow these rules, or seeds stop matching:
 5. **Changing a pass, `CW` or `H` changes every seed's world.** That's fine during development, but say so when you do it.
 
 New block types need an id next to `SAND`, `WATER` and `STONE`, a colour in `RGB`, and handling in `step()` if they move.
+
+## Saving and live updates
+
+- The game autosaves to `localStorage` (`mote-save`) every 20 seconds and whenever the app is hidden. The save holds the seed, changed chunks, the mote and the inventory.
+- **Installed app (GitHub Pages):** every 20 seconds the page re-downloads itself and compares a fingerprint. When it changes, the game saves, reloads into the new version and drops you back where you were. Requests with `?v=` skip the service worker cache.
+- **Claude artifact link:** updates arrive through `window.claude.hot`. `snapshot()` hands the state to the new version, which boots through `boot(data)`.
+- **When you add new state** (new items, player stats and so on), add it to `serializeState()` and `restoreState()` so it survives updates and saves.

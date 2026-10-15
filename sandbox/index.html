@@ -83,6 +83,7 @@
   .pause-actions { display: grid; gap: 16px; }
   .pause-actions .btn { display: flex; align-items: center; gap: 10px; text-align: left; }
   .pause-actions .btn svg { width: 16px; height: 16px; flex: none; }
+  .toast { --hi: var(--panel-hi); --lo: var(--panel-lo); position: fixed; z-index: 25; left: 50%; top: max(14px, env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 8px 14px; background: var(--panel); color: var(--t); font-family: var(--display); font-size: 11px; text-shadow: 2px 2px 0 var(--o); pointer-events: none; }
   .seed-row { display: flex; gap: 14px; }
   #invMenu .sheet { width: min(800px, calc(100% - 12px)); }
   .inv-layout { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 24px; align-items: start; }
@@ -842,7 +843,7 @@ const seedMenu = document.getElementById('seedMenu'), seedInput = document.getEl
 document.getElementById('newWorld').onclick = () => { ensureAudio(); seedInput.value = ''; seedMenu.hidden = false; sfx.open(); };
 document.getElementById('seedRandom').onclick = () => { seedInput.value = randomSeed(); sfx.click(); };
 document.getElementById('seedBack').onclick = () => { seedMenu.hidden = true; sfx.close(); };
-document.getElementById('seedGo').onclick = () => { seedMenu.hidden = true; createWorld(seedInput.value); starterKit(); started = false; play(); };
+document.getElementById('seedGo').onclick = () => { seedMenu.hidden = true; createWorld(seedInput.value); starterKit(); started = false; play(); saveGame(); };
 seedInput.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('seedGo').click(); });
 // Copy the current seed (falls back to selecting it if the clipboard is blocked)
 document.querySelectorAll('.copy-seed').forEach(b => b.onclick = () => {
@@ -1496,17 +1497,97 @@ function tick() {
 
 addEventListener('resize', resize);
 if (window.ResizeObserver) new ResizeObserver(() => { if (stage.clientWidth !== SW || stage.clientHeight !== SH) resize(); }).observe(stage);
-resize();
-createWorld(prefs.seed);
-placeStick();
-renderSides();
-renderBinds();
-starterKit();
-setFov(Math.min(5, Math.max(1, Math.round(+prefs.fov) || 3)));
-setSound(prefs.sound !== false);
-setMusic(prefs.music !== false);
-placeCamera();
-loop();
+// ---- Saving: autosave, and carrying the game across live updates ----
+// The whole game state (seed, changed chunks, mote, inventory) as plain JSON
+function serializeState() {
+  const chunks = [...saved.entries()].map(([cx, runs]) => [cx, Array.from(runs)]);
+  for (let i = 0; i < NCH; i++) if (dirty[i]) {
+    const cx = baseChunk + i, k = chunks.findIndex(c => c[0] === cx);
+    const entry = [cx, Array.from(packChunk(i))];
+    if (k >= 0) chunks[k] = entry; else chunks.push(entry);
+  }
+  const p = player;
+  return { v: 1, seed: seedText, baseChunk, chunks, started,
+    player: { wx: p.x + baseChunk * CW * CELL, y: p.y, vx: p.vx, vy: p.vy, energy: p.energy, face: p.face },
+    inv: inv.map(s => s && { id: s.id, n: s.n }), selected };
+}
+function restoreState(st) {
+  if (!st || st.v !== 1 || !st.seed) return false;
+  seedText = st.seed; seedN = seedFrom(seedText); prefs.seed = seedText; savePrefs();
+  saved.clear(); for (const [cx, runs] of st.chunks || []) saved.set(cx, Uint16Array.from(runs));
+  baseChunk = st.baseChunk | 0;
+  for (let i = 0; i < NCH; i++) loadSlot(i);
+  const sp = st.player || {};
+  Object.assign(player, { vx: sp.vx || 0, vy: sp.vy || 0, energy: sp.energy ?? 1, face: sp.face || 1, squash: 0 });
+  player.x = (sp.wx ?? 0) - baseChunk * CW * CELL; player.y = sp.y ?? 0;
+  followPlayer(); unstick(); updatePlayerCells();
+  inv.fill(null); (st.inv || []).forEach((s, i) => { if (s && ITEMS[s.id] && i < inv.length) inv[i] = { id: s.id, n: s.n }; });
+  selected = st.selected ?? -1; renderInv();
+  document.querySelectorAll('.seed-value').forEach(el => el.textContent = seedText);
+  if (st.started) { started = true; document.querySelector('#playBtn span').textContent = 'Continue'; }
+  return true;
+}
+const SAVE_KEY = 'mote-save';
+function saveGame() { if (!started) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(serializeState())); } catch (e) {} }
+function loadSave() { try { return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) { return null; } }
+setInterval(saveGame, 20000);
+addEventListener('pagehide', saveGame);
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveGame(); });
+// Go straight back into the game (used after a live update)
+function resumeGame() { mainMenu.hidden = true; stage.classList.remove('at-main'); started = true; document.querySelector('#playBtn span').textContent = 'Continue'; }
+
+// Small pixel toast in the top middle
+function toast(text, ms = 2500) {
+  const t = Object.assign(document.createElement('div'), { className: 'toast px', textContent: text });
+  document.body.appendChild(t); setTimeout(() => t.remove(), ms);
+}
+
+// Installed app (GitHub Pages): check for a new version every 20 seconds and reload into it,
+// keeping the game where it was. Inside the Claude artifact viewer, updates arrive through
+// window.claude.hot instead (see boot below).
+async function pageFingerprint() {
+  const res = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' });
+  if (!res.ok) throw new Error('offline');
+  const text = await res.text(); let h = 0;
+  for (let i = 0; i < text.length; i++) h = (Math.imul(h, 31) + text.charCodeAt(i)) | 0;
+  return h;
+}
+function watchForUpdates() {
+  let current = null, updating = false;
+  const check = async () => {
+    if (updating) return;
+    try {
+      const f = await pageFingerprint();
+      if (current === null) { current = f; return; }
+      if (f !== current) {
+        updating = true; toast('New version, updating…', 3000);
+        try { localStorage.setItem(SAVE_KEY, JSON.stringify(serializeState())); sessionStorage.setItem('mote-resume', started ? '1' : '0'); } catch (e) {}
+        setTimeout(() => location.reload(), 1200);
+      }
+    } catch (e) {}
+  };
+  check(); setInterval(check, 20000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+}
+
+function boot(data) {
+  resize();
+  placeStick(); renderSides(); renderBinds();
+  setFov(Math.min(5, Math.max(1, Math.round(+prefs.fov) || 3)));
+  setSound(prefs.sound !== false);
+  setMusic(prefs.music !== false);
+  let resume = false;
+  try { resume = sessionStorage.getItem('mote-resume') === '1'; sessionStorage.removeItem('mote-resume'); } catch (e) {}
+  if (data && data.state && restoreState(data.state)) { if (data.state.started && data.playing) resumeGame(); }
+  else if (restoreState(loadSave())) { if (resume) { resumeGame(); toast('Updated to the newest version'); } }
+  else { createWorld(prefs.seed); starterKit(); }
+  placeCamera();
+  loop();
+  if (location.protocol === 'https:' && !window.claude) watchForUpdates();
+}
+// Live updates in the Claude artifact viewer: hand the game state to the new version
+window.claude?.hot?.snapshot?.(() => ({ state: serializeState(), playing: mainMenu.hidden }));
+if (window.claude?.hot?.ready) window.claude.hot.ready(boot); else boot(window.claude?.hot?.data ?? {});
 
 // Installable app support (needs https, e.g. GitHub Pages)
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
