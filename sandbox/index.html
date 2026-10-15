@@ -15,37 +15,62 @@
 <style>
   :root {
     color-scheme: dark;
-    --bg: #101216; --fg: #e8ecf2; --muted: #8a94a6; --line: #2c3340;
+    --bg: #101216; --panel: #1b1f27; --fg: #e8ecf2; --muted: #8a94a6; --line: #2c3340;
+    --accent: #8a6cff; --accent-hi: #c9a7ff;
     --stick: 110px;
   }
   [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
   #stage { position: relative; width: 100%; height: 100%; overflow: hidden; }
   #view { position: absolute; inset: 0; display: block; }
 
   #hud { position: absolute; top: max(10px, env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
   #energy { width: 120px; height: 10px; border-radius: 5px; background: rgba(255,255,255,.08); border: 1px solid var(--line); overflow: hidden; }
-  #energy i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #8a6cff, #c9a7ff); }
+  #energy i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-hi)); }
   #energy.low i { background: #f07a6a; }
 
-  #hint { position: absolute; top: calc(max(8px, env(safe-area-inset-top, 0px)) + 46px); right: max(12px, env(safe-area-inset-right, 0px)); max-width: 50%; text-align: right; font-size: 12px; color: var(--muted); pointer-events: none; transition: opacity 1s; }
+  #hint { position: absolute; top: max(10px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); max-width: 45%; text-align: right; font-size: 12px; color: var(--muted); pointer-events: none; transition: opacity 1s; }
 
-  #gear { position: absolute; top: max(8px, env(safe-area-inset-top, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: rgba(27,31,39,.8); color: var(--fg); font-size: 18px; line-height: 1; cursor: pointer; }
-  #settings { position: absolute; top: calc(max(8px, env(safe-area-inset-top, 0px)) + 44px); right: max(10px, env(safe-area-inset-right, 0px)); padding: 12px; border-radius: 10px; background: #1b1f27; border: 1px solid var(--line); display: grid; gap: 8px; z-index: 3; }
-  #settings .label { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-  #fov { display: flex; gap: 6px; }
-  #fov button { width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--line); color: var(--fg); font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
-  #fov button.active { background: #8a6cff; border-color: #c9a7ff; }
-  #settings .sub { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); }
+  /* Side button that opens the inventory */
+  #invBtn { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 12px; border: 1px solid var(--line); background: rgba(27,31,39,.85); display: grid; place-items: center; touch-action: none; }
+  #invBtn.right { right: max(10px, env(safe-area-inset-right, 0px)); }
+  #invBtn.left { left: max(10px, env(safe-area-inset-left, 0px)); }
+  #invBtn svg { width: 26px; height: 26px; }
+
   #stick { position: absolute; width: var(--stick); height: var(--stick); margin: calc(var(--stick) / -2) 0 0 calc(var(--stick) / -2); border-radius: 50%; background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.15); touch-action: none; transition: border-color .2s, background .2s; }
-  #stick.moving { border-color: #c9a7ff; background: rgba(138,108,255,.2); }
+  #stick.moving { border-color: var(--accent-hi); background: rgba(138,108,255,.2); }
   #knob { position: absolute; left: 50%; top: 50%; width: 50%; height: 50%; margin: -25% 0 0 -25%; border-radius: 50%; background: rgba(232,236,242,.35); pointer-events: none; }
+
+  /* Menus */
+  .modal { position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: max(12px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: rgba(8,9,12,.55); }
+  .sheet { width: min(520px, 100%); max-height: 100%; overflow-y: auto; box-sizing: border-box; padding: 14px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); display: grid; gap: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+  .head { display: flex; align-items: center; gap: 8px; }
+  .head h2 { margin: 0; font-size: 16px; flex: 1; }
+  .icon-btn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--line); font-size: 16px; line-height: 1; }
+  .label { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .section { display: grid; gap: 8px; align-content: start; }
+  .slots { display: grid; grid-template-columns: repeat(5, minmax(0, 60px)); gap: 8px; }
+  .slot { aspect-ratio: 1; max-width: 100%; border-radius: 8px; border: 1px dashed var(--line); background: rgba(255,255,255,.03); }
+  .empty-note { margin: 0; font-size: 13px; color: var(--muted); }
+  .wide-btn { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--line); font-weight: 600; text-align: left; }
+  .settings-grid { display: grid; gap: 16px; }
+  @media (min-width: 620px) { .sheet.settings { width: min(720px, 100%); } .settings-grid { grid-template-columns: 1fr 1fr; } }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg button { min-width: 40px; height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--line); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .seg button.active { background: var(--accent); border-color: var(--accent-hi); }
+  .sub { max-width: 232px; display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); }
+  .bind { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+  .bind button { min-width: 64px; height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
+  .bind button.listening { border-color: var(--accent-hi); color: var(--accent-hi); }
+  .note { margin: 0; font-size: 12px; color: var(--muted); }
 
   #rotate { position: fixed; inset: 0; z-index: 5; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; background: var(--bg); }
   #rotate .phone { width: 46px; height: 80px; border: 3px solid var(--fg); border-radius: 8px; animation: turn 2s ease-in-out infinite; }
   @keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
   @media (prefers-reduced-motion: reduce) { #rotate .phone { animation: none; transform: rotate(-90deg); } }
-  #rotate button { padding: 8px 14px; background: var(--line); color: var(--fg); border: 0; border-radius: 8px; font: inherit; }
+  #rotate button { padding: 8px 14px; background: var(--line); border: 0; border-radius: 8px; }
   @media (orientation: portrait) { body:not(.anyway) #rotate { display: flex; } }
 </style>
 </head>
@@ -53,14 +78,48 @@
 <div id="stage">
   <canvas id="view"></canvas>
   <div id="hud">Levitation <div id="energy"><i></i></div></div>
-  <div id="hint">Push the stick up to levitate. Touch anywhere to look around. ⚙ changes the field of view. Hold the stick still to move it.</div>
-  <button id="gear" aria-label="Settings">⚙</button>
-  <div id="settings" hidden>
-    <div class="label">Field of view</div>
-    <div id="fov"></div>
-    <div class="sub"><span>Closer</span><span>Normal is 3</span><span>Wider</span></div>
-  </div>
+  <div id="hint">Push the stick up to levitate. Touch anywhere to look around. The bag button opens your inventory and settings.</div>
+  <button id="invBtn" class="right" aria-label="Inventory">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M8 8V6a4 4 0 0 1 8 0v2"/><path d="M5 8h14l-1 12H6z"/><path d="M9 13h6"/></svg>
+  </button>
   <div id="stick" aria-label="Movement stick"><div id="knob"></div></div>
+
+  <div id="invMenu" class="modal" hidden>
+    <div class="sheet" role="dialog" aria-label="Inventory">
+      <div class="head"><h2>Inventory</h2><button class="icon-btn close" aria-label="Close">✕</button></div>
+      <div class="slots" id="slots"></div>
+      <p class="empty-note">Nothing collected yet.</p>
+      <button class="wide-btn" id="openSettings">⚙&nbsp; Settings</button>
+    </div>
+  </div>
+
+  <div id="setMenu" class="modal" hidden>
+    <div class="sheet settings" role="dialog" aria-label="Settings">
+      <div class="head"><button class="icon-btn" id="backToInv" aria-label="Back to inventory">←</button><h2>Settings</h2><button class="icon-btn close" aria-label="Close">✕</button></div>
+      <div class="settings-grid">
+        <div class="section">
+          <div class="label">Field of view</div>
+          <div class="seg" id="fov"></div>
+          <div class="sub"><span>Closer</span><span>Normal is 3</span><span>Wider</span></div>
+          <div class="label" style="margin-top:8px">Sound</div>
+          <div class="seg" id="sound"><button data-v="1">On</button><button data-v="0">Off</button></div>
+        </div>
+        <div class="section">
+          <div class="label">Controls</div>
+          <div class="bind"><span>Move left</span><button data-act="left"></button></div>
+          <div class="bind"><span>Move right</span><button data-act="right"></button></div>
+          <div class="bind"><span>Levitate</span><button data-act="lev"></button></div>
+          <div class="bind"><span>Open inventory</span><button data-act="inv"></button></div>
+          <p class="note">Tap a key box, then press the new key. Arrow keys and Space always work too.</p>
+          <div class="label" style="margin-top:8px">Joystick side</div>
+          <div class="seg" id="stickSide"><button data-v="left">Left</button><button data-v="right">Right</button></div>
+          <p class="note">You can also hold the joystick still for a moment and drag it anywhere.</p>
+          <div class="label" style="margin-top:8px">Inventory button side</div>
+          <div class="seg" id="invSide"><button data-v="left">Left</button><button data-v="right">Right</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 <div id="rotate">
   <div class="phone"></div>
@@ -69,7 +128,7 @@
 </div>
 <script>
 const EMPTY = 0, SAND = 1, WATER = 2, STONE = 3;
-const CELL = 2;                    // screen px per world pixel
+const CELL = 2;                    // world px per world pixel (cell)
 const BG = [16, 18, 22];
 const RGB = { [SAND]: [226, 194, 107], [WATER]: [59, 142, 232], [STONE]: [120, 126, 140] };
 
@@ -81,6 +140,14 @@ const octx = off.getContext('2d');
 
 let SW = 0, SH = 0;                // screen size in px
 let VW = 0, VH = 0, img = null;    // visible area in cells
+
+// ---- Saved settings ----
+const prefs = { fov: 3, sound: true, binds: { left: 'KeyA', right: 'KeyD', lev: 'KeyW', inv: 'KeyE' }, stick: { x: 0.14, y: 0.75 }, invSide: 'right' };
+try {
+  const saved = JSON.parse(localStorage.getItem('sandbox-prefs') || '{}');
+  Object.assign(prefs, saved, { binds: Object.assign(prefs.binds, saved.binds) });
+} catch (e) {}
+const savePrefs = () => { try { localStorage.setItem('sandbox-prefs', JSON.stringify(prefs)); } catch (e) {} };
 
 // ---- World generation ----
 const big = Math.max(innerWidth, innerHeight);
@@ -129,9 +196,16 @@ function generate() {
   player.x = sx * CELL; player.y = (surface[sx] - 15) * CELL;
 }
 
-// ---- Player (screen px units) ----
-const player = { x: 0, y: 0, w: 16, h: 32, walk: 0, vx: 0, vy: 0, onGround: false, inWater: false, face: 1, energy: 1, lifting: false };
+// ---- Player (world px units) ----
+const SPR_W = 10, SPR_H = 13;      // sprite size in cells
+const player = {
+  x: 0, y: 0, w: SPR_W * CELL, h: SPR_H * CELL, vx: 0, vy: 0,
+  onGround: false, inWater: false, face: 1, energy: 1, lifting: false,
+  walk: 0, squash: 0, blink: 0, nextBlink: 120, idle: 0, emptyWarned: false,
+};
 const LEV_SECONDS = 5, SPEED = 2.5;
+const REFILL_GROUND = 1 / 120;     // full in ~2s on the ground
+const REFILL_AIR = 1 / 900;        // full in ~15s while airborne
 
 let px0 = 0, px1 = -1, py0 = 0, py1 = -1;
 function updatePlayerCells() {
@@ -151,19 +225,98 @@ function hits(x, y) {
 }
 function unstick() { for (let i = 0; i < H * CELL && hits(player.x, player.y); i++) player.y -= 1; }
 
+// ---- Sound (synthesised, starts after the first tap) ----
+let actx = null, master = null, humOsc = null, humGain = null, noiseBuf = null;
+function ensureAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain(); master.gain.value = prefs.sound ? 0.6 : 0; master.connect(actx.destination);
+    noiseBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
+    const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    humOsc = actx.createOscillator(); humOsc.type = 'triangle'; humOsc.frequency.value = 220;
+    humGain = actx.createGain(); humGain.gain.value = 0;
+    humOsc.connect(humGain).connect(master); humOsc.start();
+  } catch (e) { actx = null; }
+}
+function noise(dur, freq, vol, freqTo) {
+  if (!actx) return;
+  const t = actx.currentTime, src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+  src.buffer = noiseBuf; f.type = 'bandpass'; f.Q.value = 1.2;
+  f.frequency.setValueAtTime(freq, t); if (freqTo) f.frequency.exponentialRampToValueAtTime(freqTo, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  src.connect(f).connect(g).connect(master); src.start(t, Math.random() * 0.5); src.stop(t + dur);
+}
+function tone(f0, f1, dur, vol, type = 'sine') {
+  if (!actx) return;
+  const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(master); o.start(t); o.stop(t + dur);
+}
+const sfx = {
+  step: () => noise(0.05, 700 + Math.random() * 500, 0.12),
+  land: v => { tone(150, 45, 0.18, Math.min(0.5, v * 0.06)); noise(0.12, 500, Math.min(0.3, v * 0.03)); },
+  splash: () => noise(0.35, 1800, 0.3, 300),
+  empty: () => tone(520, 160, 0.25, 0.1, 'square'),
+  click: () => tone(900, 700, 0.05, 0.06, 'square'),
+  open: () => { tone(520, 780, 0.08, 0.08, 'triangle'); },
+  close: () => { tone(700, 450, 0.08, 0.08, 'triangle'); },
+};
+function updateHum() {
+  if (!actx) return;
+  const t = actx.currentTime, p = player;
+  humGain.gain.setTargetAtTime(p.lifting ? 0.07 : 0, t, 0.06);
+  humOsc.frequency.setTargetAtTime(170 + p.energy * 170 + Math.sin(t * 14) * 6, t, 0.05);
+}
+function setSound(on) {
+  prefs.sound = on; savePrefs();
+  if (master) master.gain.value = on ? 0.6 : 0;
+  document.querySelectorAll('#sound button').forEach(b => b.classList.toggle('active', (b.dataset.v === '1') === on));
+}
+
+// ---- Particles (world cells, drawn with world pixels) ----
+const parts = [];
+function burst(n, x, y, color, spread, up, life = 30) {
+  for (let i = 0; i < n; i++)
+    parts.push({ x, y, vx: (Math.random() - 0.5) * spread, vy: -Math.random() * up, life: life * (0.6 + Math.random() * 0.6), c: color, g: 0.08 });
+}
+function updateParticles() {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const q = parts[i];
+    q.vy += q.g; q.x += q.vx; q.y += q.vy; q.life--;
+    const cx = q.x | 0, cy = q.y | 0;
+    if (q.life <= 0 || (cx >= 0 && cx < W && cy >= 0 && cy < H && isSolid(grid[cy * W + cx]) && q.vy > 0)) parts.splice(i, 1);
+  }
+}
+
 // ---- Input ----
-const keys = { left: false, right: false, lev: false };
-const keyMap = { ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right', ArrowUp: 'lev', w: 'lev', W: 'lev', ' ': 'lev' };
-addEventListener('keydown', e => { if (keyMap[e.key]) { keys[keyMap[e.key]] = true; e.preventDefault(); } });
-addEventListener('keyup', e => { if (keyMap[e.key]) keys[keyMap[e.key]] = false; });
+const held = new Set();
+const ALT = { left: ['ArrowLeft'], right: ['ArrowRight'], lev: ['ArrowUp', 'Space'], inv: [] };
+const pressed = act => held.has(prefs.binds[act]) || ALT[act].some(c => held.has(c));
+let listening = null;               // binding button waiting for a key
+
+addEventListener('keydown', e => {
+  ensureAudio();
+  if (listening) {
+    e.preventDefault();
+    if (e.code !== 'Escape') { prefs.binds[listening.dataset.act] = e.code; savePrefs(); sfx.click(); }
+    listening.classList.remove('listening'); listening = null; renderBinds();
+    return;
+  }
+  if (e.code === 'Escape') { closeMenus(); return; }
+  if (e.code === prefs.binds.inv && !e.repeat) { invMenu.hidden ? openInv() : closeMenus(); e.preventDefault(); return; }
+  held.add(e.code);
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space'].includes(e.code) || Object.values(prefs.binds).includes(e.code)) e.preventDefault();
+});
+addEventListener('keyup', e => held.delete(e.code));
+addEventListener('blur', () => held.clear());
 addEventListener('contextmenu', e => e.preventDefault());
+addEventListener('pointerdown', ensureAudio, true);
 
 // Joystick: x moves, pushing up levitates. Hold it still for a moment to drag it somewhere else.
 const stick = document.getElementById('stick'), knob = document.getElementById('knob');
-let stickPos = { x: 0.14, y: 0.75 };            // fraction of the screen
-try { Object.assign(stickPos, JSON.parse(localStorage.getItem('sandbox-stick') || '{}')); } catch (e) {}
-function placeStick() { stick.style.left = stickPos.x * 100 + '%'; stick.style.top = stickPos.y * 100 + '%'; }
-placeStick();
+function placeStick() { stick.style.left = prefs.stick.x * 100 + '%'; stick.style.top = prefs.stick.y * 100 + '%'; }
 
 let stickX = 0, stickUp = false, stickId = null, holdTimer = 0, movingStick = false, travelled = 0;
 function moveStick(e) {
@@ -171,8 +324,7 @@ function moveStick(e) {
   let dx = e.clientX - (r.left + rad), dy = e.clientY - (r.top + rad);
   travelled = Math.max(travelled, Math.hypot(dx, dy));
   if (movingStick) {
-    stickPos.x = Math.min(0.95, Math.max(0.05, e.clientX / SW));
-    stickPos.y = Math.min(0.95, Math.max(0.1, e.clientY / SH));
+    prefs.stick = { x: Math.min(0.95, Math.max(0.05, e.clientX / SW)), y: Math.min(0.95, Math.max(0.1, e.clientY / SH)) };
     placeStick(); return;
   }
   const len = Math.hypot(dx, dy);
@@ -184,7 +336,7 @@ function moveStick(e) {
 function releaseStick(e) {
   if (e.pointerId !== stickId) return;
   clearTimeout(holdTimer);
-  if (movingStick) { try { localStorage.setItem('sandbox-stick', JSON.stringify(stickPos)); } catch (err) {} }
+  if (movingStick) { savePrefs(); renderSides(); }
   stickId = null; stickX = 0; stickUp = false; movingStick = false;
   stick.classList.remove('moving'); knob.style.transform = '';
 }
@@ -192,7 +344,7 @@ stick.addEventListener('pointerdown', e => {
   e.preventDefault(); e.stopPropagation();
   stickId = e.pointerId; travelled = 0; stick.setPointerCapture(e.pointerId); moveStick(e);
   holdTimer = setTimeout(() => {
-    if (stickId !== null && travelled < 12) { movingStick = true; stickX = 0; stickUp = false; knob.style.transform = ''; stick.classList.add('moving'); }
+    if (stickId !== null && travelled < 12) { movingStick = true; stickX = 0; stickUp = false; knob.style.transform = ''; stick.classList.add('moving'); sfx.click(); }
   }, 600);
 });
 stick.addEventListener('pointermove', e => { if (e.pointerId === stickId) moveStick(e); });
@@ -205,30 +357,71 @@ function setPeek(e) {
   peek.x = Math.max(-SW / 2, Math.min(SW / 2, e.clientX - SW / 2));
   peek.y = Math.max(-SH / 2, Math.min(SH / 2, e.clientY - SH / 2));
 }
-view.addEventListener('pointerdown', e => { panel.hidden = true; if (peekId === null) { peekId = e.pointerId; view.setPointerCapture(e.pointerId); setPeek(e); } });
+view.addEventListener('pointerdown', e => { if (peekId === null) { peekId = e.pointerId; view.setPointerCapture(e.pointerId); setPeek(e); } });
 view.addEventListener('pointermove', e => { if (e.pointerId === peekId) setPeek(e); });
 const endPeek = e => { if (e.pointerId === peekId) { peekId = null; peek.x = peek.y = 0; } };
 view.addEventListener('pointerup', endPeek);
 view.addEventListener('pointercancel', endPeek);
 
+// ---- Menus ----
+const invMenu = document.getElementById('invMenu'), setMenu = document.getElementById('setMenu');
+const invBtn = document.getElementById('invBtn');
+const menuOpen = () => !invMenu.hidden || !setMenu.hidden;
+function openInv() { setMenu.hidden = true; invMenu.hidden = false; held.clear(); sfx.open(); }
+function openSettings() { invMenu.hidden = true; setMenu.hidden = false; sfx.click(); }
+function closeMenus() {
+  if (!menuOpen()) return;
+  invMenu.hidden = setMenu.hidden = true; sfx.close();
+  if (listening) { listening.classList.remove('listening'); listening = null; renderBinds(); }
+}
+invBtn.addEventListener('click', () => invMenu.hidden ? openInv() : closeMenus());
+document.getElementById('openSettings').onclick = openSettings;
+document.getElementById('backToInv').onclick = openInv;
+document.querySelectorAll('.modal .close').forEach(b => b.onclick = closeMenus);
+document.querySelectorAll('.modal').forEach(m => m.addEventListener('pointerdown', e => { if (e.target === m) closeMenus(); }));
+const slots = document.getElementById('slots');
+for (let i = 0; i < 10; i++) slots.appendChild(Object.assign(document.createElement('div'), { className: 'slot' }));
+
 // Field of view: 5 levels, 3 is normal. Visible area scales with the level (level / 3).
-let fov = 3, zoom = 1;
-try { fov = Math.min(5, Math.max(1, Math.round(+localStorage.getItem('sandbox-fov') || 3))); } catch (e) {}
-const panel = document.getElementById('settings'), fovRow = document.getElementById('fov');
+let zoom = 1;
+const fovRow = document.getElementById('fov');
 function setFov(n) {
-  fov = n; zoom = 1.5 * 3 / n;   // level 3 = 1.5x pixels
+  prefs.fov = n; zoom = 1.5 * 3 / n;   // level 3 = 1.5x pixels
   if (SW) sizeView();
   fovRow.querySelectorAll('button').forEach(b => b.classList.toggle('active', +b.dataset.n === n));
-  try { localStorage.setItem('sandbox-fov', n); } catch (e) {}
+  savePrefs();
 }
 for (let n = 1; n <= 5; n++) {
   const b = document.createElement('button');
   b.textContent = n; b.dataset.n = n;
   b.setAttribute('aria-label', 'Field of view ' + n + (n === 3 ? ' (normal)' : ''));
-  b.onclick = () => setFov(n);
+  b.onclick = () => { setFov(n); sfx.click(); };
   fovRow.appendChild(b);
 }
-document.getElementById('gear').onclick = () => panel.hidden = !panel.hidden;
+document.querySelectorAll('#sound button').forEach(b => b.onclick = () => { ensureAudio(); setSound(b.dataset.v === '1'); sfx.click(); });
+
+// Controls
+const keyName = c => c.startsWith('Key') ? c.slice(3) : c.startsWith('Digit') ? c.slice(5)
+  : ({ ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Space: 'Space', ShiftLeft: 'Shift', ShiftRight: 'Shift' })[c] || c;
+function renderBinds() {
+  document.querySelectorAll('.bind button').forEach(b => { if (b !== listening) b.textContent = keyName(prefs.binds[b.dataset.act]); });
+}
+document.querySelectorAll('.bind button').forEach(b => b.onclick = () => {
+  if (listening) listening.classList.remove('listening');
+  listening = b; b.classList.add('listening'); b.textContent = 'Press…'; renderBinds();
+});
+function renderSides() {
+  const stickSide = prefs.stick.x < 0.5 ? 'left' : 'right';
+  document.querySelectorAll('#stickSide button').forEach(b => b.classList.toggle('active', b.dataset.v === stickSide));
+  document.querySelectorAll('#invSide button').forEach(b => b.classList.toggle('active', b.dataset.v === prefs.invSide));
+  invBtn.className = prefs.invSide;
+}
+document.querySelectorAll('#stickSide button').forEach(b => b.onclick = () => {
+  prefs.stick = { x: b.dataset.v === 'left' ? 0.14 : 0.86, y: 0.75 }; placeStick(); savePrefs(); renderSides(); sfx.click();
+});
+document.querySelectorAll('#invSide button').forEach(b => b.onclick = () => {
+  prefs.invSide = b.dataset.v; savePrefs(); renderSides(); sfx.click();
+});
 
 // Go full screen on the first touch (browsers only allow it after a tap); not every phone supports it
 function goFullscreen() {
@@ -243,7 +436,7 @@ function goFullscreen() {
 addEventListener('pointerdown', goFullscreen, true);
 
 document.getElementById('anyway').onclick = () => { document.body.classList.add('anyway'); resize(); };
-setTimeout(() => document.getElementById('hint').style.opacity = 0, 7000);
+setTimeout(() => document.getElementById('hint').style.opacity = 0, 8000);
 
 // ---- Camera ----
 // cam is the world position (px) of the screen's top-left corner; the player stays dead centre
@@ -270,24 +463,33 @@ function resize() {
 }
 
 // ---- Player physics ----
+function cellAt(px, py) {
+  const cx = Math.floor(px / CELL), cy = Math.floor(py / CELL);
+  return cx >= 0 && cx < W && cy >= 0 && cy < H ? grid[cy * W + cx] : EMPTY;
+}
 function updatePlayer() {
-  const p = player;
-  const c = Math.floor((p.x + p.w / 2) / CELL), r = Math.floor((p.y + p.h / 2) / CELL);
-  p.inWater = r >= 0 && grid[r * W + c] === WATER;
-  const dir = Math.max(-1, Math.min(1, (keys.right ? 1 : 0) - (keys.left ? 1 : 0) + stickX));
+  const p = player, playing = !menuOpen();
+  const wasInWater = p.inWater, wasOnGround = p.onGround;
+  p.inWater = cellAt(p.x + p.w / 2, p.y + p.h / 2) === WATER;
+  const dir = playing ? Math.max(-1, Math.min(1, (pressed('right') ? 1 : 0) - (pressed('left') ? 1 : 0) + stickX)) : 0;
   if (dir) p.face = Math.sign(dir);
   p.vx += (dir * SPEED * (p.inWater ? 0.6 : 1) - p.vx) * 0.35;
 
-  // A full bar lasts LEV_SECONDS of levitation and refills on the ground in about 2s
-  p.lifting = (keys.lev || stickUp) && p.energy > 0;
+  // Levitation: a full bar lasts LEV_SECONDS; refills fast on the ground and slowly in the air
+  const wantLift = playing && (pressed('lev') || stickUp);
+  p.lifting = wantLift && p.energy > 0;
   if (p.lifting) {
     p.energy = Math.max(0, p.energy - 1 / (LEV_SECONDS * 60));
     p.vy += (-2.2 - p.vy) * 0.15;
+    p.emptyWarned = false;
+    if (Math.random() < 0.6) burst(1, p.x / CELL + 2 + Math.random() * 6, (p.y + p.h) / CELL, Math.random() < 0.5 ? GLOW : TIP, 0.4, -0.3, 22);
   } else {
     p.vy += p.inWater ? 0.15 : 0.45;
     p.vy = Math.min(p.vy, p.inWater ? 2 : 10);
-    if (p.onGround) p.energy = Math.min(1, p.energy + 1 / 120);
+    p.energy = Math.min(1, p.energy + (p.onGround ? REFILL_GROUND : REFILL_AIR));
+    if (wantLift && !p.emptyWarned) { sfx.empty(); p.emptyWarned = true; }
   }
+  if (!wantLift) p.emptyWarned = false;
 
   const stepUp = 8;
   let dx = p.vx;
@@ -301,14 +503,42 @@ function updatePlayer() {
     }
     dx -= s;
   }
-  let dy = p.vy; p.onGround = false;
+  let dy = p.vy, impact = 0; p.onGround = false;
   while (Math.abs(dy) > 0) {
     const s = Math.sign(dy) * Math.min(1, Math.abs(dy));
     if (!hits(p.x, p.y + s)) p.y += s;
-    else { if (s > 0) p.onGround = true; p.vy = 0; break; }
+    else { if (s > 0) { p.onGround = true; impact = p.vy; } p.vy = 0; break; }
     dy -= s;
   }
   if (p.y < -p.h * 4) { p.y = -p.h * 4; p.vy = 0; }  // soft ceiling above the world
+
+  // Landing: squash, dust and a thump
+  if (p.onGround && !wasOnGround && impact > 2.5) {
+    p.squash = Math.min(0.35, impact * 0.035);
+    const under = cellAt(p.x + p.w / 2, p.y + p.h + 1);
+    burst(Math.min(14, impact * 1.5) | 0, (p.x + p.w / 2) / CELL, (p.y + p.h) / CELL - 1, RGB[under] || RGB[SAND], 1.6, 0.8, 26);
+    sfx.land(impact);
+  }
+  // Splash on entering water
+  if (p.inWater && !wasInWater && p.vy > 1) {
+    burst(16, (p.x + p.w / 2) / CELL, p.y / CELL + SPR_H / 2, RGB[WATER], 1.4, 1.8, 35);
+    sfx.splash();
+  }
+  // Footsteps
+  if (p.onGround && Math.abs(p.vx) > 0.3) {
+    const before = p.walk | 0;
+    p.walk += Math.abs(p.vx) * 0.09;
+    if ((p.walk | 0) !== before) {
+      sfx.step();
+      const under = cellAt(p.x + p.w / 2, p.y + p.h + 1);
+      burst(2, (p.x + p.w / 2) / CELL - p.face * 3, (p.y + p.h) / CELL - 1, RGB[under] || RGB[SAND], 0.6, 0.5, 16);
+    }
+    p.idle = 0;
+  } else p.idle++;
+
+  p.squash *= 0.8;
+  if (--p.nextBlink <= 0) { p.blink = 7; p.nextBlink = 120 + Math.random() * 200; }
+  if (p.blink > 0) p.blink--;
   updatePlayerCells();
 }
 
@@ -353,6 +583,7 @@ function step() {
 }
 
 // ---- Rendering ----
+let frame = 0;
 function render() {
   const data = img.data;
   const ox = Math.floor(cam.x / CELL), oy = Math.floor(cam.y / CELL);
@@ -368,7 +599,13 @@ function render() {
       data[o] = c[0] + s; data[o + 1] = c[1] + s; data[o + 2] = c[2] + s; data[o + 3] = 255;
     }
   }
-  drawPlayer(data, ox, oy);
+  const put = (x, y, c, s = 0) => {
+    if (x < 0 || y < 0 || x >= VW || y >= VH) return;
+    const o = (y * VW + x) * 4;
+    data[o] = c[0] + s; data[o + 1] = c[1] + s; data[o + 2] = c[2] + s;
+  };
+  drawPlayer(put, ox, oy);
+  for (const q of parts) put(Math.floor(q.x) - ox, Math.floor(q.y) - oy, q.c);
   octx.putImageData(img, 0, 0);
   // Draw in world coordinates, scaled by zoom
   const k = dpr * zoom;
@@ -377,49 +614,71 @@ function render() {
   vctx.drawImage(off, ox * CELL, oy * CELL, VW * CELL, VH * CELL);
 }
 
-// The player is drawn with world pixels, same as the terrain. 8x16 cells, facing right.
-const SPRITE = [
-  '..HHHH..',
-  '.HHHHHH.',
-  '.HHSSSS.',
-  '.HSSSES.',
-  '.SSSSSS.',
-  '..SSSS..',
-  '.BBBBBB.',
-  'BBBBBBBB',
-  'SBBBBBBS',
-  'SBBBBBBS',
-  '.BBBBBB.',
-  '.PPPPPP.',
+// The player: a little one-eyed levitating mote with an antenna, drawn with world pixels.
+// Facing right. O outline, B body, L highlight, A antenna, T antenna tip. The eye is added per frame.
+const BODY = [
+  '....T.....',
+  '....A.....',
+  '..OOOOOO..',
+  '.OBBBBBBO.',
+  'OBLLBBBBBO',
+  'OBLBBBBBBO',
+  'OBBBBBBBBO',
+  'OBBBBBBBBO',
+  'OBBBBBBBBO',
+  'OBBBBBBBBO',
+  '.OBBBBBBO.',
+  '..OOOOOO..',
 ];
-const LEGS = [
-  ['.PP..PP.', '.PP..PP.', '.PP..PP.', '.FF..FF.'],   // standing
-  ['.PP.PP..', 'PP...PP.', 'P.....PP', 'FF....FF'],   // mid-stride
-];
-const PCOL = { H: [92, 58, 38], S: [241, 201, 165], E: [20, 20, 24], B: [63, 191, 127], P: [43, 95, 168], F: [40, 40, 48] };
-const pShade = Array.from({ length: 16 * 8 }, () => (Math.random() * 16 - 8) | 0);
-const GLOW = [201, 167, 255];
+const FEET = { stand: '..OO..OO..', a: '.OO....OO.', b: '...OOOO...', tuck: '..........' };
+const GLOW = [201, 167, 255], TIP = [255, 222, 120];
+const PCOL = { O: [34, 28, 64], B: [124, 98, 255], L: [196, 180, 255], A: [34, 28, 64], W: [246, 246, 252], E: [18, 16, 30], T: TIP };
+const pShade = Array.from({ length: SPR_W * SPR_H }, () => (Math.random() * 12 - 6) | 0);
 
-function drawPlayer(data, ox, oy) {
+function playerFrame() {
   const p = player;
-  const bx = Math.round(p.x / CELL) - ox, by = Math.round(p.y / CELL) - oy;
-  const moving = Math.abs(p.vx) > 0.3 && p.onGround;
-  if (moving) p.walk += Math.abs(p.vx) * 0.08;
-  const rows = SPRITE.concat(LEGS[moving && (p.walk | 0) % 2 ? 1 : 0]);
-  const put = (x, y, c, s) => {
-    if (x < 0 || y < 0 || x >= VW || y >= VH) return;
-    const o = (y * VW + x) * 4;
-    data[o] = c[0] + s; data[o + 1] = c[1] + s; data[o + 2] = c[2] + s;
-  };
-  for (let sy = 0; sy < rows.length; sy++)
-    for (let sx = 0; sx < 8; sx++) {
-      const ch = rows[sy][p.face > 0 ? sx : 7 - sx];
-      if (ch !== '.') put(bx + sx, by + sy, PCOL[ch], ch === 'E' ? 0 : pShade[sy * 8 + sx]);
+  const rows = BODY.map(r => r.split(''));
+  // Antenna sways behind when moving, wiggles while idle
+  const sway = Math.abs(p.vx) > 0.5 ? -1 : (p.idle > 60 && (frame >> 4) % 4 === 0 ? 1 : 0);
+  if (sway) { rows[0][4] = '.'; rows[0][4 + sway] = 'T'; }
+  // Eye: 3x3 white with a 2x2 pupil that looks up while levitating, down when falling fast
+  if (p.blink > 0) { for (let x = 5; x <= 7; x++) rows[6][x] = 'O'; }
+  else {
+    for (let y = 5; y <= 7; y++) for (let x = 5; x <= 7; x++) rows[y][x] = 'W';
+    const py = p.lifting ? 5 : p.vy > 4 ? 6 : 6;
+    const pxe = p.idle > 90 && (frame >> 6) % 3 === 1 ? 5 : 6;   // glances back now and then
+    for (let y = py; y <= py + 1; y++) for (let x = pxe; x <= pxe + 1; x++) rows[y][x] = 'E';
+  }
+  let feet = FEET.stand;
+  if (p.lifting || (!p.onGround && !p.inWater)) feet = FEET.tuck;
+  else if (Math.abs(p.vx) > 0.3) feet = (p.walk | 0) % 2 ? FEET.a : FEET.b;
+  rows.push(feet.split(''));
+  return rows;
+}
+
+function drawPlayer(put, ox, oy) {
+  const p = player;
+  // Squash on landing, stretch when falling fast, breathe while idle, bob while levitating
+  const stretch = !p.onGround && !p.lifting && p.vy > 3 ? Math.min(0.2, (p.vy - 3) * 0.04) : 0;
+  const breathe = p.onGround && p.idle > 20 && (frame % 90) < 25 ? 1 : 0;
+  const tw = Math.max(6, Math.round(SPR_W * (1 + p.squash * 0.7 - stretch * 0.5)));
+  const th = Math.max(8, Math.round(SPR_H * (1 - p.squash + stretch)) - breathe);
+  const bob = p.lifting ? Math.round(Math.sin(frame * 0.2)) : 0;
+  const bx = Math.round(p.x / CELL) - ox + ((SPR_W - tw) >> 1);
+  const by = Math.round(p.y / CELL) - oy + (SPR_H - th) + bob;
+  const rows = playerFrame();
+  const tipPulse = p.lifting ? 30 : Math.round(Math.sin(frame * 0.08) * 20) - 10;
+  for (let ty = 0; ty < th; ty++) {
+    const sy = Math.min(SPR_H - 1, Math.floor((ty + 0.5) * SPR_H / th));
+    for (let tx = 0; tx < tw; tx++) {
+      const sxr = Math.min(SPR_W - 1, Math.floor((tx + 0.5) * SPR_W / tw));
+      const sx = p.face > 0 ? sxr : SPR_W - 1 - sxr;
+      const ch = rows[sy][sx];
+      if (ch === '.') continue;
+      const s = ch === 'T' ? tipPulse : ch === 'W' || ch === 'E' ? 0 : pShade[sy * SPR_W + sx];
+      put(bx + tx, by + ty, PCOL[ch], s);
     }
-  if (p.lifting)                                       // flickering glow under the feet
-    for (let sx = -1; sx <= 8; sx++)
-      for (let gy = 1; gy <= 3; gy++)
-        if (Math.random() < 0.7 / gy) put(bx + sx, by + 16 + gy, GLOW, 0);
+  }
 }
 
 const energyEl = document.getElementById('energy'), energyFill = energyEl.firstElementChild;
@@ -429,7 +688,10 @@ function drawHud() {
 }
 
 function loop() {
+  frame++;
   updatePlayer();
+  updateParticles();
+  updateHum();
   peekS.x += (peek.x - peekS.x) * 0.04;
   peekS.y += (peek.y - peekS.y) * 0.04;
   placeCamera();
@@ -444,7 +706,11 @@ resize();
 generate();
 unstick();
 updatePlayerCells();
-setFov(fov);
+placeStick();
+renderSides();
+renderBinds();
+setFov(Math.min(5, Math.max(1, Math.round(+prefs.fov) || 3)));
+setSound(prefs.sound !== false);
 placeCamera();
 loop();
 
