@@ -1,6 +1,6 @@
 {
-  "name": "Pixel Sandbox",
-  "short_name": "Sandbox",
+  "name": "Mote",
+  "short_name": "Mote",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",

@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Pixel Sandbox</title>
+<title>Mote</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&family=Silkscreen:wght@400;700&display=swap">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -11,120 +14,188 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Sandbox">
+<meta name="apple-mobile-web-app-title" content="Mote">
 <style>
+  /* Style taken from the mote itself: a dark outline, violet body, light top-left edge,
+     shaded bottom-right edge, and the gold of its antenna tip as the accent. 3px "pixels". */
   :root {
     color-scheme: dark;
-    --bg: #101216; --panel: #1b1f27; --fg: #e8ecf2; --muted: #8a94a6; --line: #2c3340;
-    --accent: #8a6cff; --accent-hi: #c9a7ff;
-    --stick: 110px;
+    --night: #101216;
+    --o: #221c40;        /* outline */
+    --b: #7c62ff;        /* body */
+    --l: #c4b4ff;        /* highlight */
+    --s: #5a43d6;        /* shade */
+    --t: #ffde78;        /* antenna tip */
+    --ink: #f6f6fc;
+    --muted: #a7a0d6;
+    --panel: #1d1939; --panel-hi: #2f2962; --panel-lo: #131027;
+    --slate: #2e2a58; --slate-hi: #463f80; --slate-lo: #1d1a3d;
+    --danger: #f07a6a;
+    --px: 3px;
+    --font: 'Pixelify Sans', ui-monospace, Menlo, monospace;
+    --display: 'Silkscreen', 'Pixelify Sans', ui-monospace, monospace;
+    --stick: 112px;
   }
   [hidden] { display: none !important; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
-  button { font: inherit; color: inherit; cursor: pointer; }
-  button:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+  html, body { margin: 0; height: 100%; background: var(--night); color: var(--ink); font-family: var(--font); font-size: 15px; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; }
+  button:focus-visible { outline: var(--px) solid var(--t); outline-offset: 6px; }
   #stage { position: relative; width: 100%; height: 100%; overflow: hidden; }
   #view { position: absolute; inset: 0; display: block; }
 
-  #hud { position: absolute; top: max(10px, env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
-  #energy { width: 120px; height: 10px; border-radius: 5px; background: rgba(255,255,255,.08); border: 1px solid var(--line); overflow: hidden; }
-  #energy i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-hi)); }
-  #energy.low i { background: #f07a6a; }
+  /* Pixel outline with notched corners + bevel, built from shadows */
+  .px {
+    box-shadow:
+      inset var(--px) var(--px) 0 var(--hi), inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--lo),
+      0 calc(var(--px) * -1) 0 var(--o), 0 var(--px) 0 var(--o), calc(var(--px) * -1) 0 0 var(--o), var(--px) 0 0 var(--o);
+  }
+  .btn {
+    --hi: var(--l); --lo: var(--s);
+    position: relative; background: var(--b); padding: 9px 16px; font-weight: 600; letter-spacing: .02em;
+    box-shadow:
+      inset var(--px) var(--px) 0 var(--hi), inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--lo),
+      0 calc(var(--px) * -1) 0 var(--o), 0 var(--px) 0 var(--o), calc(var(--px) * -1) 0 0 var(--o), var(--px) 0 0 var(--o),
+      0 calc(var(--px) * 2) 0 var(--o);
+    text-shadow: 2px 2px 0 var(--o);
+    transition: transform .05s;
+  }
+  .btn:active, .btn.down { transform: translateY(var(--px)); box-shadow:
+      inset var(--px) var(--px) 0 var(--lo), inset calc(var(--px) * -1) calc(var(--px) * -1) 0 var(--hi),
+      0 calc(var(--px) * -1) 0 var(--o), 0 var(--px) 0 var(--o), calc(var(--px) * -1) 0 0 var(--o), var(--px) 0 0 var(--o); }
+  .btn.alt { --hi: var(--slate-hi); --lo: var(--slate-lo); background: var(--slate); }
+  .btn.gold { --hi: #fff3c4; --lo: #d9a93a; background: var(--t); color: var(--o); text-shadow: none; }
+  .btn.square { width: 40px; height: 40px; padding: 0; display: grid; place-items: center; }
+  .btn svg { width: 18px; height: 18px; shape-rendering: crispEdges; }
 
-  #hint { position: absolute; top: max(10px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); max-width: 45%; text-align: right; font-size: 12px; color: var(--muted); pointer-events: none; transition: opacity 1s; }
+  /* HUD */
+  #hud { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); left: max(14px, env(safe-area-inset-left, 0px)); display: flex; align-items: center; gap: 10px; font-family: var(--display); font-size: 11px; color: var(--l); text-shadow: 2px 2px 0 var(--o); pointer-events: none; }
+  #energy { --hi: var(--panel-lo); --lo: var(--panel-hi); width: 126px; height: 12px; background: var(--panel-lo); padding: var(--px); box-sizing: content-box; }
+  #energy i { display: block; height: 100%; width: 100%; background: repeating-linear-gradient(90deg, var(--b) 0 7px, var(--l) 7px 8px, transparent 8px 9px); }
+  #energy.low i { background: repeating-linear-gradient(90deg, var(--danger) 0 8px, transparent 8px 9px); }
 
-  /* Side button that opens the inventory */
-  #invBtn { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 12px; border: 1px solid var(--line); background: rgba(27,31,39,.85); display: grid; place-items: center; touch-action: none; }
-  #invBtn.right { right: max(10px, env(safe-area-inset-right, 0px)); }
-  #invBtn.left { left: max(10px, env(safe-area-inset-left, 0px)); }
-  #invBtn svg { width: 26px; height: 26px; }
+  #hint { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); right: max(14px, env(safe-area-inset-right, 0px)); max-width: 42%; text-align: right; font-size: 13px; color: var(--muted); text-shadow: 2px 2px 0 var(--o); pointer-events: none; transition: opacity 1s; }
 
-  #stick { position: absolute; width: var(--stick); height: var(--stick); margin: calc(var(--stick) / -2) 0 0 calc(var(--stick) / -2); border-radius: 50%; background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.15); touch-action: none; transition: border-color .2s, background .2s; }
-  #stick.moving { border-color: var(--accent-hi); background: rgba(138,108,255,.2); }
-  #knob { position: absolute; left: 50%; top: 50%; width: 50%; height: 50%; margin: -25% 0 0 -25%; border-radius: 50%; background: rgba(232,236,242,.35); pointer-events: none; }
+  #invBtn { position: absolute; top: 50%; margin-top: -24px; width: 48px; height: 48px; padding: 0; display: grid; place-items: center; touch-action: none; }
+  #invBtn.right { right: max(14px, env(safe-area-inset-right, 0px)); }
+  #invBtn.left { left: max(14px, env(safe-area-inset-left, 0px)); }
+  #invBtn svg { width: 30px; height: 30px; }
+
+  /* Joystick: stepped "pixel circles" */
+  .pxcircle { clip-path: polygon(30% 0, 70% 0, 70% 6%, 82% 6%, 82% 12%, 88% 12%, 88% 18%, 94% 18%, 94% 30%, 100% 30%, 100% 70%, 94% 70%, 94% 82%, 88% 82%, 88% 88%, 82% 88%, 82% 94%, 70% 94%, 70% 100%, 30% 100%, 30% 94%, 18% 94%, 18% 88%, 12% 88%, 12% 82%, 6% 82%, 6% 70%, 0 70%, 0 30%, 6% 30%, 6% 18%, 12% 18%, 12% 12%, 18% 12%, 18% 6%, 30% 6%); }
+  #stick { position: absolute; width: var(--stick); height: var(--stick); margin: calc(var(--stick) / -2) 0 0 calc(var(--stick) / -2); background: rgba(34, 28, 64, .55); touch-action: none; }
+  #stick::before { content: ''; position: absolute; inset: 6px; background: rgba(124, 98, 255, .14); }
+  #stick.moving::before { background: rgba(255, 222, 120, .35); }
+  #knob { position: absolute; left: 50%; top: 50%; width: 46%; height: 46%; margin: -23% 0 0 -23%; background: linear-gradient(135deg, var(--l) 0 30%, var(--b) 30% 75%, var(--s) 75%); opacity: .75; pointer-events: none; }
 
   /* Menus */
-  .modal { position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: max(12px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: rgba(8,9,12,.55); }
-  .sheet { width: min(520px, 100%); max-height: 100%; overflow-y: auto; box-sizing: border-box; padding: 14px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); display: grid; gap: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
-  .head { display: flex; align-items: center; gap: 8px; }
-  .head h2 { margin: 0; font-size: 16px; flex: 1; }
-  .icon-btn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--line); font-size: 16px; line-height: 1; }
-  .label { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-  .section { display: grid; gap: 8px; align-content: start; }
-  .slots { display: grid; grid-template-columns: repeat(5, minmax(0, 60px)); gap: 8px; }
-  .slot { aspect-ratio: 1; max-width: 100%; border-radius: 8px; border: 1px dashed var(--line); background: rgba(255,255,255,.03); }
-  .empty-note { margin: 0; font-size: 13px; color: var(--muted); }
-  .wide-btn { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--line); font-weight: 600; text-align: left; }
-  .settings-grid { display: grid; gap: 16px; }
-  @media (min-width: 620px) { .sheet.settings { width: min(720px, 100%); } .settings-grid { grid-template-columns: 1fr 1fr; } }
-  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
-  .seg button { min-width: 40px; height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--line); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .seg button.active { background: var(--accent); border-color: var(--accent-hi); }
-  .sub { max-width: 232px; display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); }
-  .bind { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
-  .bind button { min-width: 64px; height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
-  .bind button.listening { border-color: var(--accent-hi); color: var(--accent-hi); }
-  .note { margin: 0; font-size: 12px; color: var(--muted); }
+  .modal { position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: max(14px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(14px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: rgba(14, 10, 32, .62); }
+  .sheet { --hi: var(--panel-hi); --lo: var(--panel-lo); width: min(500px, calc(100% - 12px)); max-height: calc(100% - 12px); overflow-y: auto; box-sizing: border-box; padding: 16px 18px 20px; background: var(--panel); display: grid; gap: 16px; }
+  .head { display: flex; align-items: center; gap: 12px; }
+  h1, h2 { font-family: var(--display); font-weight: 700; margin: 0; text-transform: uppercase; letter-spacing: .03em; text-shadow: var(--px) var(--px) 0 var(--o); }
+  .head h2 { flex: 1; font-size: 18px; color: var(--l); }
+  .label { font-family: var(--display); font-size: 11px; color: var(--t); text-shadow: 2px 2px 0 var(--o); }
+  .section { display: grid; gap: 10px; align-content: start; }
+  .slots { display: grid; grid-template-columns: repeat(5, minmax(0, 58px)); gap: 12px; }
+  .slot { --hi: #0a0817; --lo: var(--panel-hi); aspect-ratio: 1; background: var(--panel-lo); }
+  .empty-note { margin: 0; font-size: 14px; color: var(--muted); }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .row .btn { flex: 1; min-width: 120px; }
+  .settings-grid { display: grid; gap: 20px; }
+  @media (min-width: 620px) { .sheet.settings { width: min(720px, calc(100% - 12px)); } .settings-grid { grid-template-columns: 1fr 1fr; } }
+  .seg { display: flex; gap: 12px; flex-wrap: wrap; padding-bottom: 6px; }
+  .seg .btn { min-width: 40px; height: 38px; padding: 0 12px; }
+  .seg .btn:not(.active) { --hi: var(--slate-hi); --lo: var(--slate-lo); background: var(--slate); }
+  .sub { max-width: 260px; display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+  .bind { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .bind .btn { min-width: 70px; height: 34px; padding: 0 10px; }
+  .bind .btn.listening { --hi: #fff3c4; --lo: #d9a93a; background: var(--t); color: var(--o); text-shadow: none; }
+  .note { margin: 0; font-size: 13px; color: var(--muted); }
 
-  #rotate { position: fixed; inset: 0; z-index: 5; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; background: var(--bg); }
-  #rotate .phone { width: 46px; height: 80px; border: 3px solid var(--fg); border-radius: 8px; animation: turn 2s ease-in-out infinite; }
+  /* Main menu */
+  #mainMenu { position: absolute; inset: 0; z-index: 6; display: flex; align-items: center; justify-content: center; gap: clamp(20px, 6vw, 72px); flex-wrap: wrap; box-sizing: border-box; padding: max(14px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(14px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: linear-gradient(rgba(14, 10, 32, .55), rgba(14, 10, 32, .85)); overflow-y: auto; }
+  .brand { display: grid; justify-items: center; gap: 10px; }
+  #moteArt { width: calc(16px * 9); height: calc(22px * 9); image-rendering: pixelated; max-height: 42vh; max-width: 100%; aspect-ratio: 16 / 22; }
+  .brand h1 { font-size: clamp(40px, 9vw, 72px); line-height: 1; color: var(--ink); text-shadow: 4px 4px 0 var(--s), 8px 8px 0 var(--o); }
+  .brand p { margin: 0; font-family: var(--display); font-size: 12px; color: var(--t); text-shadow: 2px 2px 0 var(--o); }
+  .menu-col { display: grid; gap: 18px; width: min(260px, 100%); }
+  .menu-col .btn { padding: 12px 18px; font-size: 18px; text-align: left; display: flex; align-items: center; gap: 12px; }
+  .menu-col .btn svg { width: 20px; height: 20px; flex: none; }
+  .menu-col .tip { font-size: 12px; color: var(--muted); text-shadow: 2px 2px 0 var(--o); text-align: center; }
+
+  .at-main #hud, .at-main #invBtn, .at-main #stick, .at-main #hint { visibility: hidden; }
+  #rotate { position: fixed; inset: 0; z-index: 9; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; background: var(--panel); font-family: var(--display); font-size: 13px; color: var(--l); }
+  #rotate .phone { width: 42px; height: 72px; background: var(--b); box-shadow: inset 6px 6px 0 var(--l), inset -6px -6px 0 var(--s), 0 -3px 0 var(--o), 0 3px 0 var(--o), -3px 0 0 var(--o), 3px 0 0 var(--o); animation: turn 2s steps(4) infinite; }
   @keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
   @media (prefers-reduced-motion: reduce) { #rotate .phone { animation: none; transform: rotate(-90deg); } }
-  #rotate button { padding: 8px 14px; background: var(--line); border: 0; border-radius: 8px; }
   @media (orientation: portrait) { body:not(.anyway) #rotate { display: flex; } }
 </style>
 </head>
 <body>
-<div id="stage">
+<div id="stage" class="at-main">
   <canvas id="view"></canvas>
-  <div id="hud">Levitation <div id="energy"><i></i></div></div>
-  <div id="hint">Push the stick up to levitate. Touch anywhere to look around. The bag button opens your inventory and settings.</div>
-  <button id="invBtn" class="right" aria-label="Inventory">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M8 8V6a4 4 0 0 1 8 0v2"/><path d="M5 8h14l-1 12H6z"/><path d="M9 13h6"/></svg>
-  </button>
-  <div id="stick" aria-label="Movement stick"><div id="knob"></div></div>
+  <div id="hud">Levitation <div id="energy" class="px"><i></i></div></div>
+  <div id="hint">Push the stick up to levitate. Touch anywhere to look around. The bag opens your inventory and settings.</div>
+  <button id="invBtn" class="btn alt right" aria-label="Inventory"><svg viewBox="0 0 10 10" shape-rendering="crispEdges"><rect x="3" y="0" width="4" height="1" fill="var(--o)"/><rect x="2" y="1" width="1" height="2" fill="var(--o)"/><rect x="7" y="1" width="1" height="2" fill="var(--o)"/><rect x="1" y="3" width="8" height="7" fill="var(--o)"/><rect x="2" y="3" width="6" height="6" fill="var(--l)"/><rect x="3" y="4" width="5" height="5" fill="var(--b)"/><rect x="2" y="8" width="6" height="1" fill="var(--s)"/><rect x="4" y="5" width="2" height="2" fill="var(--t)"/></svg></button>
+  <div id="stick" class="pxcircle" aria-label="Movement stick"><div id="knob" class="pxcircle"></div></div>
 
   <div id="invMenu" class="modal" hidden>
-    <div class="sheet" role="dialog" aria-label="Inventory">
-      <div class="head"><h2>Inventory</h2><button class="icon-btn close" aria-label="Close">✕</button></div>
+    <div class="sheet px" role="dialog" aria-label="Inventory">
+      <div class="head"><h2>Inventory</h2><button class="btn alt square close" aria-label="Close"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="0" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="2" height="2"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/></svg></button></div>
       <div class="slots" id="slots"></div>
       <p class="empty-note">Nothing collected yet.</p>
-      <button class="wide-btn" id="openSettings">⚙&nbsp; Settings</button>
+      <div class="row">
+        <button class="btn" id="openSettings"><svg viewBox="0 0 7 7" fill="currentColor"><rect x="3" y="0" width="1" height="7"/><rect x="0" y="3" width="7" height="1"/><rect x="1" y="1" width="5" height="5"/><rect x="3" y="3" width="1" height="1" fill="var(--o)"/></svg> Settings</button>
+        <button class="btn alt" id="toMain"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="2" y="0" width="2" height="1"/><rect x="1" y="1" width="4" height="1"/><rect x="0" y="2" width="6" height="1"/><rect x="1" y="3" width="4" height="3"/><rect x="2" y="4" width="2" height="2" fill="var(--o)"/></svg> Main menu</button>
+      </div>
     </div>
   </div>
 
   <div id="setMenu" class="modal" hidden>
-    <div class="sheet settings" role="dialog" aria-label="Settings">
-      <div class="head"><button class="icon-btn" id="backToInv" aria-label="Back to inventory">←</button><h2>Settings</h2><button class="icon-btn close" aria-label="Close">✕</button></div>
+    <div class="sheet settings px" role="dialog" aria-label="Settings">
+      <div class="head"><button class="btn alt square" id="setBack" aria-label="Back"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="2" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="0" y="2" width="6" height="2"/><rect x="1" y="4" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/></svg></button><h2>Settings</h2><button class="btn alt square close" aria-label="Close"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="0" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="2" height="2"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/></svg></button></div>
       <div class="settings-grid">
         <div class="section">
           <div class="label">Field of view</div>
           <div class="seg" id="fov"></div>
           <div class="sub"><span>Closer</span><span>Normal is 3</span><span>Wider</span></div>
           <div class="label" style="margin-top:8px">Sound</div>
-          <div class="seg" id="sound"><button data-v="1">On</button><button data-v="0">Off</button></div>
+          <div class="seg" id="sound"><button class="btn" data-v="1">On</button><button class="btn" data-v="0">Off</button></div>
         </div>
         <div class="section">
           <div class="label">Controls</div>
-          <div class="bind"><span>Move left</span><button data-act="left"></button></div>
-          <div class="bind"><span>Move right</span><button data-act="right"></button></div>
-          <div class="bind"><span>Levitate</span><button data-act="lev"></button></div>
-          <div class="bind"><span>Open inventory</span><button data-act="inv"></button></div>
+          <div class="bind"><span>Move left</span><button class="btn alt" data-act="left"></button></div>
+          <div class="bind"><span>Move right</span><button class="btn alt" data-act="right"></button></div>
+          <div class="bind"><span>Levitate</span><button class="btn alt" data-act="lev"></button></div>
+          <div class="bind"><span>Open inventory</span><button class="btn alt" data-act="inv"></button></div>
           <p class="note">Tap a key box, then press the new key. Arrow keys and Space always work too.</p>
           <div class="label" style="margin-top:8px">Joystick side</div>
-          <div class="seg" id="stickSide"><button data-v="left">Left</button><button data-v="right">Right</button></div>
+          <div class="seg" id="stickSide"><button class="btn" data-v="left">Left</button><button class="btn" data-v="right">Right</button></div>
           <p class="note">You can also hold the joystick still for a moment and drag it anywhere.</p>
           <div class="label" style="margin-top:8px">Inventory button side</div>
-          <div class="seg" id="invSide"><button data-v="left">Left</button><button data-v="right">Right</button></div>
+          <div class="seg" id="invSide"><button class="btn" data-v="left">Left</button><button class="btn" data-v="right">Right</button></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div id="mainMenu">
+    <div class="brand">
+      <canvas id="moteArt" width="16" height="22"></canvas>
+      <h1>Mote</h1>
+      <p>A pixel sandbox</p>
+    </div>
+    <div class="menu-col">
+      <button class="btn gold" id="playBtn"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="1" y="0" width="1" height="6"/><rect x="2" y="1" width="1" height="4"/><rect x="3" y="2" width="1" height="2"/></svg> <span>Play</span></button>
+      <button class="btn" id="newWorld"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="0" y="3" width="2" height="3"/><rect x="2" y="2" width="1" height="4"/><rect x="3" y="1" width="1" height="5"/><rect x="4" y="2" width="2" height="4"/></svg> New world</button>
+      <button class="btn alt" id="mainSettings"><svg viewBox="0 0 7 7" fill="currentColor"><rect x="3" y="0" width="1" height="7"/><rect x="0" y="3" width="7" height="1"/><rect x="1" y="1" width="5" height="5"/><rect x="3" y="3" width="1" height="1" fill="var(--o)"/></svg> Settings</button>
+      <div class="tip">Push the stick up to levitate.<br>Touch anywhere to look around.</div>
     </div>
   </div>
 </div>
 <div id="rotate">
   <div class="phone"></div>
   <p>Turn your phone sideways to play.</p>
-  <button id="anyway">Play in portrait</button>
+  <button class="btn" id="anyway">Play in portrait</button>
 </div>
 <script>
 const EMPTY = 0, SAND = 1, WATER = 2, STONE = 3;
@@ -164,6 +235,8 @@ function noise1D(scale) {
   };
 }
 function generate() {
+  grid.fill(EMPTY); parts.length = 0;
+  Object.assign(player, { vx: 0, vy: 0, energy: 1, squash: 0 });
   const hills = noise1D(220), bumps = noise1D(60), grit = noise1D(14), depth = noise1D(40);
   const surface = new Int32Array(W);
   for (let x = 0; x < W; x++) {
@@ -305,7 +378,7 @@ addEventListener('keydown', e => {
     return;
   }
   if (e.code === 'Escape') { closeMenus(); return; }
-  if (e.code === prefs.binds.inv && !e.repeat) { invMenu.hidden ? openInv() : closeMenus(); e.preventDefault(); return; }
+  if (e.code === prefs.binds.inv && !e.repeat && mainMenu.hidden) { invMenu.hidden ? openInv() : closeMenus(); e.preventDefault(); return; }
   held.add(e.code);
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space'].includes(e.code) || Object.values(prefs.binds).includes(e.code)) e.preventDefault();
 });
@@ -365,22 +438,35 @@ view.addEventListener('pointercancel', endPeek);
 
 // ---- Menus ----
 const invMenu = document.getElementById('invMenu'), setMenu = document.getElementById('setMenu');
+const mainMenu = document.getElementById('mainMenu');
 const invBtn = document.getElementById('invBtn');
-const menuOpen = () => !invMenu.hidden || !setMenu.hidden;
+let settingsFrom = 'inv', started = false;
+const menuOpen = () => !invMenu.hidden || !setMenu.hidden || !mainMenu.hidden;
 function openInv() { setMenu.hidden = true; invMenu.hidden = false; held.clear(); sfx.open(); }
-function openSettings() { invMenu.hidden = true; setMenu.hidden = false; sfx.click(); }
+function openSettings(from) { settingsFrom = from; invMenu.hidden = true; setMenu.hidden = false; sfx.click(); }
 function closeMenus() {
-  if (!menuOpen()) return;
+  if (!mainMenu.hidden) { if (!setMenu.hidden) { setMenu.hidden = true; sfx.close(); } return; }
+  if (invMenu.hidden && setMenu.hidden) return;
   invMenu.hidden = setMenu.hidden = true; sfx.close();
   if (listening) { listening.classList.remove('listening'); listening = null; renderBinds(); }
 }
+function showMain() { invMenu.hidden = setMenu.hidden = true; mainMenu.hidden = false; stage.classList.add('at-main'); held.clear(); sfx.close(); }
+function play() {
+  ensureAudio(); mainMenu.hidden = true; stage.classList.remove('at-main'); sfx.open();
+  if (!started) { started = true; document.querySelector('#playBtn span').textContent = 'Continue';
+    const hint = document.getElementById('hint'); hint.hidden = false; setTimeout(() => hint.style.opacity = 0, 8000); }
+}
 invBtn.addEventListener('click', () => invMenu.hidden ? openInv() : closeMenus());
-document.getElementById('openSettings').onclick = openSettings;
-document.getElementById('backToInv').onclick = openInv;
+document.getElementById('openSettings').onclick = () => openSettings('inv');
+document.getElementById('mainSettings').onclick = () => openSettings('main');
+document.getElementById('setBack').onclick = () => { if (settingsFrom === 'main') { setMenu.hidden = true; sfx.close(); } else openInv(); };
+document.getElementById('toMain').onclick = showMain;
+document.getElementById('playBtn').onclick = play;
+document.getElementById('newWorld').onclick = () => { ensureAudio(); generate(); unstick(); updatePlayerCells(); play(); };
 document.querySelectorAll('.modal .close').forEach(b => b.onclick = closeMenus);
 document.querySelectorAll('.modal').forEach(m => m.addEventListener('pointerdown', e => { if (e.target === m) closeMenus(); }));
 const slots = document.getElementById('slots');
-for (let i = 0; i < 10; i++) slots.appendChild(Object.assign(document.createElement('div'), { className: 'slot' }));
+for (let i = 0; i < 10; i++) slots.appendChild(Object.assign(document.createElement('div'), { className: 'slot px' }));
 
 // Field of view: 5 levels, 3 is normal. Visible area scales with the level (level / 3).
 let zoom = 1;
@@ -393,7 +479,7 @@ function setFov(n) {
 }
 for (let n = 1; n <= 5; n++) {
   const b = document.createElement('button');
-  b.textContent = n; b.dataset.n = n;
+  b.className = 'btn'; b.textContent = n; b.dataset.n = n;
   b.setAttribute('aria-label', 'Field of view ' + n + (n === 3 ? ' (normal)' : ''));
   b.onclick = () => { setFov(n); sfx.click(); };
   fovRow.appendChild(b);
@@ -414,7 +500,7 @@ function renderSides() {
   const stickSide = prefs.stick.x < 0.5 ? 'left' : 'right';
   document.querySelectorAll('#stickSide button').forEach(b => b.classList.toggle('active', b.dataset.v === stickSide));
   document.querySelectorAll('#invSide button').forEach(b => b.classList.toggle('active', b.dataset.v === prefs.invSide));
-  invBtn.className = prefs.invSide;
+  invBtn.className = 'btn alt ' + prefs.invSide;
 }
 document.querySelectorAll('#stickSide button').forEach(b => b.onclick = () => {
   prefs.stick = { x: b.dataset.v === 'left' ? 0.14 : 0.86, y: 0.75 }; placeStick(); savePrefs(); renderSides(); sfx.click();
@@ -436,7 +522,7 @@ function goFullscreen() {
 addEventListener('pointerdown', goFullscreen, true);
 
 document.getElementById('anyway').onclick = () => { document.body.classList.add('anyway'); resize(); };
-setTimeout(() => document.getElementById('hint').style.opacity = 0, 8000);
+document.getElementById('hint').hidden = true;
 
 // ---- Camera ----
 // cam is the world position (px) of the screen's top-left corner; the player stays dead centre
@@ -681,6 +767,31 @@ function drawPlayer(put, ox, oy) {
   }
 }
 
+// Big mote on the main menu, drawn from the same sprite
+const artCtx = document.getElementById('moteArt').getContext('2d');
+const artImg = artCtx.createImageData(16, 22);
+const artSparks = [];
+function drawMoteArt() {
+  const d = artImg.data; d.fill(0);
+  const put = (x, y, c, a = 255) => { if (x < 0 || y < 0 || x >= 16 || y >= 22) return; const o = (y * 16 + x) * 4; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = a; };
+  const rows = BODY.map(r => r.split(''));
+  const blink = frame % 200 < 7;
+  if (blink) for (let x = 5; x <= 7; x++) rows[6][x] = 'O';
+  else {
+    for (let y = 5; y <= 7; y++) for (let x = 5; x <= 7; x++) rows[y][x] = 'W';
+    for (let y = 5; y <= 6; y++) for (let x = 6; x <= 7; x++) rows[y][x] = 'E';
+  }
+  const bob = Math.round(Math.sin(frame * 0.07) * 1.2);
+  rows.forEach((r, y) => r.forEach((ch, x) => { if (ch !== '.') put(3 + x, 2 + y + bob, ch === 'T' ? [255, 222 + Math.round(Math.sin(frame * 0.1) * 20), 120] : PCOL[ch]); }));
+  if (frame % 6 === 0) artSparks.push({ x: 4 + Math.random() * 8, y: 15 + bob, life: 24 + Math.random() * 10, c: Math.random() < 0.5 ? GLOW : TIP });
+  for (let i = artSparks.length - 1; i >= 0; i--) {
+    const q = artSparks[i]; q.y += 0.18; q.life--;
+    if (q.life <= 0) { artSparks.splice(i, 1); continue; }
+    put(Math.round(q.x), Math.round(q.y), q.c, Math.min(255, q.life * 14));
+  }
+  artCtx.putImageData(artImg, 0, 0);
+}
+
 const energyEl = document.getElementById('energy'), energyFill = energyEl.firstElementChild;
 function drawHud() {
   energyFill.style.width = (player.energy * 100).toFixed(1) + '%';
@@ -698,6 +809,7 @@ function loop() {
   step();
   render();
   drawHud();
+  if (!mainMenu.hidden) drawMoteArt();
   requestAnimationFrame(loop);
 }
 
