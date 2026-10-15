@@ -13,17 +13,34 @@
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
   [hidden] { display: none !important; }
   #app { display: flex; flex-direction: column; height: 100%; }
-  #top { display: flex; gap: 6px; padding: 8px max(8px, env(safe-area-inset-right, 0px)) 8px max(8px, env(safe-area-inset-left, 0px)); flex-wrap: wrap; align-items: center; background: var(--panel); border-bottom: 1px solid var(--line); }
-  #top button, #pad button, #settings button { font: inherit; font-weight: 600; border-radius: 8px; cursor: pointer; }
-  .tool { padding: 7px 11px; border: 2px solid transparent; color: #111; }
+  #top { display: flex; gap: 5px; padding: 5px max(8px, env(safe-area-inset-right, 0px)) 5px max(8px, env(safe-area-inset-left, 0px)); align-items: center; overflow-x: auto; background: var(--panel); border-bottom: 1px solid var(--line); }
+  #top button, #hover, #settings button { font: inherit; font-weight: 600; border-radius: 8px; cursor: pointer; }
+  .tool { padding: 5px 10px; border: 2px solid transparent; color: #111; font-size: 13px !important; flex: none; }
   .tool.active { border-color: var(--fg); }
-  #gear { margin-left: auto; padding: 7px 11px; background: var(--line); color: var(--fg); border: 0; }
-  #stage { flex: 1; position: relative; min-height: 0; }
+  #gear { margin-left: auto; padding: 5px 10px; background: var(--line); color: var(--fg); border: 0; font-size: 13px !important; flex: none; }
+  #stage { flex: 1; position: relative; min-height: 0; overflow: hidden; }
   #view { position: absolute; left: 0; top: 0; display: block; }
-  #pad { display: flex; justify-content: space-between; gap: 10px; padding: 10px max(12px, env(safe-area-inset-right, 0px)) max(10px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); background: var(--panel); border-top: 1px solid var(--line); }
-  #pad .grp { display: flex; gap: 10px; }
-  #pad button { width: var(--btn); height: var(--btn); font-size: calc(var(--btn) * 0.38); background: var(--line); color: var(--fg); border: 0; touch-action: none; }
-  #pad button.down { background: var(--accent); color: #111; }
+
+  /* HUD: levitation energy */
+  #hud { position: absolute; top: 8px; left: max(8px, env(safe-area-inset-left, 0px)); display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
+  #energy { width: 120px; height: 10px; border-radius: 5px; background: rgba(255,255,255,.08); border: 1px solid var(--line); overflow: hidden; }
+  #energy i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #8a6cff, #c9a7ff); }
+  #energy.low i { background: #f07a6a; }
+
+  /* Touch controls, overlaid on the world */
+  #controls { position: absolute; inset: 0; pointer-events: none; }
+  #stick { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); width: calc(var(--btn) * 2); height: calc(var(--btn) * 2); border-radius: 50%; background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.15); pointer-events: auto; touch-action: none; }
+  #knob { position: absolute; left: 50%; top: 50%; width: var(--btn); height: var(--btn); margin: calc(var(--btn) / -2) 0 0 calc(var(--btn) / -2); border-radius: 50%; background: rgba(232,236,242,.35); }
+  #hover { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); width: calc(var(--btn) * 1.3); height: calc(var(--btn) * 1.3); border-radius: 50%; border: 2px solid rgba(201,167,255,.5); background: rgba(138,108,255,.2); color: var(--fg); font-size: calc(var(--btn) * 0.2); pointer-events: auto; touch-action: none; }
+  #hover.down { background: rgba(138,108,255,.6); }
+
+  /* Ask for landscape on tall screens */
+  #rotate { position: fixed; inset: 0; z-index: 5; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; background: var(--bg); }
+  #rotate .phone { width: 46px; height: 80px; border: 3px solid var(--fg); border-radius: 8px; animation: turn 2s ease-in-out infinite; }
+  @keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+  @media (prefers-reduced-motion: reduce) { #rotate .phone { animation: none; transform: rotate(-90deg); } }
+  #rotate button { padding: 8px 14px; background: var(--line); color: var(--fg); border: 0; border-radius: 8px; font: inherit; }
+  @media (orientation: portrait) { body:not(.anyway) #rotate { display: flex; } }
   #settings { position: absolute; right: 8px; top: 8px; width: min(300px, calc(100% - 16px)); box-sizing: border-box; padding: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.5); z-index: 2; }
   #settings h2 { margin: 0; font-size: 15px; }
   #settings label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
@@ -45,17 +62,23 @@
       <label for="s-cell"><span>Pixel size <b id="v-cell"></b></span><input id="s-cell" type="range" min="1" max="8" step="1"></label>
       <label for="s-brush"><span>Brush size <b id="v-brush"></b></span><input id="s-brush" type="range" min="1" max="12" step="1"></label>
       <label for="s-speed"><span>Player speed <b id="v-speed"></b></span><input id="s-speed" type="range" min="1" max="6" step="0.5"></label>
-      <label for="s-jump"><span>Jump height <b id="v-jump"></b></span><input id="s-jump" type="range" min="3" max="12" step="0.5"></label>
-      <label for="s-btn"><span>Button size <b id="v-btn"></b></span><input id="s-btn" type="range" min="44" max="96" step="4"></label>
+      <label for="s-lev"><span>Levitation time <b id="v-lev"></b></span><input id="s-lev" type="range" min="1" max="15" step="0.5"></label>
+      <label for="s-btn"><span>Control size <b id="v-btn"></b></span><input id="s-btn" type="range" min="36" max="80" step="4"></label>
       <label class="row" for="s-pad"><input id="s-pad" type="checkbox"> Show touch controls</label>
-      <p class="hint">Keyboard: A/D or arrows to move, W, Up or Space to jump.</p>
+      <p class="hint">Keyboard: A/D or arrows to move. Hold W, Up or Space to levitate.</p>
       <button id="close">Done</button>
     </div>
+    <div id="hud">Levitation <div id="energy"><i></i></div></div>
+    <div id="controls">
+      <div id="stick" aria-label="Movement stick"><div id="knob"></div></div>
+      <button id="hover" aria-label="Levitate">LEVITATE</button>
+    </div>
   </div>
-  <div id="pad">
-    <div class="grp"><button data-k="left" aria-label="Left">◀</button><button data-k="right" aria-label="Right">▶</button></div>
-    <div class="grp"><button data-k="jump" aria-label="Jump">▲</button></div>
-  </div>
+</div>
+<div id="rotate">
+  <div class="phone"></div>
+  <p>Turn your phone sideways to play.</p>
+  <button id="anyway">Play in portrait</button>
 </div>
 <script>
 const EMPTY = 0, SAND = 1, WATER = 2, STONE = 3;
@@ -68,7 +91,7 @@ const TYPES = [
 const RGB = { [SAND]: [226, 194, 107], [WATER]: [59, 142, 232], [STONE]: [141, 147, 160] };
 
 // ---- Settings (saved per browser) ----
-const settings = { cell: 3, brush: 4, speed: 2.5, jump: 7, btn: 64, pad: true };
+const settings = { cell: 3, brush: 4, speed: 2.5, lev: 5, btn: 52, pad: true };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('sandbox-settings') || '{}')); } catch (e) {}
 const save = () => { try { localStorage.setItem('sandbox-settings', JSON.stringify(settings)); } catch (e) {} };
 
@@ -84,7 +107,7 @@ const octx = off.getContext('2d');
 let img = null;
 
 // Player position/size are in screen px; the world is in cells.
-const player = { x: 40, y: 0, w: 10, h: 20, vx: 0, vy: 0, onGround: false, inWater: false, face: 1 };
+const player = { x: 40, y: 0, w: 10, h: 20, vx: 0, vy: 0, onGround: false, inWater: false, face: 1, energy: 1, lifting: false };
 
 // Rebuild the grid for the current stage size / pixel size, keeping content anchored to the bottom.
 function rebuild(newCell) {
@@ -150,11 +173,12 @@ topBar.insertBefore(clearBtn, gear);
 
 // ---- Settings panel ----
 const panel = document.getElementById('settings');
-const pad = document.getElementById('pad');
+const pad = document.getElementById('controls');
 gear.onclick = () => panel.hidden = !panel.hidden;
 document.getElementById('close').onclick = () => panel.hidden = true;
-const fmt = { cell: v => v + 'px', brush: v => v, speed: v => v, jump: v => v, btn: v => v + 'px' };
-for (const key of ['cell', 'brush', 'speed', 'jump', 'btn']) {
+document.getElementById('anyway').onclick = () => { document.body.classList.add('anyway'); rebuild(cell); };
+const fmt = { cell: v => v + 'px', brush: v => v, speed: v => v, lev: v => v + 's', btn: v => v + 'px' };
+for (const key of ['cell', 'brush', 'speed', 'lev', 'btn']) {
   const input = document.getElementById('s-' + key), out = document.getElementById('v-' + key);
   input.value = settings[key]; out.textContent = fmt[key](settings[key]);
   input.oninput = () => {
@@ -169,24 +193,41 @@ padToggle.onchange = () => { settings.pad = padToggle.checked; save(); applyPad(
 function applyPad() {
   pad.hidden = !settings.pad;
   document.documentElement.style.setProperty('--btn', settings.btn + 'px');
-  rebuild(cell);
 }
 
 // ---- Input ----
-const keys = { left: false, right: false, jump: false };
-const keyMap = { ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right', ArrowUp: 'jump', w: 'jump', W: 'jump', ' ': 'jump' };
+const keys = { left: false, right: false, lev: false };
+const keyMap = { ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right', ArrowUp: 'lev', w: 'lev', W: 'lev', ' ': 'lev' };
 addEventListener('keydown', e => { if (keyMap[e.key]) { keys[keyMap[e.key]] = true; e.preventDefault(); } });
 addEventListener('keyup', e => { if (keyMap[e.key]) keys[keyMap[e.key]] = false; });
-for (const b of pad.querySelectorAll('button')) {
-  const k = b.dataset.k;
-  const on = e => { e.preventDefault(); keys[k] = true; b.classList.add('down'); };
-  const offFn = () => { keys[k] = false; b.classList.remove('down'); };
-  b.addEventListener('pointerdown', on);
-  b.addEventListener('pointerup', offFn);
-  b.addEventListener('pointercancel', offFn);
-  b.addEventListener('pointerleave', offFn);
-}
 addEventListener('contextmenu', e => e.preventDefault());
+
+// Left stick: x axis moves (analog), pushing up also levitates
+const stick = document.getElementById('stick'), knob = document.getElementById('knob');
+let stickX = 0, stickUp = false, stickId = null;
+function moveStick(e) {
+  const r = stick.getBoundingClientRect(), rad = r.width / 2;
+  let dx = e.clientX - (r.left + rad), dy = e.clientY - (r.top + rad);
+  const len = Math.hypot(dx, dy);
+  if (len > rad) { dx *= rad / len; dy *= rad / len; }
+  knob.style.transform = `translate(${dx}px, ${dy}px)`;
+  stickX = Math.abs(dx / rad) < 0.15 ? 0 : dx / rad;
+  stickUp = dy / rad < -0.55;
+}
+function releaseStick() { stickId = null; stickX = 0; stickUp = false; knob.style.transform = ''; }
+stick.addEventListener('pointerdown', e => { e.preventDefault(); stickId = e.pointerId; stick.setPointerCapture(e.pointerId); moveStick(e); });
+stick.addEventListener('pointermove', e => { if (e.pointerId === stickId) moveStick(e); });
+stick.addEventListener('pointerup', releaseStick);
+stick.addEventListener('pointercancel', releaseStick);
+
+// Right button: hold to levitate
+const hoverBtn = document.getElementById('hover');
+let hoverHeld = false;
+const hoverOn = e => { e.preventDefault(); hoverHeld = true; hoverBtn.classList.add('down'); hoverBtn.setPointerCapture(e.pointerId); };
+const hoverOff = () => { hoverHeld = false; hoverBtn.classList.remove('down'); };
+hoverBtn.addEventListener('pointerdown', hoverOn);
+hoverBtn.addEventListener('pointerup', hoverOff);
+hoverBtn.addEventListener('pointercancel', hoverOff);
 
 let drawing = false, cx = 0, cy = 0;
 function toCell(e) {
@@ -237,12 +278,21 @@ function updatePlayer() {
   const mx = cx => { const c = Math.floor((p.x + p.w / 2) / cell), r = Math.floor((p.y + p.h / 2) / cell); return grid[r * W + c]; };
   p.inWater = mx() === WATER;
   const speed = settings.speed * (p.inWater ? 0.6 : 1);
-  const dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-  if (dir) p.face = dir;
+  const dir = Math.max(-1, Math.min(1, (keys.right ? 1 : 0) - (keys.left ? 1 : 0) + stickX));
+  if (dir) p.face = Math.sign(dir);
   p.vx += (dir * speed - p.vx) * 0.35;
-  p.vy += p.inWater ? 0.15 : 0.45;
-  p.vy = Math.min(p.vy, p.inWater ? 2 : 10);
-  if (keys.jump && (p.onGround || p.inWater)) { p.vy = p.inWater ? -settings.jump * 0.45 : -settings.jump; p.onGround = false; }
+
+  // Levitation: full bar lasts settings.lev seconds, refills on the ground in about 2s
+  const wantLift = keys.lev || hoverHeld || stickUp;
+  p.lifting = wantLift && p.energy > 0;
+  if (p.lifting) {
+    p.energy = Math.max(0, p.energy - 1 / (settings.lev * 60));
+    p.vy += (-2.2 - p.vy) * 0.15;
+  } else {
+    p.vy += p.inWater ? 0.15 : 0.45;
+    p.vy = Math.min(p.vy, p.inWater ? 2 : 10);
+    if (p.onGround) p.energy = Math.min(1, p.energy + 1 / 120);
+  }
 
   // Horizontal: move 1px at a time, stepping up small ledges
   const stepUp = Math.max(cell * 2, 6);
@@ -277,6 +327,17 @@ function drawPlayer() {
   vctx.fillStyle = '#f1c9a5'; vctx.fillRect(x + 1, y, p.w - 2, 7);       // head
   vctx.fillStyle = '#111';                                                 // eye
   vctx.fillRect(p.face > 0 ? x + p.w - 4 : x + 2, y + 2, 2, 2);
+  if (p.lifting) {                                                         // glow under the feet
+    vctx.fillStyle = `rgba(201,167,255,${0.4 + Math.random() * 0.4})`;
+    vctx.fillRect(x - 1, y + p.h + 1, p.w + 2, 2);
+    vctx.fillRect(x + 2, y + p.h + 4, p.w - 4, 1);
+  }
+}
+
+const energyEl = document.getElementById('energy'), energyFill = energyEl.firstElementChild;
+function drawHud() {
+  energyFill.style.width = (player.energy * 100).toFixed(1) + '%';
+  energyEl.classList.toggle('low', player.energy < 0.2);
 }
 
 // ---- Sand / water sim ----
@@ -332,6 +393,7 @@ function loop() {
   updatePlayer();
   step();
   render();
+  drawHud();
   requestAnimationFrame(loop);
 }
 
