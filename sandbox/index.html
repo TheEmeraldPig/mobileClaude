@@ -46,7 +46,7 @@
 <div id="stage">
   <canvas id="view"></canvas>
   <div id="hud">Levitation <div id="energy"><i></i></div></div>
-  <div id="hint">Push the stick up to levitate. Touch anywhere to look around. Hold the stick still to move it.</div>
+  <div id="hint">Push the stick up to levitate. Touch anywhere to look around, pinch to zoom. Hold the stick still to move it.</div>
   <div id="stick" aria-label="Movement stick"><div id="knob"></div></div>
 </div>
 <div id="rotate">
@@ -186,17 +186,44 @@ stick.addEventListener('pointermove', e => { if (e.pointerId === stickId) moveSt
 stick.addEventListener('pointerup', releaseStick);
 stick.addEventListener('pointercancel', releaseStick);
 
-// Touching anywhere else peeks the camera toward the finger, up to half a screen each way
-let peekId = null; const peek = { x: 0, y: 0 }, peekS = { x: 0, y: 0 }; // peekS eases toward peek
+// One finger anywhere else peeks the camera toward it (up to half a screen each way).
+// Two fingers pinch or spread to zoom.
+const peek = { x: 0, y: 0 }, peekS = { x: 0, y: 0 }; // peekS eases toward peek, in screen px
+const touches = new Map();
+let pinchStart = 0, zoomStart = 1;
+let zoom = 1;
+try { zoom = +localStorage.getItem('sandbox-zoom') || 1; } catch (e) {}
+const ZOOM_MIN = 0.5, ZOOM_MAX = 3;
+function setZoom(z) {
+  zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+  sizeView();
+  try { localStorage.setItem('sandbox-zoom', zoom); } catch (e) {}
+}
+const fingerGap = () => { const [a, b] = [...touches.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
 function setPeek(e) {
   peek.x = Math.max(-SW / 2, Math.min(SW / 2, e.clientX - SW / 2));
   peek.y = Math.max(-SH / 2, Math.min(SH / 2, e.clientY - SH / 2));
 }
-view.addEventListener('pointerdown', e => { if (peekId === null) { peekId = e.pointerId; view.setPointerCapture(e.pointerId); setPeek(e); } });
-view.addEventListener('pointermove', e => { if (e.pointerId === peekId) setPeek(e); });
-const endPeek = e => { if (e.pointerId === peekId) { peekId = null; peek.x = peek.y = 0; } };
-view.addEventListener('pointerup', endPeek);
-view.addEventListener('pointercancel', endPeek);
+view.addEventListener('pointerdown', e => {
+  view.setPointerCapture(e.pointerId);
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touches.size === 1) setPeek(e);
+  if (touches.size === 2) { peek.x = peek.y = 0; pinchStart = fingerGap(); zoomStart = zoom; }
+});
+view.addEventListener('pointermove', e => {
+  if (!touches.has(e.pointerId)) return;
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touches.size === 1) setPeek(e);
+  else if (touches.size === 2 && pinchStart > 0) setZoom(zoomStart * fingerGap() / pinchStart);
+});
+const endTouch = e => {
+  touches.delete(e.pointerId);
+  peek.x = peek.y = 0;   // after a pinch, the remaining finger doesn't peek until lifted
+  pinchStart = 0;
+};
+view.addEventListener('pointerup', endTouch);
+view.addEventListener('pointercancel', endTouch);
+view.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * 0.002)); }, { passive: false });
 
 // Go full screen on the first touch (browsers only allow it after a tap); not every phone supports it
 function goFullscreen() {
@@ -214,25 +241,27 @@ document.getElementById('anyway').onclick = () => { document.body.classList.add(
 setTimeout(() => document.getElementById('hint').style.opacity = 0, 7000);
 
 // ---- Camera ----
+// cam is the world position (px) of the screen's top-left corner; the player stays dead centre
 const cam = { x: 0, y: 0 };
-function camTarget() {
-  const tx = player.x + player.w / 2 - SW / 2 + peekS.x;
-  const ty = player.y + player.h / 2 - SH / 2 + peekS.y;
-  return {
-    x: Math.max(0, Math.min(W * CELL - SW, tx)),
-    y: Math.max(0, Math.min(H * CELL - SH, ty)),
-  };
+function placeCamera() {
+  cam.x = player.x + player.w / 2 + peekS.x / zoom - SW / 2 / zoom;
+  cam.y = player.y + player.h / 2 + peekS.y / zoom - SH / 2 / zoom;
 }
 
-function resize() {
-  SW = stage.clientWidth; SH = stage.clientHeight;
-  const dpr = devicePixelRatio || 1;
-  view.width = SW * dpr; view.height = SH * dpr;
-  vctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  vctx.imageSmoothingEnabled = false;
-  VW = Math.ceil(SW / CELL) + 2; VH = Math.ceil(SH / CELL) + 2;
+let dpr = 1;
+function sizeView() {
+  const vw = Math.ceil(SW / zoom / CELL) + 2, vh = Math.ceil(SH / zoom / CELL) + 2;
+  if (vw === VW && vh === VH) return;
+  VW = vw; VH = vh;
   off.width = VW; off.height = VH;
   img = octx.createImageData(VW, VH);
+}
+function resize() {
+  SW = stage.clientWidth; SH = stage.clientHeight;
+  dpr = devicePixelRatio || 1;
+  view.width = SW * dpr; view.height = SH * dpr;
+  VW = VH = 0;
+  sizeView();
 }
 
 // ---- Player physics ----
@@ -330,18 +359,21 @@ function render() {
       if (x >= 0 && x < W && y >= 0 && y < H) {
         const i = y * W + x, t = grid[i];
         if (t) { c = RGB[t]; s = shade[i]; }
-      } else if (y >= H) c = RGB[STONE];
+      } else if (y >= 0) c = RGB[STONE];   // solid walls around the world
       data[o] = c[0] + s; data[o + 1] = c[1] + s; data[o + 2] = c[2] + s; data[o + 3] = 255;
     }
   }
   octx.putImageData(img, 0, 0);
-  const fx = cam.x - ox * CELL, fy = cam.y - oy * CELL;
-  vctx.drawImage(off, -fx, -fy, VW * CELL, VH * CELL);
+  // Draw in world coordinates, scaled by zoom
+  const k = dpr * zoom;
+  vctx.setTransform(k, 0, 0, k, -cam.x * k, -cam.y * k);
+  vctx.imageSmoothingEnabled = false;
+  vctx.drawImage(off, ox * CELL, oy * CELL, VW * CELL, VH * CELL);
   drawPlayer();
 }
 
 function drawPlayer() {
-  const p = player, x = Math.round(p.x - cam.x), y = Math.round(p.y - cam.y);
+  const p = player, x = p.x, y = p.y;
   vctx.fillStyle = '#3fbf7f'; vctx.fillRect(x, y + 7, p.w, p.h - 11);    // body
   vctx.fillStyle = '#2b5fa8'; vctx.fillRect(x + 1, y + p.h - 4, 3, 4);   // legs
   vctx.fillRect(x + p.w - 4, y + p.h - 4, 3, 4);
@@ -365,9 +397,7 @@ function loop() {
   updatePlayer();
   peekS.x += (peek.x - peekS.x) * 0.04;
   peekS.y += (peek.y - peekS.y) * 0.04;
-  const t = camTarget();
-  cam.x += (t.x - cam.x) * 0.1;
-  cam.y += (t.y - cam.y) * 0.1;
+  placeCamera();
   step();
   render();
   drawHud();
@@ -379,7 +409,8 @@ resize();
 generate();
 unstick();
 updatePlayerCells();
-Object.assign(cam, camTarget());
+sizeView();
+placeCamera();
 loop();
 
 // Installable app support (needs https, e.g. GitHub Pages)
