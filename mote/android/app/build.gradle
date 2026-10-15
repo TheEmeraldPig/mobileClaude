@@ -2,6 +2,9 @@ plugins {
     id 'com.android.application'
 }
 
+// CI passes the build number so each build installs over the last one
+def moteVersion = (project.findProperty('moteVersion') ?: '1').toString()
+
 android {
     namespace 'com.theemeraldpig.mote'
     compileSdk 34
@@ -10,9 +13,8 @@ android {
         applicationId 'com.theemeraldpig.mote'
         minSdk 23
         targetSdk 34
-        // CI passes the build number so each build installs over the last one
-        versionCode (project.findProperty('moteVersion') ?: '1') as int
-        versionName "build-" + (project.findProperty('moteVersion') ?: 'dev')
+        versionCode moteVersion.toInteger()
+        versionName "build-" + moteVersion
     }
 
     // A fixed key for installing the APK directly on your phone, so new builds update the old one.
