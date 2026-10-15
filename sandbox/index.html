@@ -179,7 +179,7 @@ stick.addEventListener('pointerup', releaseStick);
 stick.addEventListener('pointercancel', releaseStick);
 
 // Touching anywhere else peeks the camera toward the finger, up to half a screen each way
-let peekId = null; const peek = { x: 0, y: 0 };
+let peekId = null; const peek = { x: 0, y: 0 }, peekS = { x: 0, y: 0 }; // peekS eases toward peek
 function setPeek(e) {
   peek.x = Math.max(-SW / 2, Math.min(SW / 2, e.clientX - SW / 2));
   peek.y = Math.max(-SH / 2, Math.min(SH / 2, e.clientY - SH / 2));
@@ -190,14 +190,26 @@ const endPeek = e => { if (e.pointerId === peekId) { peekId = null; peek.x = pee
 view.addEventListener('pointerup', endPeek);
 view.addEventListener('pointercancel', endPeek);
 
+// Go full screen on the first touch (browsers only allow it after a tap); not every phone supports it
+function goFullscreen() {
+  const el = document.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (document.fullscreenElement || document.webkitFullscreenElement || !req) return;
+  try {
+    Promise.resolve(req.call(el, { navigationUI: 'hide' }))
+      .then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape'))
+      .catch(() => {});
+  } catch (e) {}
+}
+addEventListener('pointerdown', goFullscreen, true);
+
 document.getElementById('anyway').onclick = () => { document.body.classList.add('anyway'); resize(); };
 setTimeout(() => document.getElementById('hint').style.opacity = 0, 7000);
 
 // ---- Camera ----
 const cam = { x: 0, y: 0 };
 function camTarget() {
-  const tx = player.x + player.w / 2 - SW / 2 + peek.x;
-  const ty = player.y + player.h / 2 - SH / 2 + peek.y;
+  const tx = player.x + player.w / 2 - SW / 2 + peekS.x;
+  const ty = player.y + player.h / 2 - SH / 2 + peekS.y;
   return {
     x: Math.max(0, Math.min(W * CELL - SW, tx)),
     y: Math.max(0, Math.min(H * CELL - SH, ty)),
@@ -343,6 +355,8 @@ function drawHud() {
 
 function loop() {
   updatePlayer();
+  peekS.x += (peek.x - peekS.x) * 0.04;
+  peekS.y += (peek.y - peekS.y) * 0.04;
   const t = camTarget();
   cam.x += (t.x - cam.x) * 0.1;
   cam.y += (t.y - cam.y) * 0.1;
