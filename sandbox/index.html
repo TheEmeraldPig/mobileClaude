@@ -318,7 +318,8 @@ try {
 const savePrefs = () => { try { localStorage.setItem('sandbox-prefs', JSON.stringify(prefs)); } catch (e) {} };
 
 // ---- World generation ----
-const big = Math.max(innerWidth, innerHeight);
+// The window can report 0x0 if the page loads in the background, so fall back to the screen size
+const big = Math.max(900, innerWidth, innerHeight, screen.width || 0, screen.height || 0);
 const W = Math.round(big / CELL * 3), H = Math.round(big / CELL * 1.5);
 const grid = new Uint8Array(W * H);
 const shade = new Int8Array(W * H);
@@ -1180,6 +1181,21 @@ function drawEnergy(put, ox, oy) {
 }
 
 function loop() {
+  try { tick(); } catch (err) { showError(err); }
+  requestAnimationFrame(loop);
+}
+// If something breaks, say so on screen instead of leaving a black screen
+let errShown = false;
+function showError(err) {
+  console.error(err);
+  if (errShown) return; errShown = true;
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:30;max-width:70%;padding:8px 12px;background:#221c40;color:#ffde78;font:12px ui-monospace,monospace';
+  d.textContent = 'Something went wrong: ' + ((err && err.message) || err) + '. Try reloading.';
+  document.body.appendChild(d);
+}
+addEventListener('error', e => showError(e.error || e.message));
+function tick() {
   frame++;
   const paused = menuOpen();
   if (!paused) { updatePlayer(); useHeld(); updateParticles(); }
@@ -1190,12 +1206,13 @@ function loop() {
   if (!paused) step();
   render();
   if (!mainMenu.hidden) drawMoteArt();
-  requestAnimationFrame(loop);
 }
 
 addEventListener('resize', resize);
+if (window.ResizeObserver) new ResizeObserver(() => { if (stage.clientWidth !== SW || stage.clientHeight !== SH) resize(); }).observe(stage);
 resize();
 generate();
+if (!isFinite(player.x) || !isFinite(player.y)) { player.x = W * CELL / 2; player.y = 0; }
 unstick();
 updatePlayerCells();
 placeStick();
