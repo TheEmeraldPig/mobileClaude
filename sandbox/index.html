@@ -84,6 +84,22 @@
   .pause-actions .btn { display: flex; align-items: center; gap: 10px; text-align: left; }
   .pause-actions .btn svg { width: 16px; height: 16px; flex: none; }
   .seed-row { display: flex; gap: 14px; }
+  #invMenu .sheet { width: min(800px, calc(100% - 12px)); }
+  .inv-layout { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 24px; align-items: start; }
+  @media (max-width: 560px) { .inv-layout { grid-template-columns: 1fr; } }
+  .recipes { display: grid; gap: 10px; max-height: min(52vh, 340px); overflow-y: auto; padding: 4px 6px 8px 4px; }
+  .recipe { --hi: var(--panel-hi); --lo: var(--panel-lo); display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 10px; background: var(--slate-lo); }
+  .recipe > img { width: 28px; height: 28px; image-rendering: pixelated; }
+  .recipe .name { font-size: 14px; font-weight: 600; }
+  .recipe .needs { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; font-size: 12px; color: var(--muted); }
+  .recipe .needs span { display: inline-flex; align-items: center; gap: 4px; }
+  .recipe .needs img { width: 14px; height: 14px; image-rendering: pixelated; }
+  .recipe .needs .short { color: var(--danger); }
+  .recipe .btn { padding: 6px 12px; font-size: 13px; }
+  .btn:disabled { filter: grayscale(.8) brightness(.7); cursor: default; transform: none; }
+  .touch .recipes { max-height: calc(100vh - 150px); }
+  .touch .recipe { padding: 5px 8px; gap: 8px; }
+  .touch .inv-layout { gap: 16px; }
   .px-input { --hi: #0a0817; --lo: var(--panel-hi); flex: 1; min-width: 0; border: 0; background: var(--panel-lo); color: var(--ink); font: inherit; font-size: 16px; padding: 9px 12px; outline: none; user-select: text; -webkit-user-select: text; }
   .px-input:focus { --lo: var(--t); }
   .px-input::placeholder { color: var(--muted); }
@@ -168,13 +184,6 @@
   .touch .note, .touch .empty-note { font-size: 12px; }
   .touch .label { font-size: 10px; }
   .touch .slots { grid-template-columns: repeat(5, minmax(0, clamp(32px, 10.5vh, 46px))); gap: 8px; }
-  .touch #invMenu .sheet { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "head head" "hl info" "hot info" "pl info" "pack row"; column-gap: 20px; width: min(600px, calc(100% - 12px)); }
-  .touch #invMenu .head { grid-area: head; }
-  .touch #invMenu .row { grid-area: row; flex-direction: column; align-self: end; gap: 12px; }
-  .touch #invMenu .row .btn { flex: none; min-width: 0; }
-  .touch #invMenu .empty-note { grid-area: info; align-self: start; }
-  .touch #invHot { grid-area: hot; } .touch #invPack { grid-area: pack; }
-  .touch #hotLabel { grid-area: hl; } .touch #packLabel { grid-area: pl; }
   .touch .dbg-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
   .touch .dbg-grid .btn { padding: 5px 10px; }
   .touch #hotbar { gap: 7px; padding: 6px; }
@@ -204,15 +213,18 @@
   <div id="invMenu" class="modal" hidden>
     <div class="sheet px" role="dialog" aria-label="Inventory">
       <div class="head"><h2>Inventory</h2><button class="btn alt square close" aria-label="Close"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="0" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="2" height="2"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/></svg></button></div>
-      <div class="label" id="hotLabel">Hotbar</div>
-      <div class="slots" id="invHot"></div>
-      <div class="label" id="packLabel">Backpack</div>
-      <div class="slots" id="invPack"></div>
-      <p class="empty-note" id="invInfo">Drag an item to another slot to move it.</p>
-      <div class="row">
-        <button class="btn" id="openSettings"><svg viewBox="0 0 7 7" fill="currentColor"><rect x="3" y="0" width="1" height="7"/><rect x="0" y="3" width="7" height="1"/><rect x="1" y="1" width="5" height="5"/><rect x="3" y="3" width="1" height="1" fill="var(--o)"/></svg> Settings</button>
-        <button class="btn alt" id="toMain"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="2" y="0" width="2" height="1"/><rect x="1" y="1" width="4" height="1"/><rect x="0" y="2" width="6" height="1"/><rect x="1" y="3" width="4" height="3"/><rect x="2" y="4" width="2" height="2" fill="var(--o)"/></svg> Main menu</button>
-        <button class="btn alt" id="openDebug">Debug</button>
+      <div class="inv-layout">
+        <div class="section">
+          <div class="label" id="hotLabel">Hotbar</div>
+          <div class="slots" id="invHot"></div>
+          <div class="label" id="packLabel">Backpack</div>
+          <div class="slots" id="invPack"></div>
+          <p class="empty-note" id="invInfo">Drag an item to another slot to move it.</p>
+        </div>
+        <div class="section">
+          <div class="label">Crafting</div>
+          <div class="recipes" id="recipes"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -225,7 +237,9 @@
           <div class="label">Field of view</div>
           <div class="seg" id="fov"></div>
           <div class="sub"><span>Closer</span><span>Normal is 3</span><span>Wider</span></div>
-          <div class="label" style="margin-top:8px">Sound</div>
+          <div class="label" style="margin-top:8px">Music</div>
+          <div class="seg" id="music"><button class="btn" data-v="1">On</button><button class="btn" data-v="0">Off</button></div>
+          <div class="label" style="margin-top:8px">Sound effects</div>
           <div class="seg" id="sound"><button class="btn" data-v="1">On</button><button class="btn" data-v="0">Off</button></div>
         </div>
         <div class="section">
@@ -267,6 +281,7 @@
           <button class="btn gold" id="resumeBtn"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="1" y="0" width="1" height="6"/><rect x="2" y="1" width="1" height="4"/><rect x="3" y="2" width="1" height="2"/></svg> Resume</button>
           <button class="btn" id="pauseSettings"><svg viewBox="0 0 7 7" fill="currentColor"><rect x="3" y="0" width="1" height="7"/><rect x="0" y="3" width="7" height="1"/><rect x="1" y="1" width="5" height="5"/><rect x="3" y="3" width="1" height="1" fill="var(--o)"/></svg> Settings</button>
           <div class="seed-show"><span class="label">Seed</span><span class="seed-value"></span><button class="btn alt copy-seed">Copy</button></div>
+          <button class="btn alt" id="pauseDebug"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="1" y="0" width="1" height="1"/><rect x="4" y="0" width="1" height="1"/><rect x="1" y="1" width="4" height="4"/><rect x="0" y="2" width="1" height="1"/><rect x="5" y="2" width="1" height="1"/><rect x="0" y="4" width="1" height="1"/><rect x="5" y="4" width="1" height="1"/><rect x="2" y="2" width="2" height="1" fill="var(--o)"/></svg> Debug</button>
           <button class="btn alt" id="pauseMain"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="2" y="0" width="2" height="1"/><rect x="1" y="1" width="4" height="1"/><rect x="0" y="2" width="6" height="1"/><rect x="1" y="3" width="4" height="3"/><rect x="2" y="4" width="2" height="2" fill="var(--o)"/></svg> Main menu</button>
         </div>
         <div class="keys px">
@@ -279,7 +294,7 @@
 
   <div id="dbgMenu" class="modal" hidden>
     <div class="sheet settings px" role="dialog" aria-label="Debug">
-      <div class="head"><button class="btn alt square" id="dbgBack" aria-label="Back to inventory"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="2" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="0" y="2" width="6" height="2"/><rect x="1" y="4" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/></svg></button><h2>Debug</h2><button class="btn alt square close" aria-label="Close"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="0" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="2" height="2"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/></svg></button></div>
+      <div class="head"><button class="btn alt square" id="dbgBack" aria-label="Back to pause"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="2" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="0" y="2" width="6" height="2"/><rect x="1" y="4" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/></svg></button><h2>Debug</h2><button class="btn alt square close" aria-label="Close"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="0" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="2" height="2"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/></svg></button></div>
       <div class="label">Give item</div>
       <div class="dbg-grid" id="dbgItems"></div>
       <div class="row"><button class="btn alt" id="dbgEnergy">Fill energy</button><button class="btn alt" id="dbgClear">Clear inventory</button></div>
@@ -310,10 +325,10 @@
   <button class="btn" id="anyway">Play in portrait</button>
 </div>
 <script>
-const EMPTY = 0, SAND = 1, WATER = 2, STONE = 3;
+const EMPTY = 0, SAND = 1, WATER = 2, STONE = 3, BRICK = 4;
 const CELL = 2;                    // world px per world pixel (cell)
 const BG = [16, 18, 22];
-const RGB = { [SAND]: [226, 194, 107], [WATER]: [59, 142, 232], [STONE]: [120, 126, 140] };
+const RGB = { [SAND]: [226, 194, 107], [WATER]: [59, 142, 232], [STONE]: [120, 126, 140], [BRICK]: [176, 92, 72] };
 
 const stage = document.getElementById('stage');
 const view = document.getElementById('view');
@@ -529,7 +544,7 @@ function updatePlayerCells() {
   py0 = Math.floor(player.y / CELL); py1 = Math.floor((player.y + player.h - 0.01) / CELL);
 }
 const inPlayer = (x, y) => x >= px0 && x <= px1 && y >= py0 && y <= py1;
-const isSolid = t => t === SAND || t === STONE;
+const isSolid = t => t === SAND || t === STONE || t === BRICK;
 
 function hits(x, y) {
   const x0 = Math.floor(x / CELL), x1 = Math.floor((x + player.w - 0.01) / CELL);
@@ -553,6 +568,7 @@ function ensureAudio() {
     humOsc = actx.createOscillator(); humOsc.type = 'triangle'; humOsc.frequency.value = 220;
     humGain = actx.createGain(); humGain.gain.value = 0;
     humOsc.connect(humGain).connect(master); humOsc.start();
+    if (prefs.music !== false) startMusic();
   } catch (e) { actx = null; }
 }
 function noise(dur, freq, vol, freqTo) {
@@ -591,6 +607,68 @@ function updateHum() {
   humGain.gain.setTargetAtTime(p.lifting && !menuOpen() ? 0.07 : 0, t, 0.06);
   humOsc.frequency.setTargetAtTime(170 + p.energy * 170 + Math.sin(t * 14) * 6, t, 0.05);
 }
+
+// ---- Music: a calm generated chiptune loop (square lead, triangle arps and bass, soft drums) ----
+let musicGain = null, musicTimer = 0, nextNoteTime = 0, stepIdx = 0, phrase = [], phraseBar = 0;
+const BPM = 92, STEP = 60 / BPM / 4;                       // 16th notes
+const CHORDS = [                                           // A minor: Am, F, C, G
+  { root: 45, tones: [69, 72, 76] }, { root: 41, tones: [65, 69, 72] },
+  { root: 48, tones: [64, 67, 72] }, { root: 43, tones: [67, 71, 74] },
+];
+const PENTA = [69, 72, 74, 76, 79, 81, 84];
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+function newPhrase() {                                     // 4 bars of melody, played twice
+  phrase = [];
+  for (let b = 0; b < 4; b++) for (let s = 0; s < 16; s += 2) {
+    const chord = CHORDS[b], rest = Math.random() < (s % 8 === 0 ? 0.2 : 0.55);
+    const pool = Math.random() < 0.6 ? chord.tones.map(t => t + 12) : PENTA.map(t => t + 12);
+    phrase.push(rest ? null : { m: pool[(Math.random() * pool.length) | 0], len: Math.random() < 0.3 ? 4 : 2 });
+  }
+}
+function voice(type, m, t, dur, vol, glide) {
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(mtof(m), t);
+  if (glide) o.frequency.exponentialRampToValueAtTime(mtof(m) * glide, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(musicGain); o.start(t); o.stop(t + dur + 0.02);
+}
+function drum(t, kind) {
+  if (kind === 'kick') { voice('sine', 40, t, 0.18, 0.5, 0.4); return; }
+  const src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+  src.buffer = noiseBuf; f.type = 'highpass'; f.frequency.value = kind === 'hat' ? 7000 : 1800;
+  const v = kind === 'hat' ? 0.05 : 0.09, d = kind === 'hat' ? 0.04 : 0.12;
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  src.connect(f).connect(g).connect(musicGain); src.start(t, Math.random() * 0.5); src.stop(t + d);
+}
+function scheduleStep(i, t) {
+  const bar = Math.floor(i / 16) % 4, s = i % 16, chord = CHORDS[bar];
+  if (s === 0 && bar === 0) { if (phraseBar % 2 === 0) newPhrase(); phraseBar++; }
+  if (s % 2 === 0) voice('triangle', chord.tones[[0, 1, 2, 1][(s / 2) % 4]], t, STEP * 1.6, 0.05);   // arp
+  if (s === 0 || s === 6 || s === 8 || s === 14) voice('triangle', chord.root - (s === 8 ? 0 : 12) + 12, t, STEP * 3, 0.16);  // bass
+  if (s % 2 === 0) { const n = phrase[bar * 8 + s / 2]; if (n) voice('square', n.m, t, STEP * n.len * 0.9, 0.035); }  // lead
+  if (s === 0 || s === 8) drum(t, 'kick');
+  if (s === 4 || s === 12) drum(t, 'snare');
+  if (s % 4 === 2) drum(t, 'hat');
+}
+function musicTick() {
+  while (nextNoteTime < actx.currentTime + 0.15) { scheduleStep(stepIdx++, nextNoteTime); nextNoteTime += STEP; }
+}
+function startMusic() {
+  if (!actx || musicTimer) return;
+  if (!musicGain) { musicGain = actx.createGain(); musicGain.connect(actx.destination); }
+  musicGain.gain.value = 0.55;
+  nextNoteTime = actx.currentTime + 0.1; stepIdx = 0; phraseBar = 0;
+  musicTimer = setInterval(musicTick, 25);
+}
+function stopMusic() { clearInterval(musicTimer); musicTimer = 0; if (musicGain) musicGain.gain.setTargetAtTime(0, actx.currentTime, 0.1); }
+function setMusic(on) {
+  prefs.music = on; savePrefs();
+  document.querySelectorAll('#music button').forEach(b => b.classList.toggle('active', (b.dataset.v === '1') === on));
+  if (on) startMusic(); else stopMusic();
+}
+document.addEventListener('visibilitychange', () => { if (!actx) return; if (document.hidden) actx.suspend(); else actx.resume(); });
+
 function setSound(on) {
   prefs.sound = on; savePrefs();
   if (master) master.gain.value = on ? 0.6 : 0;
@@ -699,7 +777,7 @@ view.addEventListener('pointercancel', endPeek);
 const invMenu = document.getElementById('invMenu'), setMenu = document.getElementById('setMenu');
 const mainMenu = document.getElementById('mainMenu');
 const invBtn = document.getElementById('invBtn');
-let settingsFrom = 'inv', started = false;
+let settingsFrom = 'pause', started = false;
 const dbgMenu = document.getElementById('dbgMenu');
 const pauseMenu = document.getElementById('pauseMenu'), pauseBtn = document.getElementById('pauseBtn');
 const menuOpen = () => !invMenu.hidden || !setMenu.hidden || !mainMenu.hidden || !dbgMenu.hidden || !pauseMenu.hidden || !document.getElementById('seedMenu').hidden;
@@ -718,12 +796,10 @@ function play() {
     const hint = document.getElementById('hint'); hint.hidden = false; setTimeout(() => hint.style.opacity = 0, 8000); }
 }
 invBtn.addEventListener('click', () => invMenu.hidden ? openInv() : closeMenus());
-document.getElementById('openSettings').onclick = () => openSettings('inv');
 document.getElementById('mainSettings').onclick = () => openSettings('main');
 document.getElementById('setBack').onclick = () => {
   if (settingsFrom === 'main') { setMenu.hidden = true; sfx.close(); }
-  else if (settingsFrom === 'pause') openPause();
-  else openInv();
+  else openPause();
 };
 
 // Pause screen, with the controls for this device listed beside it
@@ -760,7 +836,6 @@ pauseBtn.addEventListener('click', openPause);
 document.getElementById('resumeBtn').onclick = closeMenus;
 document.getElementById('pauseSettings').onclick = () => openSettings('pause');
 document.getElementById('pauseMain').onclick = showMain;
-document.getElementById('toMain').onclick = showMain;
 document.getElementById('playBtn').onclick = play;
 // New world dialog: pick or type a seed
 const seedMenu = document.getElementById('seedMenu'), seedInput = document.getElementById('seedInput');
@@ -778,8 +853,8 @@ document.querySelectorAll('.copy-seed').forEach(b => b.onclick = () => {
   } catch (e) { selectText(val); done(false); }
 });
 function selectText(el) { const r = document.createRange(); r.selectNodeContents(el); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
-document.getElementById('openDebug').onclick = () => { invMenu.hidden = true; dbgMenu.hidden = false; sfx.click(); };
-document.getElementById('dbgBack').onclick = openInv;
+document.getElementById('pauseDebug').onclick = () => { pauseMenu.hidden = true; dbgMenu.hidden = false; sfx.click(); };
+document.getElementById('dbgBack').onclick = openPause;
 document.querySelectorAll('.modal .close').forEach(b => b.onclick = closeMenus);
 document.querySelectorAll('.modal').forEach(m => m.addEventListener('pointerdown', e => { if (e.target === m) closeMenus(); }));
 
@@ -800,6 +875,7 @@ for (let n = 1; n <= 5; n++) {
   fovRow.appendChild(b);
 }
 document.querySelectorAll('#sound button').forEach(b => b.onclick = () => { ensureAudio(); setSound(b.dataset.v === '1'); sfx.click(); });
+document.querySelectorAll('#music button').forEach(b => b.onclick = () => { ensureAudio(); setMusic(b.dataset.v === '1'); sfx.click(); });
 
 // Controls
 const keyName = c => c.startsWith('Key') ? c.slice(3) : c.startsWith('Digit') ? c.slice(5)
@@ -846,7 +922,7 @@ const ICOL = {
   O: [34, 28, 64], S: [200, 206, 218], s: [130, 136, 150], H: [150, 100, 60], h: [110, 70, 40],
   M: [170, 176, 190], m: [110, 116, 130], W: [59, 142, 232], w: [140, 196, 250],
   Y: [226, 194, 107], y: [190, 158, 80], G: [120, 126, 140], g: [90, 96, 110],
-  B: [124, 98, 255], L: [196, 180, 255], D: [90, 67, 214], T: [255, 222, 120], K: [60, 58, 70], k: [100, 98, 112], R: [240, 122, 106],
+  B: [124, 98, 255], L: [196, 180, 255], r: [140, 70, 56], D: [90, 67, 214], T: [255, 222, 120], K: [60, 58, 70], k: [100, 98, 112], R: [196, 108, 84],
 };
 const ITEMS = {
   pickaxe: { name: 'Pickaxe', tool: true, desc: 'Digs sand and stone', icon: [
@@ -857,6 +933,8 @@ const ITEMS = {
     'OOOOOOOO', 'OYYyYYYO', 'OYyYYYyO', 'OYYYyYYO', 'OyYYYYYO', 'OYYyYyYO', 'OYYYYYyO', 'OOOOOOOO'] },
   stone: { name: 'Stone', place: STONE, desc: 'Place stone', icon: [
     'OOOOOOOO', 'OGGgGGGO', 'OGgGGGgO', 'OGGGgGGO', 'OgGGGGGO', 'OGGgGgGO', 'OGGGGGgO', 'OOOOOOOO'] },
+  brick: { name: 'Brick', place: BRICK, desc: 'Place brick (does not fall)', icon: [
+    'OOOOOOOO', 'ORRrORRO', 'OrrrOrrO', 'OOOOOOOO', 'ORORRrRO', 'OrOrrrrO', 'OOOOOOOO', '........'] },
   water: { name: 'Water', place: WATER, desc: 'Pour water', icon: [
     '...OO...', '..OwWO..', '..OwWO..', '.OwWWWO.', 'OwWWWWWO', 'OWWWWWWO', '.OWWWWO.', '..OOOO..'] },
   gem: { name: 'Energy gem', once: true, desc: 'Refills levitation', icon: [
@@ -864,7 +942,7 @@ const ITEMS = {
   bomb: { name: 'Bomb', once: true, desc: 'Blasts a hole', icon: [
     '.....T..', '....T...', '..OOOh..', '.OKKKKO.', 'OKkKKKKO', 'OKKKKKKO', '.OKKKKO.', '..OOOO..'] },
 };
-const GIVE = { pickaxe: 1, bucket: 1, sand: 200, stone: 200, water: 200, gem: 5, bomb: 5 };
+const GIVE = { pickaxe: 1, bucket: 1, sand: 200, stone: 200, brick: 200, water: 200, gem: 5, bomb: 5 };
 const STACK = 999;
 for (const [id, it] of Object.entries(ITEMS)) {
   const c = document.createElement('canvas'); c.width = c.height = 8;
@@ -955,8 +1033,52 @@ function renderInv() {
     b.innerHTML = slotHTML(inv[i], i < 5 ? i + 1 : 0); b.classList.toggle('picked', i === picked);
     b.setAttribute('aria-label', (inv[i] ? ITEMS[inv[i].id].name : 'Empty slot'));
   });
+  if (typeof renderRecipes === 'function' && !invMenu.hidden) renderRecipes();
   if (picked >= 0 && inv[picked]) { const it = ITEMS[inv[picked].id]; invInfo.textContent = `${it.name}: ${it.desc}. Tap another slot to move it.`; }
   else invInfo.textContent = inv.some(Boolean) ? 'Drag an item to another slot to move it, or tap it then tap a slot.' : 'Nothing collected yet.';
+}
+
+
+// Crafting: tap Craft to turn materials into an item
+const RECIPES = [
+  { out: 'brick', n: 10, needs: { sand: 10, water: 5 } },
+  { out: 'bomb', n: 1, needs: { sand: 20, stone: 10 } },
+  { out: 'gem', n: 1, needs: { stone: 40, water: 20 } },
+  { out: 'pickaxe', n: 1, needs: { stone: 30 } },
+  { out: 'bucket', n: 1, needs: { stone: 20 } },
+];
+const countItem = id => inv.reduce((t, s) => t + (s && s.id === id ? s.n : 0), 0);
+function removeItem(id, n) {
+  for (let i = inv.length - 1; i >= 0 && n > 0; i--) {
+    const s = inv[i]; if (!s || s.id !== id) continue;
+    const k = Math.min(n, s.n); s.n -= k; n -= k; if (!s.n) inv[i] = null;
+  }
+}
+const recipesEl = document.getElementById('recipes');
+const recipeEls = RECIPES.map(r => {
+  const row = document.createElement('div'); row.className = 'recipe px';
+  const it = ITEMS[r.out];
+  row.innerHTML = `<img src="${it.src}" alt=""><div><div class="name">${it.name}${r.n > 1 ? ' ×' + r.n : ''}</div><div class="needs"></div></div><button class="btn">Craft</button>`;
+  row.querySelector('button').onclick = () => craft(r);
+  recipesEl.appendChild(row);
+  return row;
+});
+function craft(r) {
+  if (!Object.entries(r.needs).every(([id, n]) => countItem(id) >= n)) return;
+  if (!inv.includes(null) && !inv.some(s => s && s.id === r.out && !ITEMS[r.out].tool && s.n + r.n <= STACK)) { invInfo.textContent = 'No room in your inventory.'; return; }
+  for (const [id, n] of Object.entries(r.needs)) removeItem(id, n);
+  addItem(r.out, r.n); sfx.give();
+  invInfo.textContent = `Crafted ${r.n > 1 ? r.n + ' ' : ''}${ITEMS[r.out].name}.`;
+}
+function renderRecipes() {
+  RECIPES.forEach((r, k) => {
+    let ok = true;
+    recipeEls[k].querySelector('.needs').innerHTML = Object.entries(r.needs).map(([id, n]) => {
+      const have = countItem(id), short = have < n; if (short) ok = false;
+      return `<span class="${short ? 'short' : ''}"><img src="${ITEMS[id].src}" alt="">${Math.min(have, n)}/${n} ${ITEMS[id].name}</span>`;
+    }).join('');
+    recipeEls[k].querySelector('button').disabled = !ok;
+  });
 }
 
 // Debug menu: give any item
@@ -994,17 +1116,19 @@ function useHeld() {
   useTick++;
   if (inv[selected].id === 'pickaxe') {
     let sand = 0, stone = 0;
-    eachInCircle(3, (x, y, i) => {
-      if (Math.random() > 0.35) return;
-      if (grid[i] === SAND) { sand++; grid[i] = EMPTY; } else if (grid[i] === STONE) { stone++; grid[i] = EMPTY; } else return;
-      if (Math.random() < 0.3) burst(1, x, y, RGB[sand ? SAND : STONE], 0.8, 0.8, 18);
+    let brick = 0;
+    eachInCircle(4, (x, y, i) => {
+      const t = grid[i];
+      if (t === SAND) sand++; else if (t === STONE) stone++; else if (t === BRICK) brick++; else return;
+      grid[i] = EMPTY;
+      if (Math.random() < 0.12) burst(1, x, y, RGB[t], 0.8, 0.8, 18);
     });
-    if (sand) addItem('sand', sand); if (stone) addItem('stone', stone);
-    if ((sand || stone) && useTick % 5 === 0) sfx.dig();
+    if (sand) addItem('sand', sand); if (stone) addItem('stone', stone); if (brick) addItem('brick', brick);
+    if ((sand || stone || brick) && useTick % 4 === 0) sfx.dig();
   } else if (inv[selected].id === 'bucket') {
     let n = 0;
-    eachInCircle(3, (x, y, i) => { if (grid[i] === WATER && Math.random() < 0.5) { grid[i] = EMPTY; n++; } });
-    if (n) { addItem('water', n); if (useTick % 6 === 0) sfx.slurp(); }
+    eachInCircle(5, (x, y, i) => { if (grid[i] === WATER) { grid[i] = EMPTY; n++; } });
+    if (n) { addItem('water', n); if (useTick % 5 === 0) sfx.slurp(); }
   } else if (it.place) {
     let n = 0;
     eachInCircle(2, (x, y, i) => {
@@ -1040,7 +1164,7 @@ function explode(cx, cy, r) {
 function drawAim(put, ox, oy) {
   if (useId === null || selected < 0 || !inv[selected]) return;
   const it = ITEMS[inv[selected].id]; if (inv[selected].id === 'gem') return;
-  const ok = aimCell(), r = inv[selected].id === 'bomb' ? 12 : it.place ? 2 : 3, c = ok ? TIP : [240, 122, 106];
+  const ok = aimCell(), r = { bomb: 12, pickaxe: 4, bucket: 5 }[inv[selected].id] || 2, c = ok ? TIP : [240, 122, 106];
   for (let a = 0; a < 40; a++) {
     const t = a / 40 * Math.PI * 2;
     put(Math.round(aim.x + Math.cos(t) * (r + 1)) - ox, Math.round(aim.y + Math.sin(t) * (r + 1)) - oy, c);
@@ -1380,6 +1504,7 @@ renderBinds();
 starterKit();
 setFov(Math.min(5, Math.max(1, Math.round(+prefs.fov) || 3)));
 setSound(prefs.sound !== false);
+setMusic(prefs.music !== false);
 placeCamera();
 loop();
 
