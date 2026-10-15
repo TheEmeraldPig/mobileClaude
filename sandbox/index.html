@@ -75,6 +75,20 @@
   #invBtn.right { right: max(14px, env(safe-area-inset-right, 0px)); }
   #invBtn.left { left: max(14px, env(safe-area-inset-left, 0px)); }
   #invBtn svg { width: 30px; height: 30px; }
+  #pauseBtn { position: absolute; top: 50%; margin-top: -88px; width: 48px; height: 48px; padding: 0; display: grid; place-items: center; touch-action: none; }
+  #pauseBtn.right { right: max(14px, env(safe-area-inset-right, 0px)); }
+  #pauseBtn.left { left: max(14px, env(safe-area-inset-left, 0px)); }
+  #pauseBtn svg { width: 26px; height: 26px; }
+  .pause-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 22px; align-items: start; }
+  .pause-actions { display: grid; gap: 16px; }
+  .pause-actions .btn { display: flex; align-items: center; gap: 10px; text-align: left; }
+  .pause-actions .btn svg { width: 16px; height: 16px; flex: none; }
+  .keys { --hi: #0a0817; --lo: var(--panel-hi); background: var(--panel-lo); padding: 12px 14px; display: grid; gap: 8px; align-content: start; }
+  .keys dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px; align-items: baseline; }
+  .keys dt { font-size: 13px; color: var(--muted); }
+  .keys dd { margin: 0; font-size: 13px; text-align: right; }
+  .keys kbd { display: inline-block; min-width: 14px; padding: 1px 6px; margin: 1px 2px; background: var(--slate); box-shadow: 0 -2px 0 var(--o), 0 2px 0 var(--o), -2px 0 0 var(--o), 2px 0 0 var(--o), inset 0 -2px 0 var(--slate-lo); font-family: var(--font); font-size: 12px; text-align: center; }
+  @media (max-width: 520px) { .pause-layout { grid-template-columns: 1fr; } }
 
   /* Joystick: stepped "pixel circles" */
   .pxcircle { clip-path: polygon(30% 0, 70% 0, 70% 6%, 82% 6%, 82% 12%, 88% 12%, 88% 18%, 94% 18%, 94% 30%, 100% 30%, 100% 70%, 94% 70%, 94% 82%, 88% 82%, 88% 88%, 82% 88%, 82% 94%, 70% 94%, 70% 100%, 30% 100%, 30% 94%, 18% 94%, 18% 88%, 12% 88%, 12% 82%, 6% 82%, 6% 70%, 0 70%, 0 30%, 6% 30%, 6% 18%, 12% 18%, 12% 12%, 18% 12%, 18% 6%, 30% 6%); }
@@ -130,10 +144,10 @@
   .menu-col .btn svg { width: 20px; height: 20px; flex: none; }
   .menu-col .tip { font-size: 12px; color: var(--muted); text-shadow: 2px 2px 0 var(--o); text-align: center; }
 
-  .at-main #invBtn, .at-main #stick, .at-main #hint, .at-main #hotbar { visibility: hidden; }
+  .at-main #invBtn, .at-main #pauseBtn, .at-main #stick, .at-main #hint, .at-main #hotbar { visibility: hidden; }
 
   /* Computer: no joystick or bag button. Phone: compact menus sized to the short landscape screen. */
-  .desktop #stick, .desktop #invBtn, .desktop .only-touch, .touch .only-desktop { display: none !important; }
+  .desktop #stick, .desktop #invBtn, .desktop #pauseBtn, .desktop .only-touch, .touch .only-desktop { display: none !important; }
   .touch .sheet { padding: 10px 14px 14px; gap: 10px; max-height: calc(100% - 8px); width: min(520px, calc(100% - 12px)); }
   .touch .sheet.settings { width: min(760px, calc(100% - 12px)); }
   .touch .settings-grid { grid-template-columns: 1fr 1fr; gap: 14px 22px; }
@@ -176,6 +190,7 @@
 <div id="stage" class="at-main">
   <canvas id="view"></canvas>
   <div id="hint"><span class="only-touch">Push the stick up to levitate. Pick a hotbar slot, then touch the world to use it. With no slot picked, touch to look around.</span><span class="only-desktop">A / D to move, W to levitate, E for inventory. Scroll or 1–5 to pick a hotbar item, then click the world to use it.</span></div>
+  <button id="pauseBtn" class="btn alt right" aria-label="Pause"><svg viewBox="0 0 10 10" shape-rendering="crispEdges"><rect x="1" y="1" width="3" height="8" fill="var(--o)"/><rect x="6" y="1" width="3" height="8" fill="var(--o)"/><rect x="2" y="2" width="1" height="6" fill="var(--l)"/><rect x="7" y="2" width="1" height="6" fill="var(--l)"/></svg></button>
   <button id="invBtn" class="btn alt right" aria-label="Inventory"><svg viewBox="0 0 10 10" shape-rendering="crispEdges"><rect x="3" y="0" width="4" height="1" fill="var(--o)"/><rect x="2" y="1" width="1" height="2" fill="var(--o)"/><rect x="7" y="1" width="1" height="2" fill="var(--o)"/><rect x="1" y="3" width="8" height="7" fill="var(--o)"/><rect x="2" y="3" width="6" height="6" fill="var(--l)"/><rect x="3" y="4" width="5" height="5" fill="var(--b)"/><rect x="2" y="8" width="6" height="1" fill="var(--s)"/><rect x="4" y="5" width="2" height="2" fill="var(--t)"/></svg></button>
   <div id="stick" class="pxcircle" aria-label="Movement stick"><div id="knob" class="pxcircle"></div></div>
 
@@ -217,9 +232,26 @@
           <div class="label" style="margin-top:8px">Joystick side</div>
           <div class="seg" id="stickSide"><button class="btn" data-v="left">Left</button><button class="btn" data-v="right">Right</button></div>
           <p class="note">You can also hold the joystick still for a moment and drag it anywhere.</p>
-          <div class="label" style="margin-top:8px">Inventory button side</div>
+          <div class="label" style="margin-top:8px">Pause and bag buttons side</div>
           <div class="seg" id="invSide"><button class="btn" data-v="left">Left</button><button class="btn" data-v="right">Right</button></div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="pauseMenu" class="modal" hidden>
+    <div class="sheet settings px" role="dialog" aria-label="Paused">
+      <div class="head"><h2>Paused</h2><button class="btn alt square close" aria-label="Resume"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="0" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="2" height="2"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/></svg></button></div>
+      <div class="pause-layout">
+        <div class="pause-actions">
+          <button class="btn gold" id="resumeBtn"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="1" y="0" width="1" height="6"/><rect x="2" y="1" width="1" height="4"/><rect x="3" y="2" width="1" height="2"/></svg> Resume</button>
+          <button class="btn" id="pauseSettings"><svg viewBox="0 0 7 7" fill="currentColor"><rect x="3" y="0" width="1" height="7"/><rect x="0" y="3" width="7" height="1"/><rect x="1" y="1" width="5" height="5"/><rect x="3" y="3" width="1" height="1" fill="var(--o)"/></svg> Settings</button>
+          <button class="btn alt" id="pauseMain"><svg viewBox="0 0 6 6" fill="currentColor"><rect x="2" y="0" width="2" height="1"/><rect x="1" y="1" width="4" height="1"/><rect x="0" y="2" width="6" height="1"/><rect x="1" y="3" width="4" height="3"/><rect x="2" y="4" width="2" height="2" fill="var(--o)"/></svg> Main menu</button>
+        </div>
+        <div class="keys px">
+          <div class="label" id="keysTitle">Controls</div>
+          <dl id="keysList"></dl>
         </div>
       </div>
     </div>
@@ -448,7 +480,7 @@ addEventListener('keydown', e => {
     listening.classList.remove('listening'); listening = null; renderBinds();
     return;
   }
-  if (e.code === 'Escape') { closeMenus(); return; }
+  if (e.code === 'Escape') { if (menuOpen()) closeMenus(); else openPause(); return; }
   if (/^Digit[1-5]$/.test(e.code) && !Object.values(prefs.binds).includes(e.code) && !menuOpen()) { selectSlot(+e.code[5] - 1); return; }
   if (e.code === prefs.binds.inv && !e.repeat && mainMenu.hidden) { invMenu.hidden ? openInv() : closeMenus(); e.preventDefault(); return; }
   held.add(e.code);
@@ -522,16 +554,17 @@ const mainMenu = document.getElementById('mainMenu');
 const invBtn = document.getElementById('invBtn');
 let settingsFrom = 'inv', started = false;
 const dbgMenu = document.getElementById('dbgMenu');
-const menuOpen = () => !invMenu.hidden || !setMenu.hidden || !mainMenu.hidden || !dbgMenu.hidden;
+const pauseMenu = document.getElementById('pauseMenu'), pauseBtn = document.getElementById('pauseBtn');
+const menuOpen = () => !invMenu.hidden || !setMenu.hidden || !mainMenu.hidden || !dbgMenu.hidden || !pauseMenu.hidden;
 function openInv() { setMenu.hidden = dbgMenu.hidden = true; invMenu.hidden = false; held.clear(); picked = -1; renderInv(); sfx.open(); }
-function openSettings(from) { settingsFrom = from; invMenu.hidden = true; setMenu.hidden = false; sfx.click(); }
+function openSettings(from) { settingsFrom = from; invMenu.hidden = pauseMenu.hidden = true; setMenu.hidden = false; sfx.click(); }
 function closeMenus() {
   if (!mainMenu.hidden) { if (!setMenu.hidden) { setMenu.hidden = true; sfx.close(); } return; }
-  if (invMenu.hidden && setMenu.hidden && dbgMenu.hidden) return;
-  invMenu.hidden = setMenu.hidden = dbgMenu.hidden = true; sfx.close();
+  if (invMenu.hidden && setMenu.hidden && dbgMenu.hidden && pauseMenu.hidden) return;
+  invMenu.hidden = setMenu.hidden = dbgMenu.hidden = pauseMenu.hidden = true; sfx.close();
   if (listening) { listening.classList.remove('listening'); listening = null; renderBinds(); }
 }
-function showMain() { invMenu.hidden = setMenu.hidden = true; mainMenu.hidden = false; stage.classList.add('at-main'); held.clear(); sfx.close(); }
+function showMain() { invMenu.hidden = setMenu.hidden = pauseMenu.hidden = true; mainMenu.hidden = false; stage.classList.add('at-main'); held.clear(); sfx.close(); }
 function play() {
   ensureAudio(); mainMenu.hidden = true; stage.classList.remove('at-main'); sfx.open();
   if (!started) { started = true; document.querySelector('#playBtn span').textContent = 'Continue';
@@ -540,7 +573,46 @@ function play() {
 invBtn.addEventListener('click', () => invMenu.hidden ? openInv() : closeMenus());
 document.getElementById('openSettings').onclick = () => openSettings('inv');
 document.getElementById('mainSettings').onclick = () => openSettings('main');
-document.getElementById('setBack').onclick = () => { if (settingsFrom === 'main') { setMenu.hidden = true; sfx.close(); } else openInv(); };
+document.getElementById('setBack').onclick = () => {
+  if (settingsFrom === 'main') { setMenu.hidden = true; sfx.close(); }
+  else if (settingsFrom === 'pause') openPause();
+  else openInv();
+};
+
+// Pause screen, with the controls for this device listed beside it
+function openPause() {
+  if (!mainMenu.hidden) return;
+  invMenu.hidden = setMenu.hidden = dbgMenu.hidden = true; pauseMenu.hidden = false;
+  held.clear(); renderKeys(); sfx.close();
+}
+const kb = (...k) => k.map(x => `<kbd>${x}</kbd>`).join('');
+function renderKeys() {
+  const b = prefs.binds, n = keyName;
+  const rows = IS_TOUCH ? [
+    ['Move', 'Joystick left / right'],
+    ['Levitate', 'Push the joystick up'],
+    ['Inventory', 'Bag button'],
+    ['Pause', 'Pause button'],
+    ['Pick item', 'Tap a hotbar slot'],
+    ['Use item', 'Touch the world'],
+    ['Look around', 'Touch the world with no slot picked'],
+    ['Move joystick', 'Hold it still, then drag'],
+  ] : [
+    ['Move', kb(n(b.left), n(b.right)) + ' or ' + kb('←', '→')],
+    ['Levitate', kb(n(b.lev)) + ' or ' + kb('↑', 'Space')],
+    ['Inventory', kb(n(b.inv))],
+    ['Pause', kb('Esc')],
+    ['Pick item', kb('1–5') + ' or scroll'],
+    ['Use item', 'Click the world'],
+    ['Look around', 'Hold click with no slot picked'],
+  ];
+  document.getElementById('keysTitle').textContent = IS_TOUCH ? 'Touch controls' : 'Keyboard and mouse';
+  document.getElementById('keysList').innerHTML = rows.map(([a, c]) => `<dt>${a}</dt><dd>${c}</dd>`).join('');
+}
+pauseBtn.addEventListener('click', openPause);
+document.getElementById('resumeBtn').onclick = closeMenus;
+document.getElementById('pauseSettings').onclick = () => openSettings('pause');
+document.getElementById('pauseMain').onclick = showMain;
 document.getElementById('toMain').onclick = showMain;
 document.getElementById('playBtn').onclick = play;
 document.getElementById('newWorld').onclick = () => { ensureAudio(); generate(); unstick(); updatePlayerCells(); starterKit(); play(); };
@@ -581,7 +653,7 @@ function renderSides() {
   const stickSide = prefs.stick.x < 0.5 ? 'left' : 'right';
   document.querySelectorAll('#stickSide button').forEach(b => b.classList.toggle('active', b.dataset.v === stickSide));
   document.querySelectorAll('#invSide button').forEach(b => b.classList.toggle('active', b.dataset.v === prefs.invSide));
-  invBtn.className = 'btn alt ' + prefs.invSide;
+  invBtn.className = pauseBtn.className = 'btn alt ' + prefs.invSide;
 }
 document.querySelectorAll('#stickSide button').forEach(b => b.onclick = () => {
   prefs.stick = { x: b.dataset.v === 'left' ? 0.14 : 0.86, y: 0.75 }; placeStick(); savePrefs(); renderSides(); sfx.click();
