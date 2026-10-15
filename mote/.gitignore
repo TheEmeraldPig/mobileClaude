@@ -1,0 +1,10 @@
+/Mote.exe
+/Mote-steam.exe
+/Mote.apk
+/mote
+android/app/libs/*.aar
+android/app/libs/*.jar
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties

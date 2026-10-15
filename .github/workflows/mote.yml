@@ -1,0 +1,97 @@
+name: Build Mote
+
+# Builds the Windows .exe and the Android .apk on every push that changes the game,
+# then publishes them as a GitHub release named build-<number>.
+on:
+  push:
+    paths:
+      - 'mote/**'
+      - '.github/workflows/mote.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mote
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: mote/go.sum
+      - name: Install libraries for tests
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxxf86vm-dev libasound2-dev xvfb
+      - name: Test (world generation must match the web version)
+        run: xvfb-run -a go test ./game
+      - name: Build Mote.exe
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
+            -ldflags "-s -w -H windowsgui -X github.com/TheEmeraldPig/mobileClaude/mote/game.Version=${{ github.run_number }}" \
+            -o Mote.exe ./cmd/mote
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -tags steam \
+            -ldflags "-s -w -H windowsgui -X github.com/TheEmeraldPig/mobileClaude/mote/game.Version=${{ github.run_number }}" \
+            -o Mote-steam.exe ./cmd/mote
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            mote/Mote.exe
+            mote/Mote-steam.exe
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: mote/go.sum
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install the Android NDK
+        run: |
+          sdkmanager --install "ndk;26.3.11579264" "platforms;android-34" "build-tools;34.0.0" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.3.11579264" >> $GITHUB_ENV
+      - name: Build the game library (.aar)
+        working-directory: mote
+        run: |
+          go install github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@v2.8.8
+          ebitenmobile bind -target android -androidapi 23 -javapkg com.theemeraldpig.mote \
+            -ldflags "-X github.com/TheEmeraldPig/mobileClaude/mote/game.Version=${{ github.run_number }}" \
+            -o android/app/libs/mote.aar ./mobile
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build Mote.apk
+        working-directory: mote/android
+        run: |
+          gradle assembleRelease -PmoteVersion=${{ github.run_number }} --no-daemon -q
+          cp app/build/outputs/apk/release/app-release.apk ../Mote.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: mote/Mote.apk
+
+  release:
+    needs: [windows, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Publish release build-${{ github.run_number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ github.run_number }}" Mote.exe Mote-steam.exe Mote.apk \
+            --repo "${{ github.repository }}" --target "${{ github.sha }}" --latest \
+            --title "Mote build ${{ github.run_number }}" \
+            --notes "Windows: download Mote.exe and run it. Android: download Mote.apk on your phone and open it to install. Mote-steam.exe is the Steam build (no built-in updater)."

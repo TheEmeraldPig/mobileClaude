@@ -1,0 +1,169 @@
+package game
+
+import (
+	"encoding/json"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"strconv"
+)
+
+// Settings and save game, stored as JSON in the user's config folder
+// (on Android, the app's files folder passed in by the Android activity).
+
+type Prefs struct {
+	FOV     int               `json:"fov"`
+	Sound   bool              `json:"sound"`
+	Music   bool              `json:"music"`
+	Binds   map[string]string `json:"binds"`
+	StickX  float64           `json:"stickX"`
+	StickY  float64           `json:"stickY"`
+	BtnSide string            `json:"btnSide"`
+	Seed    string            `json:"seed"`
+	Full    bool              `json:"fullscreen"`
+}
+
+var prefs = Prefs{FOV: 3, Sound: true, Music: true, StickX: 0.14, StickY: 0.75, BtnSide: "right", Full: true,
+	Binds: map[string]string{"left": "A", "right": "D", "lev": "W", "inv": "E"}}
+
+// DataDir can be set before the game starts (the Android wrapper does this).
+var DataDir string
+
+func dataPath(name string) string {
+	dir := DataDir
+	if dir == "" {
+		if d, err := os.UserConfigDir(); err == nil {
+			dir = filepath.Join(d, "Mote")
+		} else {
+			dir = "."
+		}
+	}
+	os.MkdirAll(dir, 0o755)
+	return filepath.Join(dir, name)
+}
+
+func loadPrefs() {
+	b, err := os.ReadFile(dataPath("settings.json"))
+	if err != nil {
+		return
+	}
+	def := prefs.Binds
+	json.Unmarshal(b, &prefs)
+	for k, v := range def {
+		if prefs.Binds[k] == "" {
+			prefs.Binds[k] = v
+		}
+	}
+	if prefs.FOV < 1 || prefs.FOV > 5 {
+		prefs.FOV = 3
+	}
+}
+
+func savePrefs() {
+	b, _ := json.MarshalIndent(prefs, "", "  ")
+	writeFileAtomic(dataPath("settings.json"), b)
+}
+
+// ---- Save game ----
+
+type SaveState struct {
+	V         int              `json:"v"`
+	Seed      string           `json:"seed"`
+	BaseChunk int              `json:"baseChunk"`
+	Chunks    map[int][]uint16 `json:"chunks"`
+	Started   bool             `json:"started"`
+	PlayerWX  float64          `json:"playerWX"`
+	PlayerY   float64          `json:"playerY"`
+	Energy    float64          `json:"energy"`
+	Face      int              `json:"face"`
+	Inv       []*Stack         `json:"inv"`
+	Selected  int              `json:"selected"`
+}
+
+// The whole game state. When you add new state (items, player stats...), add it here
+// and in restoreState so it survives saves and updates.
+func serializeState() SaveState {
+	chunks := map[int][]uint16{}
+	for k, v := range saved {
+		chunks[k] = v
+	}
+	for i := 0; i < NCH; i++ {
+		if dirty[i] {
+			chunks[baseChunk+i] = packChunk(i)
+		}
+	}
+	return SaveState{V: 1, Seed: seedText, BaseChunk: baseChunk, Chunks: chunks, Started: started,
+		PlayerWX: player.x + float64(baseChunk*CW*CELL), PlayerY: player.y, Energy: player.energy, Face: player.face,
+		Inv: append([]*Stack(nil), inv...), Selected: selected}
+}
+
+func restoreState(st *SaveState) bool {
+	if st == nil || st.V != 1 || st.Seed == "" {
+		return false
+	}
+	seedText = st.Seed
+	seedN = seedFrom(seedText)
+	prefs.Seed = seedText
+	saved = map[int][]uint16{}
+	for k, v := range st.Chunks {
+		saved[k] = v
+	}
+	baseChunk = st.BaseChunk
+	for i := 0; i < NCH; i++ {
+		loadSlot(i)
+	}
+	player.vx, player.vy, player.squash = 0, 0, 0
+	player.energy, player.face = st.Energy, st.Face
+	if player.face == 0 {
+		player.face = 1
+	}
+	player.x = st.PlayerWX - float64(baseChunk*CW*CELL)
+	player.y = st.PlayerY
+	followPlayer()
+	unstick()
+	updatePlayerCells()
+	for i := range inv {
+		inv[i] = nil
+		if i < len(st.Inv) && st.Inv[i] != nil && items[st.Inv[i].ID] != nil {
+			inv[i] = st.Inv[i]
+		}
+	}
+	selected = st.Selected
+	if selected < -1 || selected > 4 {
+		selected = -1
+	}
+	started = st.Started
+	return true
+}
+
+func saveGame() {
+	if !started {
+		return
+	}
+	st := serializeState()
+	b, err := json.Marshal(st)
+	if err == nil {
+		writeFileAtomic(dataPath("save.json"), b)
+	}
+}
+
+func loadSave() *SaveState {
+	b, err := os.ReadFile(dataPath("save.json"))
+	if err != nil {
+		return nil
+	}
+	var st SaveState
+	if json.Unmarshal(b, &st) != nil {
+		return nil
+	}
+	return &st
+}
+
+func writeFileAtomic(path string, b []byte) {
+	tmp := path + ".tmp"
+	if os.WriteFile(tmp, b, 0o644) == nil {
+		os.Rename(tmp, path)
+	}
+}
+
+func randomSeed() string { return strconv.Itoa(100000000 + rand.Intn(900000000)) }
