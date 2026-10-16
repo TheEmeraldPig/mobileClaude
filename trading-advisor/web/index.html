@@ -26,6 +26,9 @@
   <!-- shared filter bar (dashboard, trades, mistakes) -->
   <template id="filter-tpl">
     <div class="filters">
+      <label>Whose trades
+        <select data-f="who" style="width:auto"><option value="me">Mine</option></select>
+      </label>
       <label>Account
         <span class="seg" data-f="account">
           <button data-v="all">All</button><button data-v="real">Real money</button><button data-v="paper">Paper</button>
@@ -78,6 +81,8 @@
           <label class="field"><span>Stop-loss</span><input name="stop_loss" type="number" step="any" min="0"></label>
           <label class="field"><span>Target</span><input name="target" type="number" step="any" min="0"></label>
           <label class="field"><span>Fees &amp; commissions ($)</span><input name="fees" type="number" step="any" min="0" value="0"></label>
+          <label class="field"><span>Whose trade</span><input name="trader" list="traders-list" placeholder="Mine" autocomplete="off">
+            <span class="hint">Leave empty for your own trade, or type another trader's name.</span></label>
         </div>
         <div class="live-calc num" id="live-calc"></div>
       </div>
@@ -121,7 +126,9 @@
       <h2>1. Choose a CSV file</h2>
       <p class="muted">Export your trade history from your broker as CSV, then choose it here. To try the app first, load a sample:
         <button type="button" class="link-btn" data-sample="sample_trades.csv" data-mode="trades">32 fake trades</button> or
-        <button type="button" class="link-btn" data-sample="sample_fills.csv" data-mode="fills">individual buys and sells</button>. Samples import as paper trades.</p>
+        <button type="button" class="link-btn" data-sample="sample_fills.csv" data-mode="fills">individual buys and sells</button>, or
+        <button type="button" class="link-btn" data-sample="sample_other_trader.csv" data-mode="trades" data-trader="Sample Trader">another trader's journal</button>. Samples import as paper trades.</p>
+      <p class="hint">Other people's trades: only import data you're allowed to use. It stays private in your journal.</p>
       <div class="form-grid">
         <label class="field"><span>CSV file</span><input type="file" id="csv-input" accept=".csv,text/csv,.txt"></label>
         <div class="field"><span>How is your file laid out?</span>
@@ -130,6 +137,8 @@
             <label><input type="radio" name="imp-mode" value="fills"> One row per buy or sell</label>
           </div>
         </div>
+        <label class="field"><span>Whose trades are these?</span><input id="imp-trader" list="traders-list" placeholder="Mine" autocomplete="off">
+          <span class="hint">Leave empty for your own. Type a name for another trader's trades; they're kept separate from your stats.</span></label>
         <label class="field"><span>These trades are</span>
           <select id="imp-account"><option value="paper">Paper trades</option><option value="real">Real money</option></select></label>
         <label class="field"><span>Times in this file are in</span>
@@ -216,18 +225,24 @@
       <div class="row"><button class="primary" type="submit">Save rules</button></div>
     </form>
     <div class="card" style="margin-top:2rem">
+      <h3>Other traders</h3>
+      <p class="muted">Trades you imported from other people. They never count toward your own stats, limits or rule checks, but they're measured against your rules so you can compare.</p>
+      <div id="traders-admin"></div>
+    </div>
+    <div class="card">
       <h3>Your data</h3>
       <p class="muted">Your trades are saved privately with this page on your claude.ai account. Only you can see them.
         Download a CSV now and then as an extra backup.</p>
       <div class="row">
         <button type="button" class="export-btn">Download all trades (CSV)</button>
-        <select id="del-scope" style="width:auto"><option value="paper">Delete all paper trades</option><option value="real">Delete all real-money trades</option><option value="all">Delete ALL trades</option></select>
+        <select id="del-scope" style="width:auto"><option value="paper">Delete all my paper trades</option><option value="real">Delete all my real-money trades</option><option value="all">Delete ALL trades (everyone's)</option></select>
         <button type="button" class="danger" id="del-all">Delete…</button>
       </div>
       <div id="del-confirm"></div>
     </div>
   </section>
 </main>
+<datalist id="traders-list"></datalist>
 <div class="toast" id="toast" role="status"></div>
 <script src="logic.js"></script>
 <script src="app.js"></script>

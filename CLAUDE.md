@@ -20,8 +20,8 @@
 
 ## trading-advisor/ (day-trading journal and advisor)
 
-- The main version is the website in `web/`, published as a private claude.ai artifact: https://claude.ai/artifact/VUNk24GVvv5xewtmwJEMHq. Republish it by passing that URL with `file_path` `web/index.html` and `files` for `style.css`, `logic.js`, `app.js` and the two `samples/*.csv`. Omit `capabilities` on redeploys so the stored ones (owner-only db rules, assets, downloads, user) stay.
-- The user's trades live in that artifact's database (`trades/<id>`, `settings/main`), readable with the ArtifactData tool. Never copy them into this public repo.
+- The main version is the website in `web/`, published as a private claude.ai artifact: https://claude.ai/artifact/VUNk24GVvv5xewtmwJEMHq. Republish it by passing that URL with `file_path` `web/index.html` and `files` for `style.css`, `logic.js`, `app.js` and the three `samples/*.csv`. Omit `capabilities` on redeploys so the stored ones (owner-only db rules, assets, downloads, user) stay.
+- The user's trades live in that artifact's database (`trades/<id>`, `settings/main`), readable with the ArtifactData tool. Never copy them into this public repo. A trade with a `trader` name belongs to another person: keep those out of the user's own stats, limits and pre-trade checks.
 - It must never connect to a brokerage or place orders. The user is a beginner: keep wording plain and `README.md` steps simple.
 - All trading math is in `web/logic.js`; run `node tests/web_logic_test.js` after changing it. The page can't use `alert`/`confirm`/`prompt` or plain download links (use the inline confirm and the `downloads` capability).
 - The older offline version (`app.py`, Python standard library, SQLite in gitignored `data/`) is no longer kept in sync. Its tests: `python -m unittest discover tests`.

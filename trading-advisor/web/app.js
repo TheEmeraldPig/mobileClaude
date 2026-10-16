@@ -131,6 +131,7 @@ function setStatus(kind, text) {
 // Re-render pages that only show data. Forms are left alone so typing isn't wiped.
 function dataChanged() {
   if (!store.ready()) return;
+  refreshTraderLists();
   if (["dashboard", "trades", "mistakes"].includes(currentPage)) render();
   else if (currentPage === "rules" && !$("#rules-form").dataset.dirty) renderRules();
 }
@@ -185,8 +186,8 @@ function icon(level) {
   return `<span class="ico ${level}" aria-hidden="true">${ch}</span>`;
 }
 function loadFilter() {
-  try { return Object.assign({ account: "all", from: "", to: "" }, JSON.parse(localStorage.getItem("advisor-filter") || "{}")); }
-  catch { return { account: "all", from: "", to: "" }; }
+  try { return Object.assign({ who: "me", account: "all", from: "", to: "" }, JSON.parse(localStorage.getItem("advisor-filter") || "{}")); }
+  catch { return { who: "me", account: "all", from: "", to: "" }; }
 }
 function saveFilter() {
   try { localStorage.setItem("advisor-filter", JSON.stringify(filter)); } catch { /* storage blocked */ }
@@ -252,14 +253,26 @@ function setupFilters() {
   $$(".filter-slot").forEach(slot => {
     slot.appendChild($("#filter-tpl").content.cloneNode(true));
     $$("[data-f=account] button", slot).forEach(b => b.addEventListener("click", () => { filter.account = b.dataset.v; filterChanged(); }));
+    $("[data-f=who]", slot).addEventListener("change", e => { filter.who = e.target.value; filterChanged(); });
     $("[data-f=from]", slot).addEventListener("change", e => { filter.from = e.target.value; filterChanged(); });
     $("[data-f=to]", slot).addEventListener("change", e => { filter.to = e.target.value; filterChanged(); });
     $("[data-f=clear]", slot).addEventListener("click", () => { filter.from = filter.to = ""; filterChanged(); });
   });
   syncFilters();
 }
+function refreshTraderLists() {
+  const names = traderNames(store.trades);
+  if (filter.who.startsWith("t:") && !names.includes(filter.who.slice(2))) filter.who = "me";
+  if (filter.who === "others" && !names.length) filter.who = "me";
+  const opts = [["me", "Mine"], ...(names.length ? [["others", "All other traders"]] : []), ...names.map(n => ["t:" + n, n]), ...(names.length ? [["all", "Everyone"]] : [])];
+  const html = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
+  $$("[data-f=who]").forEach(sel => { if (sel.innerHTML !== html) sel.innerHTML = html; });
+  $("#traders-list").innerHTML = names.map(n => `<option value="${esc(n)}">`).join("");
+  syncFilters();
+}
 function syncFilters() {
   $$(".filter-slot").forEach(slot => {
+    $("[data-f=who]", slot).value = filter.who;
     $$("[data-f=account] button", slot).forEach(b => b.classList.toggle("on", b.dataset.v === filter.account));
     $("[data-f=from]", slot).value = filter.from;
     $("[data-f=to]", slot).value = filter.to;
@@ -273,8 +286,10 @@ function renderDashboard() {
   const body = $("#dash-body");
   const r = fullReport(store.trades, S(), filter);
   const s = r.summary;
+  const who = whoLabel(filter.who);
+  const viewing = filter.who === "me" ? "" : `<div class="notice">Showing <b>${esc(who.possessive)}</b> trades. Switch "Whose trades" to <b>Mine</b> to see your own.</div>`;
   if (!s.trades) {
-    body.innerHTML = `<div class="card empty"><h2>No closed trades yet</h2>
+    body.innerHTML = viewing + `<div class="card empty"><h2>No closed trades yet</h2>
       <p>Add a trade, or import a CSV from your broker. To see how it works first, load the sample trades on the
       <button type="button" class="link-btn" data-page="import">Import CSV</button> page.</p>
       ${r.open_trades ? `<p>You have ${r.open_trades} open trade(s). They're counted once you add an exit.</p>` : ""}</div>`;
@@ -284,7 +299,7 @@ function renderDashboard() {
   const cs = s.current_streak;
   const cur = cs.kind ? `${cs.length} ${cs.kind === "loss" ? (cs.length > 1 ? "losses" : "loss") : (cs.length > 1 ? "wins" : "win")}` : "–";
   const tile = (k, v, sub = "") => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
-  body.innerHTML = `
+  body.innerHTML = viewing + `
     <div class="tiles">
       ${tile("Total P&L", pnlSpan(s.total_pnl), `${s.trades} closed trades${r.open_trades ? ` · ${r.open_trades} open` : ""}`)}
       ${tile("Win rate", pct(s.win_rate), `${s.wins} wins · ${s.losses} losses${s.breakeven ? ` · ${s.breakeven} even` : ""}`)}
@@ -300,6 +315,7 @@ function renderDashboard() {
         <small>Starts at your account size (${fmtMoney(S().account_size, false)}), one point per closed trade</small></div>
       <div class="chart" id="equity-chart"></div>
     </div>
+    ${comparisonCard()}
     <div class="card">
       <h2>What the advisor sees</h2>
       <ul class="insights">${r.insights.map(i => `<li class="${i.tone}">${icon(i.tone)}<span>${esc(i.text)}</span></li>`).join("")}</ul>
@@ -308,6 +324,21 @@ function renderDashboard() {
     <p class="muted">Blue bars are total profit, red bars are total loss. Groups with fewer than ${MIN_SAMPLE} trades are greyed out because they're too small to trust.</p>
     <div class="grid grid-2">${Object.values(r.breakdowns).map(breakdownCard).join("")}</div>`;
   drawEquity($("#equity-chart"), s.equity_curve);
+}
+
+function comparisonCard() {
+  if (!traderNames(store.trades).length) return "";
+  const rows = traderComparison(store.trades, S(), { account: filter.account, from: filter.from, to: filter.to });
+  if (rows.length < 2) return "";
+  const pf = x => x === null ? "No losses" : num(x);
+  return `<div class="card"><h2>You vs other traders</h2>
+    <p class="muted">Same dates and account filter as above. Other traders are measured against your rules, so "trades with a mistake" means trades that would break your rules.</p>
+    <div class="table-wrap"><table><thead><tr><th>Trader</th><th class="r">Trades</th><th class="r">Win %</th><th class="r">Expectancy</th>
+      <th class="r">Avg win / loss</th><th class="r">Profit factor</th><th class="r">Typical hold</th><th class="r">Trades with a mistake</th><th>Best setup</th><th class="r">Total</th></tr></thead>
+    <tbody>${rows.map(r => `<tr class="clickable" data-who="${esc(r.who)}"><td><b>${esc(r.name)}</b></td><td class="r num">${r.trades}</td><td class="r num">${pct(r.win_rate)}</td>
+      <td class="r">${pnlSpan(r.expectancy)}</td><td class="r num">${fmtMoney(r.avg_win, false)} / ${fmtMoney(r.avg_loss, false)}</td><td class="r num">${pf(r.profit_factor)}</td>
+      <td class="r num">${holdLabel(r.typical_hold)}</td><td class="r num">${pct(r.mistake_rate)}</td><td>${esc(r.best_setup || "–")}</td><td class="r">${pnlSpan(r.total_pnl)}</td></tr>`).join("")}</tbody></table></div>
+    <small>Click a trader to see their full dashboard.</small></div>`;
 }
 
 function breakdownCard(b) {
@@ -383,11 +414,12 @@ function renderTrades() {
       or <button type="button" class="link-btn" data-page="import">import a CSV</button>.</div>`;
     return;
   }
+  const showTrader = filter.who !== "me";
   body.innerHTML = `<div class="table-wrap"><table>
-    <thead><tr><th>Entry</th><th>Ticker</th><th>Side</th><th>Acct</th><th class="r">Shares</th><th class="r">Entry</th><th class="r">Exit</th>
+    <thead><tr><th>Entry</th>${showTrader ? "<th>Trader</th>" : ""}<th>Ticker</th><th>Side</th><th>Acct</th><th class="r">Shares</th><th class="r">Entry</th><th class="r">Exit</th>
       <th class="r">P&amp;L</th><th class="r">R</th><th class="r">Hold</th><th>Setup</th><th>Plan</th><th>Flags</th></tr></thead>
     <tbody>${trades.map(t => `<tr class="clickable" data-id="${esc(t.id)}">
-      <td class="num">${fmtDT(t.entry_time)}</td><td><b>${esc(t.ticker)}</b></td><td>${t.direction}</td>
+      <td class="num">${fmtDT(t.entry_time)}</td>${showTrader ? `<td>${esc(t.trader || "You")}</td>` : ""}<td><b>${esc(t.ticker)}</b></td><td>${t.direction}</td>
       <td><span class="badge ${t.account_type}">${t.account_type === "real" ? "real" : "paper"}</span></td>
       <td class="r num">${t.shares}</td><td class="r num">${num(t.entry_price)}</td><td class="r num">${t.exit_price === null ? "–" : num(t.exit_price)}</td>
       <td class="r">${pnlSpan(t.pnl)}</td><td class="r num">${t.r_multiple === null ? "–" : num(t.r_multiple, 1)}</td>
@@ -421,10 +453,11 @@ function openEditor(id) {
   $("#shot-input").value = "";
   $("#delete-confirm").innerHTML = "";
   editing = id ? store.trades.find(t => t.id === id) || null : null;
-  const t = editing || { direction: "long", account_type: filter.account === "real" ? "real" : "paper", fees: 0 };
+  const t = editing || { direction: "long", account_type: filter.account === "real" ? "real" : "paper", fees: 0,
+    trader: filter.who.startsWith("t:") ? filter.who.slice(2) : null };
   $("#edit-title").textContent = editing ? `Edit trade: ${editing.ticker}` : "Add a trade";
   $("#delete-trade").hidden = !editing;
-  for (const k of ["ticker", "direction", "account_type", "shares", "entry_price", "exit_price", "stop_loss", "target", "fees", "reason", "notes"]) {
+  for (const k of ["ticker", "direction", "account_type", "shares", "entry_price", "exit_price", "stop_loss", "target", "fees", "reason", "notes", "trader"]) {
     f.elements[k].value = t[k] ?? "";
   }
   f.elements.entry_time.value = (t.entry_time || nowET()).replace(" ", "T").slice(0, 16);
@@ -489,7 +522,7 @@ async function saveTrade(ev) {
   const mistakes = [...$$("#mistake-chips .on").map(b => b.dataset.m), ...f.mistakes_extra.value.split(",").map(s => s.trim()).filter(Boolean)];
   const data = {};
   for (const k of ["ticker", "direction", "account_type", "shares", "entry_price", "exit_price", "stop_loss", "target", "fees",
-    "entry_time", "exit_time", "setup", "emotion_before", "emotion_after", "reason", "notes"]) data[k] = f[k].value;
+    "entry_time", "exit_time", "setup", "emotion_before", "emotion_after", "reason", "notes", "trader"]) data[k] = f[k].value;
   data.followed_plan = $$("[name=followed_plan]").find(r => r.checked)?.value ?? "";
   data.mistakes = mistakes.join(", ");
   data.screenshot = editing?.screenshot || null;
@@ -586,7 +619,8 @@ function mappedRows() {
 }
 
 function importOptions() {
-  return { mode: importMode(), account_type: $("#imp-account").value, tz_offset_hours: $("#imp-tz").value, default_direction: $("#imp-default-dir").value };
+  return { mode: importMode(), account_type: $("#imp-account").value, tz_offset_hours: $("#imp-tz").value, default_direction: $("#imp-default-dir").value,
+    trader: $("#imp-trader").value.trim() || null };
 }
 
 function previewImport() {
@@ -595,7 +629,8 @@ function previewImport() {
   const list = (items, title) => items.length ? `<details ${items.length < 6 ? "open" : ""}><summary>${title} (${items.length})</summary><ul class="err-list">${
     items.map(e => `<li>${e.row ? `Row ${e.row}: ` : ""}${esc(e.message)}</li>`).join("")}</ul></details>` : "";
   $("#imp-preview").innerHTML = `
-    <p><b>${r.trades.length}</b> trade(s) ready to import as <b>${importOptions().account_type === "real" ? "real-money" : "paper"}</b> trades${r.errors.length ? `, <b class="neg">${r.errors.length}</b> row(s) couldn't be read and will be skipped` : ""}.</p>
+    <p><b>${r.trades.length}</b> trade(s) ready to import as <b>${importOptions().account_type === "real" ? "real-money" : "paper"}</b> trades
+      ${importOptions().trader ? `for <b>${esc(importOptions().trader)}</b> (kept separate from your own stats)` : "of <b>yours</b>"}${r.errors.length ? `, <b class="neg">${r.errors.length}</b> row(s) couldn't be read and will be skipped` : ""}.</p>
     ${list(r.errors, "Rows with problems")}${list(r.warnings, "Notes")}
     <div class="table-wrap" style="margin:.8rem 0"><table><thead><tr><th>Ticker</th><th>Side</th><th>Entry</th><th class="r">Entry $</th><th>Exit</th><th class="r">Exit $</th><th class="r">Shares</th><th class="r">Stop</th><th class="r">Fees</th></tr></thead>
     <tbody>${r.trades.slice(0, 50).map(t => `<tr><td>${esc(t.ticker)}</td><td>${t.direction}</td><td>${fmtDT(t.entry_time)}</td><td class="r num">${num(t.entry_price)}</td>
@@ -610,6 +645,7 @@ function previewImport() {
     try {
       await store.addTrades(r.trades, (i, n) => (btn.textContent = `Saving ${i} of ${n}…`));
       toast(`Imported ${r.trades.length} trades`);
+      if (importOptions().trader) { filter.who = "t:" + importOptions().trader; saveFilter(); }
       csvData = null;
       $("#csv-input").value = "";
       $("#imp-map-card").hidden = $("#imp-preview-card").hidden = true;
@@ -623,13 +659,14 @@ function previewImport() {
   $("#imp-preview-card").scrollIntoView({ behavior: "smooth" });
 }
 
-async function loadSample(name, mode) {
+async function loadSample(name, mode, trader) {
   try {
     const res = await fetch(name);
     if (!res.ok) throw new Error();
     $(`[name=imp-mode][value=${mode}]`).checked = true;
     $("#imp-account").value = "paper";
     $("#imp-tz").value = "0";
+    $("#imp-trader").value = trader || "";
     csvData = { ...parseCSV(await res.text()), name };
     renderMapping();
   } catch {
@@ -652,7 +689,7 @@ function renderMistakes() {
   const c = m.clean;
   body.innerHTML = `
     <div class="card">
-      <h2>Which mistakes cost you the most</h2>
+      <h2>${filter.who === "me" ? "Which mistakes cost you the most" : `Which mistakes cost ${esc(whoLabel(filter.who).name)} the most`}</h2>
       <p class="muted">"Net result" is the total profit or loss of every trade that had this mistake. A trade with two mistakes counts in both rows.
         ${c ? `For comparison, your <b>${c.count}</b> trades with no mistakes averaged ${pnlSpan(c.avg_pnl)} each.` : ""}</p>
       <div class="table-wrap"><table>
@@ -710,6 +747,11 @@ function runPretrade(ev) {
       <tbody>${r.history.map(h => `<tr><td>${icon(h.level)}</td><td>${esc(h.label)}${h.count && h.count < MIN_SAMPLE ? ' <small class="muted">(too few to judge)</small>' : ""}</td>
         <td class="r num">${h.count}</td><td class="r num">${pct(h.win_rate)}</td><td class="r">${h.count ? pnlSpan(h.avg_pnl) : "–"}</td><td class="r">${h.count ? pnlSpan(h.total_pnl) : "–"}</td></tr>`).join("")}</tbody></table></div>
     </div>
+    ${r.others_history.length ? `<div class="card"><h3>How other traders did</h3>
+      <p class="muted">From the other traders you imported. Useful for learning, but their results aren't yours.</p>
+      <div class="table-wrap"><table><thead><tr><th></th><th>Their trades</th><th class="r">Trades</th><th class="r">Win %</th><th class="r">Avg</th><th class="r">Total</th></tr></thead>
+      <tbody>${r.others_history.map(h => `<tr><td>${icon(h.level)}</td><td>${esc(h.label.replace(/^Others: /, ""))}${h.count && h.count < MIN_SAMPLE ? ' <small class="muted">(too few to judge)</small>' : ""}</td>
+        <td class="r num">${h.count}</td><td class="r num">${pct(h.win_rate)}</td><td class="r">${h.count ? pnlSpan(h.avg_pnl) : "–"}</td><td class="r">${h.count ? pnlSpan(h.total_pnl) : "–"}</td></tr>`).join("")}</tbody></table></div></div>` : ""}
     <p class="muted">Advice only, based on your own rules and history. It is not a prediction and not financial advice.</p>`;
 }
 
@@ -724,6 +766,27 @@ function renderRules() {
   $("#windows").innerHTML = "";
   S().no_trade_windows.forEach(addWindowRow);
   updateRiskHint();
+  renderTradersAdmin();
+}
+function renderTradersAdmin() {
+  const box = $("#traders-admin");
+  const names = traderNames(store.trades);
+  if (!names.length) {
+    box.innerHTML = `<p class="hint">None yet. On the Import CSV page, type a name in "Whose trades are these?" to add one.</p>`;
+    return;
+  }
+  box.innerHTML = names.map(n => `<div class="row" style="margin-bottom:.4rem"><b>${esc(n)}</b>
+    <small>${store.trades.filter(t => t.trader === n).length} trades</small><span class="spacer"></span>
+    <button type="button" class="small" data-who="t:${esc(n)}" data-goto-dash>View</button>
+    <button type="button" class="small danger" data-del-trader="${esc(n)}">Delete their trades</button></div>`).join("") + '<div id="trader-del-confirm"></div>';
+  $$("[data-goto-dash]", box).forEach(b => b.addEventListener("click", () => go("dashboard")));
+  $$("[data-del-trader]", box).forEach(b => b.addEventListener("click", () => {
+    const n = b.dataset.delTrader, list = store.trades.filter(t => t.trader === n);
+    askConfirm($("#trader-del-confirm"), `Delete all ${list.length} of ${n}'s trades? This can't be undone.`, `Delete ${list.length} trades`, async () => {
+      for (const t of list) await store.deleteTrade(t.id);
+      toast(`Deleted ${n}'s trades`);
+    });
+  }));
 }
 function addWindowRow(w = { start: "", end: "", label: "" }) {
   const row = document.createElement("div");
@@ -761,8 +824,8 @@ async function saveRules(ev) {
 
 function deleteAll() {
   const scope = $("#del-scope").value;
-  const what = { paper: "all paper trades", real: "all real-money trades", all: "ALL trades" }[scope];
-  const targets = store.trades.filter(t => scope === "all" || t.account_type === scope);
+  const what = { paper: "all your paper trades", real: "all your real-money trades", all: "ALL trades, including other traders'" }[scope];
+  const targets = store.trades.filter(t => scope === "all" || (!t.trader && t.account_type === scope));
   if (!targets.length) { toast("There are no trades to delete."); return; }
   askConfirm($("#del-confirm"), `Permanently delete ${what} (${targets.length})? This can't be undone.`, `Delete ${targets.length} trades`, async () => {
     for (const t of targets) await store.deleteTrade(t.id);
@@ -778,7 +841,9 @@ function init() {
     const nav = e.target.closest("[data-page]");
     if (nav) go(nav.dataset.page);
     const sample = e.target.closest("[data-sample]");
-    if (sample) loadSample(sample.dataset.sample, sample.dataset.mode);
+    if (sample) loadSample(sample.dataset.sample, sample.dataset.mode, sample.dataset.trader);
+    const whoRow = e.target.closest("[data-who]");
+    if (whoRow) { filter.who = whoRow.dataset.who; saveFilter(); syncFilters(); render(); window.scrollTo(0, 0); }
     if (e.target.closest(".export-btn")) exportCSV();
   });
   $("#trade-form").addEventListener("submit", saveTrade);

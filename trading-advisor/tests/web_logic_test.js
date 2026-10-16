@@ -8,7 +8,7 @@ const root = path.join(__dirname, "..");
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(root, "web/logic.js"), "utf8") +
-  ";this.L={parseCSV,importRows,fullReport,preTradeCheck,DEFAULT_SETTINGS,parseBrokerDate,cleanTrade};", ctx);
+  ";this.L={parseCSV,importRows,fullReport,preTradeCheck,DEFAULT_SETTINGS,parseBrokerDate,cleanTrade,traderComparison};", ctx);
 const L = ctx.L;
 const read = f => fs.readFileSync(path.join(root, "samples", f), "utf8");
 const map = (csv, m) => L.parseCSV(csv).rows.map(r => Object.fromEntries(Object.entries(m).map(([k, h]) => [k, r[h]])));
@@ -61,3 +61,30 @@ assert.throws(() => D("yesterday"));
 assert.throws(() => L.cleanTrade({ ticker: "X", direction: "long", entry_time: "2026-03-02T10:00", entry_price: 0, shares: 1 }));
 
 console.log("web logic: all checks passed");
+
+// other traders: kept apart from your stats, flags and limits
+const other = L.importRows(map(read("sample_other_trader.csv"), {
+  ticker: "Ticker", direction: "Direction", entry_date: "Entry Time", entry_price: "Entry", exit_date: "Exit Time",
+  exit_price: "Exit", shares: "Shares", stop_loss: "Stop Loss", target: "Profit Target", fees: "Fees", setup: "Strategy" }),
+  { mode: "trades", account_type: "paper", trader: "Sample Trader" }, all);
+assert.strictEqual(other.errors.length, 0);
+assert.strictEqual(other.trades.length, 22);
+assert.ok(other.trades.every(t => t.trader === "Sample Trader"));
+const withOthers = [...all, ...other.trades.map((t, i) => ({ ...t, id: "o" + String(i).padStart(3, "0") }))];
+const mine = L.fullReport(withOthers, L.DEFAULT_SETTINGS, {});
+assert.strictEqual(mine.summary.total_pnl.toFixed(2), "15.00"); // unchanged by their trades
+const theirs = L.fullReport(withOthers, L.DEFAULT_SETTINGS, { who: "t:Sample Trader" });
+assert.strictEqual(theirs.summary.trades, 22);
+assert.ok(theirs.insights.every(i => !/\bYour\b|\byou\b/.test(i.text)), JSON.stringify(theirs.insights));
+const cmp = L.traderComparison(withOthers, L.DEFAULT_SETTINGS, {});
+assert.strictEqual(JSON.stringify(cmp.map(c => [c.name, c.trades])), JSON.stringify([["You", 36], ["Sample Trader", 22]]));
+// the same trades for a different person are not duplicates
+assert.strictEqual(L.importRows(map(read("sample_trades.csv"), { ticker: "Symbol", entry_date: "Open Date", entry_time: "Open Time",
+  entry_price: "Entry Price", shares: "Qty" }), { account_type: "paper", trader: "Someone" }, all).trades.length, 32);
+// pre-trade: their history shown separately; their trades don't count toward your daily limits
+const pt = L.preTradeCheck({ direction: "long", entry: 100, stop: 99, target: 103, shares: 100, setup: "Pullback",
+  time: "2026-03-09T10:45", account_type: "paper" }, withOthers, L.DEFAULT_SETTINGS);
+assert.ok(pt.others_history.some(h => h.label === 'Others: setup "Pullback"' && h.count === 9));
+assert.strictEqual(pt.numbers.trades_today, 2);
+
+console.log("other traders: all checks passed");

@@ -22,7 +22,7 @@ const DEFAULT_SETTINGS = {
 
 const TRADE_FIELDS = ["ticker", "direction", "entry_time", "entry_price", "exit_time", "exit_price", "shares",
   "stop_loss", "target", "fees", "account_type", "setup", "reason", "emotion_before", "emotion_after",
-  "followed_plan", "mistakes", "notes", "screenshot"];
+  "followed_plan", "mistakes", "notes", "screenshot", "trader"];
 const NUMERIC_FIELDS = new Set(["entry_price", "exit_price", "shares", "stop_loss", "target", "fees"]);
 
 const FLAG_INFO = {
@@ -130,6 +130,9 @@ function cleanTrade(data) {
   const fp = t.followed_plan;
   t.followed_plan = [true, 1, "1", "yes", "true"].includes(fp) ? 1 : [false, 0, "0", "no", "false"].includes(fp) ? 0 : null;
   if (Array.isArray(t.mistakes)) t.mistakes = t.mistakes.filter(Boolean).join(", ");
+  // trader: empty for your own trades, otherwise the other person's name
+  t.trader = t.trader ? String(t.trader).replace(/\s+/g, " ").slice(0, 60) : null;
+  if (t.trader && /^(me|mine|myself|you)$/i.test(t.trader)) t.trader = null;
   return t;
 }
 
@@ -182,10 +185,17 @@ function enrich(trade, settings) {
 
 // ---------- mistake flags ----------
 
+// Each person's paper and real trades are judged separately, so one trader's loss
+// never makes another's trade a "revenge trade". Everyone is measured against your rules.
 function applyFlags(trades, settings) {
-  for (const acct of ["paper", "real"]) {
-    const group = trades.filter(t => t.account_type === acct)
-      .sort((a, b) => a.entry_dt.ms - b.entry_dt.ms || String(a.id).localeCompare(String(b.id)));
+  const groups = new Map();
+  for (const t of trades) {
+    const k = (t.trader || "") + "|" + t.account_type;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(t);
+  }
+  for (const group of groups.values()) {
+    group.sort((a, b) => a.entry_dt.ms - b.entry_dt.ms || String(a.id).localeCompare(String(b.id)));
     flagGroup(group, settings);
   }
   return trades;
@@ -398,8 +408,26 @@ function prepare(trades, settings) {
   return enriched;
 }
 
+// f.who: "me" (default), "others", "all", or "t:<name>" for one other trader.
+function whoMatches(t, who = "me") {
+  if (who === "all") return true;
+  if (who === "others") return !!t.trader;
+  if (who.startsWith("t:")) return t.trader === who.slice(2);
+  return !t.trader;
+}
+function whoLabel(who = "me") {
+  if (who === "all") return { name: "Everyone", possessive: "Everyone's" };
+  if (who === "others") return { name: "Other traders", possessive: "Other traders'" };
+  if (who.startsWith("t:")) { const n = who.slice(2); return { name: n, possessive: n.endsWith("s") ? n + "'" : n + "'s" }; }
+  return { name: "You", possessive: "Your" };
+}
+function traderNames(trades) {
+  return [...new Set(trades.map(t => t.trader).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
 function filterTrades(trades, f = {}) {
   return trades.filter(t => {
+    if (!whoMatches(t, f.who)) return false;
     if ((f.account === "paper" || f.account === "real") && t.account_type !== f.account) return false;
     const d = t.entry_time.slice(0, 10);
     if (f.from && d < f.from) return false;
@@ -414,8 +442,36 @@ function fullReport(trades, settings, f = {}) {
   const s = summary(closed, settings);
   const bd = breakdowns(closed);
   const costs = mistakeCosts(closed);
-  return { summary: s, breakdowns: bd, mistakes: costs, insights: insights(closed, s, bd, costs),
+  let ins = insights(closed, s, bd, costs);
+  if (f.who && f.who !== "me") ins = ins.map(i => ({ ...i, text: aboutSomeoneElse(i.text, whoLabel(f.who)) }));
+  return { summary: s, breakdowns: bd, mistakes: costs, insights: ins,
     open_trades: enriched.filter(t => !t.closed).length, trades: enriched };
+}
+
+// Insights are written to "you"; reword them when looking at someone else's trades.
+function aboutSomeoneElse(text, label) {
+  return text
+    .replace(/Until that's positive, trade small or paper trade\./, "")
+    .replace(/\b(loses|makes) you\b/g, "$1 them")
+    .replace(/\bYour\b/g, label.possessive).replace(/\byour\b/g, "their")
+    .replace(/\bYou\b/g, "They").replace(/\byou\b/g, "they").trim();
+}
+
+// One row of headline stats per person, for "You vs other traders".
+function traderComparison(trades, settings, f = {}) {
+  const enriched = filterTrades(prepare(trades, settings), { ...f, who: "all" }).filter(t => t.closed);
+  const people = [null, ...traderNames(enriched)];
+  return people.map(name => {
+    const closed = enriched.filter(t => (t.trader || null) === name);
+    if (!closed.length) return null;
+    const s = summary(closed, settings);
+    const holds = closed.map(t => t.hold_minutes);
+    const best = breakdowns(closed).setup.rows.filter(g => g.count >= 3 && g.label !== "(no setup)").sort((a, b) => b.total_pnl - a.total_pnl)[0];
+    return { name: name || "You", who: name ? "t:" + name : "me", trades: s.trades, win_rate: s.win_rate, expectancy: s.expectancy,
+      avg_win: s.avg_win, avg_loss: s.avg_loss, profit_factor: s.profit_factor, total_pnl: s.total_pnl,
+      typical_hold: median(holds), mistake_rate: closed.filter(t => t.flags.length).length / closed.length,
+      best_setup: best ? best.label : null };
+  }).filter(Boolean);
 }
 
 // ---------- pre-trade check ----------
@@ -457,7 +513,8 @@ function preTradeCheck(plan, trades, settings, nowStr) {
   if (w) check("red", "Inside a no-trade window", `${w.start}–${w.end}${w.label ? ` (${w.label})` : ""}`);
   if (when.mins < 570 || when.mins >= 960) check("yellow", "Outside regular market hours", "Pre-market and after-hours have thin volume and wide spreads. Be extra careful.");
 
-  const enriched = prepare(trades, settings).filter(t => t.account_type === accountType);
+  const everyone = prepare(trades, settings);
+  const enriched = everyone.filter(t => !t.trader && t.account_type === accountType);
   const today = enriched.filter(t => t.entry_dt.date === when.date && t.entry_dt.ms <= when.ms);
   const doneToday = today.filter(t => t.closed && t.exit_dt.ms <= when.ms);
   const dayPnl = sum(doneToday.map(t => t.pnl));
@@ -494,6 +551,15 @@ function preTradeCheck(plan, trades, settings, nowStr) {
   judged.push(hist(`Any trade at ${bucket}`, closed.filter(t => timeBucket(t.entry_dt)[0] === bucket)));
   if (ticker) hist(`${ticker} trades`, closed.filter(t => t.ticker === ticker));
   hist(`${direction[0].toUpperCase() + direction.slice(1)} trades`, closed.filter(t => t.direction === direction));
+  // Other traders: shown for learning, never counted as your own history
+  const others = everyone.filter(t => t.trader && t.closed);
+  const otherRows = [];
+  if (others.length) {
+    const oh = (title, subset) => { const g = groupStats(title, subset); g.level = g.count < MIN_SAMPLE ? "gray" : g.win_rate < 0.4 || g.total_pnl < 0 ? "yellow" : "green"; otherRows.push(g); };
+    if (setup) oh(`Others: setup "${setup}"`, others.filter(t => t.setup === setup));
+    oh(`Others: any trade at ${bucket}`, others.filter(t => timeBucket(t.entry_dt)[0] === bucket));
+    if (ticker) oh(`Others: ${ticker} trades`, others.filter(t => t.ticker === ticker));
+  }
   for (const g of judged) {
     if (g.count >= MIN_SAMPLE && g.level === "yellow") check("yellow", `Your history is weak here: ${g.label}`, `Won ${pctText(g.win_rate)} of ${g.count} trades, ${money(g.total_pnl)} total.`);
     else if (g.count >= MIN_SAMPLE && g.level === "green") check("green", `Your history is good here: ${g.label}`, `Won ${pctText(g.win_rate)} of ${g.count} trades, ${money(g.total_pnl)} total.`);
@@ -503,7 +569,7 @@ function preTradeCheck(plan, trades, settings, nowStr) {
   return {
     numbers: { ...r, position_value: positionValue, position_pct: acct ? positionValue / acct * 100 : null, max_risk_dollars: maxRisk,
       suggested_max_shares: r.risk_per_share ? Math.floor(maxRisk / r.risk_per_share) : null, trades_today: today.length, pnl_today: dayPnl },
-    checks, history, time_bucket: bucket,
+    checks, history, others_history: otherRows, time_bucket: bucket,
     verdict: checks.some(c => c.level === "red") ? "red" : checks.some(c => c.level === "yellow") ? "yellow" : "green",
   };
 }
@@ -611,7 +677,7 @@ function rowsToTrades(rows, opts) {
         entry_time: entry, entry_price: parseNumber(row.entry_price), exit_time: exit,
         exit_price: exit ? parseNumber(row.exit_price) : null, shares: shares === null ? null : Math.abs(shares),
         stop_loss: parseNumber(row.stop_loss), target: parseNumber(row.target), fees: rowFees(row),
-        account_type: opts.account_type || "paper", setup: row.setup, notes: row.notes,
+        account_type: opts.account_type || "paper", setup: row.setup, notes: row.notes, trader: opts.trader || null,
       }));
     } catch (e) { errors.push({ row: i + 1, message: e.message }); }
   });
@@ -642,7 +708,8 @@ function fillsToTrades(rows, opts) {
   const trades = [], acct = opts.account_type || "paper";
   const finish = (cur, ticker) => {
     const t = { ticker, direction: cur.direction, entry_time: cur.entry_time, entry_price: Math.round(cur.entry_val / cur.entry_qty * 10000) / 10000,
-      shares: cur.exit_qty || cur.entry_qty, fees: Math.round(cur.fees * 100) / 100, account_type: acct, exit_time: null, exit_price: null };
+      shares: cur.exit_qty || cur.entry_qty, fees: Math.round(cur.fees * 100) / 100, account_type: acct, exit_time: null, exit_price: null,
+      trader: opts.trader || null };
     if (cur.exit_qty) { t.exit_time = cur.exit_time; t.exit_price = Math.round(cur.exit_val / cur.exit_qty * 10000) / 10000; }
     trades.push(cleanTrade(t));
   };
@@ -685,7 +752,7 @@ function fillsToTrades(rows, opts) {
 
 function importRows(rows, opts, existing) {
   const [trades, errors, warnings] = (opts.mode === "fills" ? fillsToTrades : rowsToTrades)(rows, opts);
-  const key = t => [t.ticker, String(t.entry_time).slice(0, 19).replace(" ", "T"), Math.round(t.entry_price * 10000), t.shares, t.account_type].join("|");
+  const key = t => [t.trader || "", t.ticker, String(t.entry_time).slice(0, 19).replace(" ", "T"), Math.round(t.entry_price * 10000), t.shares, t.account_type].join("|");
   const seen = new Set(existing.map(key));
   const fresh = [];
   let dupes = 0;

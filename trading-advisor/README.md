@@ -98,6 +98,18 @@ Click on the terminal window and press **Ctrl + C**, or just close the window. Y
 
 ---
 
+## Other traders' trades
+
+You can import other people's trade histories to study and compare them, for example a journal a friend or mentor shares with you as a CSV.
+
+1. On **Import CSV**, choose their file and type their name in **Whose trades are these?** (try **another trader's journal** to see a sample).
+2. Their trades are kept separate. They never change your own stats, daily limits or pre-trade warnings.
+3. Use **Whose trades** at the top of Dashboard, Trades and Mistakes to switch between *Mine*, one trader, *All other traders* or *Everyone*.
+4. With other traders imported, the Dashboard adds a **You vs other traders** table, and **Pre-Trade Check** shows how they did with the same setup and time of day.
+5. To remove someone, go to **My Rules → Other traders → Delete their trades**.
+
+Only import data you're allowed to use. It stays private in your journal like everything else.
+
 ## The pages
 
 | Page | What it does |
