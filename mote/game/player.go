@@ -3,6 +3,7 @@ package game
 import (
 	"math"
 	"math/rand"
+	"sort"
 )
 
 // The mote: a little one-eyed levitating creature drawn with world pixels.
@@ -64,25 +65,52 @@ func hits(x, y float64) bool {
 	return false
 }
 
-// Blocks may fall or be built into the mote; it gets nudged to the nearest free spot.
+// Blocks may fall or be built into the mote; it slides out toward the nearest free spot,
+// a little each frame. It is never thrown far: if there is no room close by, it stays
+// stuck until it digs itself out.
+const pushRange = 16.0 // px, a bit over half the mote's height
+
+var pushOffsets = func() [][2]float64 {
+	var o [][2]float64
+	for dy := -pushRange; dy <= pushRange; dy++ {
+		for dx := -pushRange; dx <= pushRange; dx++ {
+			if (dx != 0 || dy != 0) && math.Hypot(dx, dy) <= pushRange {
+				o = append(o, [2]float64{dx, dy})
+			}
+		}
+	}
+	// nearest first; on a tie prefer up, then sideways
+	sort.SliceStable(o, func(i, j int) bool {
+		di, dj := math.Hypot(o[i][0], o[i][1]), math.Hypot(o[j][0], o[j][1])
+		if di != dj {
+			return di < dj
+		}
+		return o[i][1] < o[j][1]
+	})
+	return o
+}()
+
 func pushOut() {
 	p := &player
 	if !hits(p.x, p.y) {
 		return
 	}
-	for d := 1.0; d <= 24; d++ {
-		for _, o := range [][2]float64{{0, -d}, {-d, 0}, {d, 0}, {0, d}, {-d, -d}, {d, -d}} {
-			if !hits(p.x+o[0], p.y+o[1]) {
-				p.x += o[0]
-				p.y += o[1]
-				if o[1] < 0 {
-					p.vy = math.Min(p.vy, 0)
-				}
-				return
-			}
+	for _, o := range pushOffsets {
+		if hits(p.x+o[0], p.y+o[1]) {
+			continue
 		}
+		d := math.Hypot(o[0], o[1])
+		step := math.Min(1.5, d) / d
+		p.x += o[0] * step
+		p.y += o[1] * step
+		p.vx *= 0.5
+		if o[1] < 0 {
+			p.vy = math.Min(p.vy, 0)
+		}
+		return
 	}
-	unstick()
+	// buried: stay put
+	p.vx, p.vy = 0, 0
 }
 
 func hurtPlayer(dmg, dir int) {

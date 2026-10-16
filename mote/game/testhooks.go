@@ -133,6 +133,13 @@ func runScript() {
 					grid[y*W+x] = SAND
 				}
 			}
+		case "blockme": // fill the lower half of the mote with stone
+			updatePlayerCells()
+			for y := (py0 + py1) / 2; y <= py1; y++ {
+				for x := px0; x <= px1; x++ {
+					grid[y*W+x] = STONE
+				}
+			}
 		case "god": // lots of health, for watching creatures
 			player.maxHP, player.hp = 999, 999
 		case "hurt":
