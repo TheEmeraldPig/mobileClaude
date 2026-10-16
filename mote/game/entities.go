@@ -11,11 +11,11 @@ import (
 type entKind int
 
 const (
-	entGloom entKind = iota // crawls along cave floors and hops at you
-	entBat                  // flutters through dark caves
-	entItem                 // a dropped item
-	entShade                // prowls the surface at night
-	entWarden               // the boss guarding the Core
+	entGloom  entKind = iota // crawls along cave floors and hops at you
+	entBat                   // flutters through dark caves
+	entItem                  // a dropped item
+	entShade                 // prowls the surface at night
+	entWarden                // the boss guarding the Core
 )
 
 type Entity struct {

@@ -28,15 +28,15 @@ import (
 )
 
 const (
-	EMPTY   = 0
-	SAND    = 1
-	WATER   = 2
-	STONE   = 3
-	BRICK   = 4
-	COAL    = 5
-	COPPER  = 6
-	IRON    = 7
-	GOLD    = 8
+	EMPTY    = 0
+	SAND     = 1
+	WATER    = 2
+	STONE    = 3
+	BRICK    = 4
+	COAL     = 5
+	COPPER   = 6
+	IRON     = 7
+	GOLD     = 8
 	CRYSTAL  = 9
 	TORCH    = 10
 	DIRT     = 11
@@ -61,15 +61,15 @@ const (
 )
 
 var blockRGB = map[uint8][3]int{
-	SAND:    {226, 194, 107},
-	WATER:   {59, 142, 232},
-	STONE:   {120, 126, 140},
-	BRICK:   {176, 92, 72},
-	COAL:    {40, 40, 48},
-	COPPER:  {210, 126, 70},
-	IRON:    {214, 190, 172},
-	GOLD:    {246, 204, 70},
-	CRYSTAL: {120, 232, 255},
+	SAND:     {226, 194, 107},
+	WATER:    {59, 142, 232},
+	STONE:    {120, 126, 140},
+	BRICK:    {176, 92, 72},
+	COAL:     {40, 40, 48},
+	COPPER:   {210, 126, 70},
+	IRON:     {214, 190, 172},
+	GOLD:     {246, 204, 70},
+	CRYSTAL:  {120, 232, 255},
 	TORCH:    {255, 204, 96},
 	DIRT:     {122, 86, 60},
 	GRASS:    {88, 168, 74},
