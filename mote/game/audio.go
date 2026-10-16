@@ -123,6 +123,19 @@ func sfx(name string) {
 		noiseFx(0.7, 600, 0.6, 80)
 	case "give":
 		tone(800, 1200, 0.07, 0.07, square)
+	case "pickup":
+		tone(1000, 1500, 0.05, 0.05, triangle)
+	case "hurt":
+		tone(300, 120, 0.2, 0.18, square)
+		noiseFx(0.12, 900, 0.15, 0)
+	case "hit":
+		noiseFx(0.08, 1200, 0.2, 400)
+		tone(220, 110, 0.08, 0.1, square)
+	case "die":
+		tone(400, 60, 0.35, 0.15, triangle)
+		noiseFx(0.25, 700, 0.15, 200)
+	case "swing":
+		noiseFx(0.1, 2500, 0.1, 800)
 	}
 }
 
@@ -144,11 +157,9 @@ func setHum(on bool, energy float64) {
 
 func setVolumes() {
 	syn.mu.Lock()
-	syn.sfxVol = 0
-	if prefs.Sound {
-		syn.sfxVol = 0.6
-	}
-	syn.musicOn = prefs.Music
+	syn.sfxVol = 0.75 * float64(prefs.SfxVol) / 5
+	syn.musicVol = 0.8 * float64(prefs.MusicVol) / 5
+	syn.musicOn = prefs.MusicVol > 0
 	syn.mu.Unlock()
 }
 

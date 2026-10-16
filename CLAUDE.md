@@ -10,6 +10,8 @@
 ## mote/ (native version of Mote: Windows .exe, Android .apk, Steam)
 
 - A Go + Ebitengine port of the game. See `mote/README.md`.
-- `game/world_test.go` must keep passing: seeds have to build the same world as the web version. Change both versions together when you change world generation.
+- This native version is now the main one; the web version in `sandbox/` is no longer kept in sync and builds different worlds.
+- `game/world_test.go` must keep passing: a seed must always build the same chunks. If you change world generation on purpose, update its reference numbers and say so (every seed's world changes).
+- Lighting is a flood fill in `game/render.go` (levels 0-64). New light-giving blocks go in `blockLight()` in `world.go`.
 - Every push to `mote/` builds and releases `Mote.exe`, `Mote-steam.exe` and `Mote.apk` through `.github/workflows/mote.yml`.
 - Check layouts by running under Xvfb with the test hooks in `game/testhooks.go` (`MOTE_SCRIPT`, `MOTE_TOUCH=1`, `MOTE_NOAUDIO=1`).

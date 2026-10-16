@@ -12,19 +12,19 @@ import (
 // (on Android, the app's files folder passed in by the Android activity).
 
 type Prefs struct {
-	FOV     int               `json:"fov"`
-	Sound   bool              `json:"sound"`
-	Music   bool              `json:"music"`
-	Binds   map[string]string `json:"binds"`
-	StickX  float64           `json:"stickX"`
-	StickY  float64           `json:"stickY"`
-	BtnSide string            `json:"btnSide"`
-	Seed    string            `json:"seed"`
-	Full    bool              `json:"fullscreen"`
+	FOV      int               `json:"fov"`
+	SfxVol   int               `json:"sfxVol"`   // 0-5
+	MusicVol int               `json:"musicVol"` // 0-5
+	Binds    map[string]string `json:"binds"`
+	StickX   float64           `json:"stickX"`
+	StickY   float64           `json:"stickY"`
+	BtnSide  string            `json:"btnSide"`
+	Seed     string            `json:"seed"`
+	Full     bool              `json:"fullscreen"`
 }
 
-var prefs = Prefs{FOV: 3, Sound: true, Music: true, StickX: 0.14, StickY: 0.75, BtnSide: "right", Full: true,
-	Binds: map[string]string{"left": "A", "right": "D", "lev": "W", "inv": "E"}}
+var prefs = Prefs{FOV: 3, SfxVol: 4, MusicVol: 3, StickX: 0.12, StickY: 0.62, BtnSide: "right", Full: true,
+	Binds: map[string]string{"left": "A", "right": "D", "lev": "W", "inv": "E", "drop": "Q"}}
 
 // DataDir can be set before the game starts (the Android wrapper does this).
 var DataDir string
@@ -57,6 +57,8 @@ func loadPrefs() {
 	if prefs.FOV < 1 || prefs.FOV > 5 {
 		prefs.FOV = 3
 	}
+	prefs.SfxVol = max(0, min(5, prefs.SfxVol))
+	prefs.MusicVol = max(0, min(5, prefs.MusicVol))
 }
 
 func savePrefs() {
@@ -78,6 +80,17 @@ type SaveState struct {
 	Face      int              `json:"face"`
 	Inv       []*Stack         `json:"inv"`
 	Selected  int              `json:"selected"`
+	Time      float64          `json:"time"`
+	HP        int              `json:"hp"`
+	SpawnWX   int              `json:"spawnWX"`
+	Drops     []SavedDrop      `json:"drops"`
+}
+
+type SavedDrop struct {
+	ID string  `json:"id"`
+	N  int     `json:"n"`
+	WX float64 `json:"wx"`
+	Y  float64 `json:"y"`
 }
 
 // The whole game state. When you add new state (items, player stats...), add it here
@@ -92,9 +105,15 @@ func serializeState() SaveState {
 			chunks[baseChunk+i] = packChunk(i)
 		}
 	}
+	var drops []SavedDrop
+	for _, e := range ents {
+		if e.kind == entItem {
+			drops = append(drops, SavedDrop{e.item, e.n, e.x + float64(baseChunk*CW*CELL), e.y})
+		}
+	}
 	return SaveState{V: 1, Seed: seedText, BaseChunk: baseChunk, Chunks: chunks, Started: started,
 		PlayerWX: player.x + float64(baseChunk*CW*CELL), PlayerY: player.y, Energy: player.energy, Face: player.face,
-		Inv: append([]*Stack(nil), inv...), Selected: selected}
+		Inv: append([]*Stack(nil), inv...), Selected: selected, Time: worldTime, HP: player.hp, SpawnWX: spawnWX, Drops: drops}
 }
 
 func restoreState(st *SaveState) bool {
@@ -129,8 +148,18 @@ func restoreState(st *SaveState) bool {
 		}
 	}
 	selected = st.Selected
-	if selected < -1 || selected > 4 {
+	if selected < -1 || selected >= hotbarN {
 		selected = -1
+	}
+	worldTime, player.hp, spawnWX = st.Time, st.HP, st.SpawnWX
+	if player.hp <= 0 {
+		player.hp = maxHP
+	}
+	ents = ents[:0]
+	for _, d := range st.Drops {
+		if items[d.ID] != nil {
+			dropItem(d.ID, d.N, d.WX-float64(baseChunk*CW*CELL), d.Y, 0)
+		}
 	}
 	started = st.Started
 	return true

@@ -15,7 +15,9 @@ Saves and settings live in `%AppData%\Mote` on Windows and in the app's private 
 ## Layout
 
 - `game/` holds the whole game as a library:
-  - `world.go`: seeded chunk world. Follow the rules at the top of the file when adding terrain.
+  - `world.go`: seeded chunk world: terrain, caves, caverns, ores and crystals. Follow the rules at the top of the file when adding terrain.
+  - `render.go`: lighting (fog of war), the day/night sky and background, and drawing the world.
+  - `entities.go`: cave creatures and dropped items.
   - `sim.go`: sand and water.
   - `player.go`: the mote, its physics and sprite.
   - `items.go`: items, inventory, crafting and item use.
@@ -44,6 +46,6 @@ go test ./game
 
 Upload `Mote-steam.exe` as the game's executable through Steamworks (SteamPipe). Steam handles updates for that build. Achievements and other Steam features can be added later with `github.com/hajimehoshi/go-steamworks`.
 
-## Same worlds as the web version
+## Seeds
 
-`game/world_test.go` checks that seeds build exactly the same chunks as `sandbox/index.html`.
+`game/world_test.go` checks that seeds always build exactly the same chunks. When world generation changes on purpose, update the reference numbers in that test. This version no longer builds the same worlds as the web version in `sandbox/`.

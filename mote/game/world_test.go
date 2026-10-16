@@ -11,18 +11,39 @@ func chunkSum(cx int) int32 {
 	return h
 }
 
-// The same seed must build the same chunks as the web version.
-func TestSeedMatchesWeb(t *testing.T) {
-	// Checksums taken from the web version (sandbox/index.html) for the same seeds and chunks
+// A seed must always build exactly the same chunks. If you change world generation on
+// purpose, update these numbers (every seed's world changes with it).
+func TestSeedsAreStable(t *testing.T) {
 	want := []struct {
 		seed string
 		cx   int
 		sum  int32
-	}{{"12345", 0, 1354437337}, {"12345", -3, 1455508183}, {"12345", 17, 1036798767}, {"hello", 0, 319047322}, {"hello", 5, -1985747448}}
+	}{{"12345", 0, -1605603133}, {"12345", -3, -220907905}, {"12345", 17, 1361306742}, {"hello", 0, 748796256}, {"hello", 5, 674686539}}
 	for _, w := range want {
 		seedN = seedFrom(w.seed)
-		if got := chunkSum(w.cx); got != w.sum {
-			t.Errorf("seed %q chunk %d: got %d, want %d", w.seed, w.cx, got, w.sum)
+		a, b := chunkSum(w.cx), chunkSum(w.cx)
+		if a != b {
+			t.Fatalf("seed %q chunk %d is not repeatable", w.seed, w.cx)
+		}
+		if a != w.sum {
+			t.Errorf("seed %q chunk %d: got %d, want %d", w.seed, w.cx, a, w.sum)
 		}
 	}
+}
+
+// Ores and caves should actually appear
+func TestWorldHasOresAndCaves(t *testing.T) {
+	seedN = seedFrom("12345")
+	count := map[uint8]int{}
+	for cx := -4; cx < 4; cx++ {
+		for _, v := range genChunk(cx) {
+			count[v]++
+		}
+	}
+	for _, b := range []uint8{COAL, COPPER, IRON, GOLD, CRYSTAL} {
+		if count[b] == 0 {
+			t.Errorf("no block %d generated", b)
+		}
+	}
+	t.Logf("counts: %v", count)
 }

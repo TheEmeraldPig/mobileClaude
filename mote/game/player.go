@@ -28,9 +28,14 @@ type Player struct {
 	blink, nextBlink  int
 	idle              int
 	emptyWarned       bool
+	hp                int
+	invuln            int
+	regen             int
 }
 
-var player = Player{w: sprW * CELL, h: sprH * CELL, face: 1, energy: 1, nextBlink: 120}
+const maxHP = 10 // five hearts
+
+var player = Player{w: sprW * CELL, h: sprH * CELL, face: 1, energy: 1, nextBlink: 120, hp: maxHP}
 
 var px0, px1, py0, py1 int
 
@@ -57,6 +62,58 @@ func hits(x, y float64) bool {
 		}
 	}
 	return false
+}
+
+// Blocks may fall or be built into the mote; it gets nudged to the nearest free spot.
+func pushOut() {
+	p := &player
+	if !hits(p.x, p.y) {
+		return
+	}
+	for d := 1.0; d <= 24; d++ {
+		for _, o := range [][2]float64{{0, -d}, {-d, 0}, {d, 0}, {0, d}, {-d, -d}, {d, -d}} {
+			if !hits(p.x+o[0], p.y+o[1]) {
+				p.x += o[0]
+				p.y += o[1]
+				if o[1] < 0 {
+					p.vy = math.Min(p.vy, 0)
+				}
+				return
+			}
+		}
+	}
+	unstick()
+}
+
+func hurtPlayer(dmg, dir int) {
+	p := &player
+	if p.invuln > 0 || p.hp <= 0 {
+		return
+	}
+	p.hp -= dmg
+	p.invuln = 60
+	p.regen = 0
+	if dir == 0 {
+		dir = -p.face
+	}
+	p.vx, p.vy = float64(-dir)*4.5, -4
+	burst(10, (p.x+p.w/2)/CELL, (p.y+p.h/2)/CELL, [3]int{240, 122, 106}, 1.4, 1.4, 22)
+	sfx("hurt")
+	if p.hp <= 0 {
+		respawn()
+	}
+}
+
+// Back to the spawn point with full health; the inventory is kept
+func respawn() {
+	p := &player
+	shiftWindow(floorDiv(spawnWX, CW) - NCH/2 - baseChunk)
+	p.x = float64((spawnWX - baseChunk*CW) * CELL)
+	p.y = float64((surfaceAt(spawnWX) - 15) * CELL)
+	p.vx, p.vy, p.hp, p.energy, p.invuln = 0, 0, maxHP, 1, 90
+	unstick()
+	updatePlayerCells()
+	toast("You fainted and woke up at the start")
 }
 
 func unstick() {
@@ -101,6 +158,16 @@ func updateParticles() {
 
 func updatePlayer() {
 	p := &player
+	pushOut()
+	if p.invuln > 0 {
+		p.invuln--
+	}
+	if p.hp < maxHP {
+		if p.regen++; p.regen >= 60*8 { // a half heart every 8 seconds
+			p.hp++
+			p.regen = 0
+		}
+	}
 	wasInWater, wasOnGround := p.inWater, p.onGround
 	p.inWater = cellAt(p.x+p.w/2, p.y+p.h/2) == WATER
 	dir := 0.0
@@ -344,6 +411,9 @@ func drawPlayer(put func(x, y int, c [3]int, s int), ox, oy int) {
 		} else {
 			feet = "b"
 		}
+	}
+	if p.invuln > 0 && (p.invuln/4)%2 == 0 {
+		return
 	}
 	rows := playerFrame(p.blink > 0, p.lifting, feet, sway)
 	tipPulse := int(math.Round(math.Sin(float64(frame)*0.08)*20)) - 10

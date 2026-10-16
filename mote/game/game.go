@@ -44,7 +44,7 @@ func (g *Game) Update() error {
 		switch cur {
 		case scPlaying:
 			openScreen(scPause)
-		case scPause, scInv, scDebug:
+		case scPause, scInv:
 			play()
 		case scSettings:
 			if settingsFrom == scMain {
@@ -64,15 +64,24 @@ func (g *Game) Update() error {
 	}
 	if cur == scPlaying {
 		input.left, input.right, input.lev = bindDown("left"), bindDown("right") || scriptRight, bindDown("lev") || scriptLev
-		for i := 0; i < 5; i++ {
+		for i := 0; i < hotbarN; i++ {
 			if inpututil.IsKeyJustPressed(ebiten.Key1 + ebiten.Key(i)) {
 				if selected == i {
 					selected = -1
 				} else {
 					selected = i
 				}
+				showItemName()
 				sfx("click")
 			}
+		}
+		// Q drops one of the selected item, Ctrl+Q the whole stack
+		if bindJustPressed("drop") && selected >= 0 && inv[selected] != nil {
+			n := 1
+			if ebiten.IsKeyPressed(ebiten.KeyControl) {
+				n = inv[selected].N
+			}
+			dropSlot(selected, n)
 		}
 		if _, wy := ebiten.Wheel(); wy != 0 {
 			d := 1
@@ -83,15 +92,16 @@ func (g *Game) Update() error {
 				if d > 0 {
 					selected = 0
 				} else {
-					selected = 4
+					selected = hotbarN - 1
 				}
 			} else {
-				selected = (selected + d + 5) % 5
+				selected = (selected + d + hotbarN) % hotbarN
 			}
+			showItemName()
 			sfx("click")
 		}
 		// the mouse also aims while held
-		if useActive && !isTouch {
+		if useActive && !isTouch && !scriptAim {
 			aimSX, aimSY = hoverX, hoverY
 		}
 	} else {
@@ -99,9 +109,11 @@ func (g *Game) Update() error {
 	}
 
 	if !paused() {
+		worldTime = math.Mod(worldTime+1.0/dayFrames, 1)
 		updatePlayer()
 		followPlayer()
 		useHeld()
+		updateEntities()
 		updateParticles()
 	}
 	setHum(player.lifting && !paused(), player.energy)
@@ -130,8 +142,6 @@ func (g *Game) Update() error {
 			mainMenuArt()
 		}
 		settingsMenu()
-	case scDebug:
-		debugMenu()
 	}
 	drawToast()
 
@@ -155,69 +165,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		op(screen)
 	}
 	takeShot(screen)
-}
-
-// Render the visible cells into a small image (one pixel per cell), then scale it up.
-func drawWorld(screen *ebiten.Image) {
-	vw, vh := int(logicalW/zoom/CELL)+2, int(logicalH/zoom/CELL)+2
-	viewW, viewH = vw, vh
-	if worldImg == nil || worldImg.Bounds().Dx() != vw || worldImg.Bounds().Dy() != vh {
-		worldImg = ebiten.NewImage(vw, vh)
-		worldPix = make([]byte, vw*vh*4)
-	}
-	ox, oy := int(math.Floor(cam.x/CELL)), int(math.Floor(cam.y/CELL))
-	pix := worldPix
-	for y := 0; y < vh; y++ {
-		wy := oy + y
-		for x := 0; x < vw; x++ {
-			wx := ox + x
-			o := (y*vw + x) * 4
-			c, s := bgRGB, 0
-			if wx >= 0 && wx < W && wy >= 0 && wy < H {
-				i := wy*W + wx
-				if t := grid[i]; t != EMPTY {
-					c, s = blockRGB[t], int(shade[i])
-				}
-			} else if wy >= 0 {
-				c = blockRGB[STONE]
-			}
-			pix[o] = clamp8(c[0] + s)
-			pix[o+1] = clamp8(c[1] + s)
-			pix[o+2] = clamp8(c[2] + s)
-			pix[o+3] = 255
-		}
-	}
-	put := func(x, y int, c [3]int, s int) {
-		if x < 0 || y < 0 || x >= vw || y >= vh {
-			return
-		}
-		o := (y*vw + x) * 4
-		pix[o], pix[o+1], pix[o+2] = clamp8(c[0]+s), clamp8(c[1]+s), clamp8(c[2]+s)
-	}
-	drawPlayer(put, ox, oy)
-	for _, q := range parts {
-		put(int(math.Floor(q.x))-ox, int(math.Floor(q.y))-oy, q.c, 0)
-	}
-	drawEnergy(put, ox, oy)
-	if cur == scPlaying {
-		drawAim(put, ox, oy)
-	}
-	worldImg.WritePixels(pix)
-	k := zoom * CELL * uiScale
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(k, k)
-	op.GeoM.Translate((float64(ox*CELL)-cam.x)*zoom*uiScale, (float64(oy*CELL)-cam.y)*zoom*uiScale)
-	screen.DrawImage(worldImg, op)
-}
-
-func clamp8(v int) byte {
-	if v < 0 {
-		return 0
-	}
-	if v > 255 {
-		return 255
-	}
-	return byte(v)
 }
 
 func (g *Game) Layout(outW, outH int) (int, int) {

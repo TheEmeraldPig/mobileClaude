@@ -14,8 +14,7 @@ package game
 //  5. World height (H) and chunk width (CW) are part of the world format: changing them,
 //     or changing a pass, changes every seed's world.
 //
-// The hashing and generation match the web version bit for bit, so a seed gives the same
-// world in both.
+// world_test.go pins the output for a few seeds; update it when generation changes on purpose.
 //
 // The loaded area is a window of NCH chunks held in grid. The window slides as the mote
 // travels: chunks leaving are unloaded (saved compressed if they changed) and chunks entering
@@ -29,21 +28,51 @@ import (
 )
 
 const (
-	EMPTY = 0
-	SAND  = 1
-	WATER = 2
-	STONE = 3
-	BRICK = 4
+	EMPTY   = 0
+	SAND    = 1
+	WATER   = 2
+	STONE   = 3
+	BRICK   = 4
+	COAL    = 5
+	COPPER  = 6
+	IRON    = 7
+	GOLD    = 8
+	CRYSTAL = 9
+	TORCH   = 10
 )
 
 var blockRGB = map[uint8][3]int{
-	SAND:  {226, 194, 107},
-	WATER: {59, 142, 232},
-	STONE: {120, 126, 140},
-	BRICK: {176, 92, 72},
+	SAND:    {226, 194, 107},
+	WATER:   {59, 142, 232},
+	STONE:   {120, 126, 140},
+	BRICK:   {176, 92, 72},
+	COAL:    {40, 40, 48},
+	COPPER:  {210, 126, 70},
+	IRON:    {214, 190, 172},
+	GOLD:    {246, 204, 70},
+	CRYSTAL: {120, 232, 255},
+	TORCH:   {255, 204, 96},
 }
 
-func isSolid(t uint8) bool { return t == SAND || t == STONE || t == BRICK }
+// Ores are drawn as specks of their colour in stone
+func isOre(t uint8) bool { return t >= COAL && t <= GOLD }
+
+func isSolid(t uint8) bool { return t == SAND || t == STONE || t == BRICK || isOre(t) || t == CRYSTAL }
+
+// Light given off by a block (0-64)
+func blockLight(t uint8) int {
+	switch t {
+	case TORCH:
+		return 60
+	case CRYSTAL:
+		return 22
+	}
+	return 0
+}
+
+// The item you get for mining a block
+var blockItem = map[uint8]string{SAND: "sand", STONE: "stone", BRICK: "brick", COAL: "coal", COPPER: "copper",
+	IRON: "iron", GOLD: "gold", CRYSTAL: "crystal", TORCH: "torch"}
 
 const (
 	CELL = 2   // world px per cell
@@ -61,6 +90,7 @@ var (
 	baseChunk int
 	seedText  string
 	seedN     uint32
+	spawnWX   int // world cell x of the spawn point
 )
 
 func initWorld(viewCells int) {
@@ -152,6 +182,7 @@ var genPasses = []genPass{
 		}
 	},
 	carveCaves,
+	carveCaverns,
 	// water in the valleys
 	func(buf []uint8, cx, x0 int) {
 		for lx := 0; lx < CW; lx++ {
@@ -163,26 +194,43 @@ var genPasses = []genPass{
 			}
 		}
 	},
+	placeOres,
+	placeCrystals,
 }
 
-// Worms that may start in nearby chunks
+// Smooth 2D value noise in 0..1
+func noise2(x, y, scale float64, salt int) float64 {
+	fx, fy := x/scale, y/scale
+	ix, iy := math.Floor(fx), math.Floor(fy)
+	tx, ty := (1-math.Cos((fx-ix)*math.Pi))/2, (1-math.Cos((fy-iy)*math.Pi))/2
+	i, j := int(ix), int(iy)
+	a, b := hash01(i, j, salt), hash01(i+1, j, salt)
+	c, d := hash01(i, j+1, salt), hash01(i+1, j+1, salt)
+	return (a*(1-tx)+b*tx)*(1-ty) + (c*(1-tx)+d*tx)*ty
+}
+
+// Winding tunnels that may start in nearby chunks
 func carveCaves(buf []uint8, cx, x0 int) {
-	for c := cx - 5; c <= cx+5; c++ {
+	for c := cx - 6; c <= cx+6; c++ {
 		r := chunkRng(c, 5)
 		worms := 1
-		if r() < 0.45 {
+		if r() < 0.6 {
 			worms = 2
+		}
+		if r() < 0.25 {
+			worms++
 		}
 		for k := 0; k < worms; k++ {
 			x := float64(c*CW) + r()*CW
-			y := H*0.55 + r()*H*0.4
+			y := H*0.5 + r()*H*0.45
 			a := r() * math.Pi * 2
-			length := 80 + r()*200
+			length := 120 + r()*260
+			base := 5 + r()*4
 			for st := 0.0; st < length; st++ {
-				a += (r() - 0.5) * 0.5
-				x += math.Cos(a) * 2
+				a += (r() - 0.5) * 0.45
+				x += math.Cos(a) * 2.2
 				y += math.Sin(a) * 1.2
-				rad := 4 + r()*5
+				rad := base + r()*4
 				if x+rad < float64(x0) || x-rad >= float64(x0+CW) {
 					continue
 				}
@@ -195,6 +243,69 @@ func carveCaves(buf []uint8, cx, x0 int) {
 						}
 					}
 				}
+			}
+		}
+	}
+}
+
+// Big open caverns deeper down
+func carveCaverns(buf []uint8, cx, x0 int) {
+	for lx := 0; lx < CW; lx++ {
+		x := float64(x0 + lx)
+		top := surfaceAt(x0+lx) + 30
+		for y := max(top, 0); y < H-4; y++ {
+			n := noise2(x, float64(y), 56, 11)*0.7 + noise2(x, float64(y), 18, 12)*0.3
+			fade := math.Min(1, float64(y-top)/40) // caverns open up gradually below the surface
+			if n*fade > 0.63 {
+				buf[y*CW+lx] = EMPTY
+			}
+		}
+	}
+}
+
+// Ore veins in stone, rarer and richer deeper down
+func placeOres(buf []uint8, cx, x0 int) {
+	type ore struct {
+		t      uint8
+		depth  int
+		scale  float64
+		thresh float64
+		salt   int
+	}
+	ores := []ore{{COAL, 4, 6, 0.85, 21}, {COPPER, 25, 5, 0.865, 22}, {IRON, 70, 5, 0.88, 23}, {GOLD, 140, 4, 0.9, 24}}
+	for lx := 0; lx < CW; lx++ {
+		x := x0 + lx
+		s := surfaceAt(x)
+		for y := max(s, 0); y < H; y++ {
+			i := y*CW + lx
+			if buf[i] != STONE {
+				continue
+			}
+			for _, o := range ores {
+				if y-s >= o.depth && noise2(float64(x), float64(y)*1.3, o.scale, o.salt) > o.thresh {
+					buf[i] = o.t
+					break
+				}
+			}
+		}
+	}
+}
+
+// Glowing crystals growing on cave walls
+func placeCrystals(buf []uint8, cx, x0 int) {
+	for lx := 1; lx < CW-1; lx++ {
+		x := x0 + lx
+		s := surfaceAt(x)
+		for y := max(s+50, 1); y < H-1; y++ {
+			i := y*CW + lx
+			if buf[i] != STONE {
+				continue
+			}
+			if buf[i-CW] != EMPTY && buf[i+CW] != EMPTY && buf[i-1] != EMPTY && buf[i+1] != EMPTY {
+				continue
+			}
+			if noise2(float64(x), float64(y), 7, 31) > 0.74 && hash01(x, y, 32) < 0.3 {
+				buf[i] = CRYSTAL
 			}
 		}
 	}
@@ -323,6 +434,9 @@ func shiftWindow(dc int) {
 	for i := range parts {
 		parts[i].x -= float64(dc * CW)
 	}
+	for _, e := range ents {
+		e.x -= shift
+	}
 	updatePlayerCells()
 }
 
@@ -362,6 +476,10 @@ func createWorld(text string) {
 		loadSlot(i)
 	}
 	player.vx, player.vy, player.energy, player.squash = 0, 0, 1, 0
+	player.hp = maxHP
+	spawnWX = sx
+	ents = ents[:0]
+	worldTime = 0.32 // morning
 	player.x = float64((sx - baseChunk*CW) * CELL)
 	player.y = float64((surfaceAt(sx) - 15) * CELL)
 	unstick()

@@ -5,7 +5,7 @@ import "math/rand"
 // Sand and water simulation, only around the camera.
 
 func getCell(x, y int) uint8 {
-	if x < 0 || x >= W || y < 0 || y >= H || inPlayer(x, y) {
+	if x < 0 || x >= W || y < 0 || y >= H {
 		return STONE
 	}
 	return grid[y*W+x]
