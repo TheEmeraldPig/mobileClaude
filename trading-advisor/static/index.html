@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day-Trading Advisor</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M1 13 L6 7 L9 10 L15 3%22 fill=%22none%22 stroke=%22%232a78d6%22 stroke-width=%222%22/%3E%3C/svg%3E">
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <h1>Day-Trading Advisor</h1>
+      <span class="tag">Analysis &amp; advice only · never connects to a broker · data stays on this computer</span>
+    </div>
+    <nav class="tabs" id="tabs">
+      <a href="#dashboard">Dashboard</a>
+      <a href="#trades">Trades</a>
+      <a href="#edit">Add Trade</a>
+      <a href="#import">Import CSV</a>
+      <a href="#mistakes">Mistakes</a>
+      <a href="#pretrade">Pre-Trade Check</a>
+      <a href="#rules">My Rules</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- shared filter bar (dashboard, trades, mistakes) -->
+  <template id="filter-tpl">
+    <div class="filters">
+      <label>Account
+        <span class="seg" data-f="account">
+          <button data-v="all">All</button><button data-v="real">Real money</button><button data-v="paper">Paper</button>
+        </span>
+      </label>
+      <label>From <input type="date" data-f="from"></label>
+      <label>To <input type="date" data-f="to"></label>
+      <button class="small" data-f="clear">Clear dates</button>
+    </div>
+  </template>
+
+  <!-- DASHBOARD -->
+  <section class="page" id="page-dashboard">
+    <div class="filter-slot"></div>
+    <div id="dash-body"></div>
+  </section>
+
+  <!-- TRADES -->
+  <section class="page" id="page-trades">
+    <div class="filter-slot"></div>
+    <div class="card">
+      <div class="row" style="margin-bottom:.6rem">
+        <h2 style="margin:0">Your trades</h2>
+        <span class="spacer"></span>
+        <a class="btn" href="#edit">+ Add trade</a>
+        <a class="btn" href="/api/export.csv">Download backup (CSV)</a>
+      </div>
+      <p class="muted">Click a trade to edit it or fill in its journal. Red tags are mistakes the advisor found automatically.</p>
+      <div id="trades-body"></div>
+    </div>
+  </section>
+
+  <!-- ADD / EDIT TRADE -->
+  <section class="page" id="page-edit">
+    <form id="trade-form" autocomplete="off">
+      <div class="card">
+        <h2 id="edit-title">Add a trade</h2>
+        <p class="muted">Use US market time (Eastern Time) for dates and times. Leave the exit empty if the trade is still open.</p>
+        <div class="form-grid">
+          <label class="field"><span>Ticker *</span><input name="ticker" required placeholder="AAPL" style="text-transform:uppercase"></label>
+          <label class="field"><span>Long or short *</span>
+            <select name="direction"><option value="long">Long (buy first)</option><option value="short">Short (sell first)</option></select></label>
+          <label class="field"><span>Account *</span>
+            <select name="account_type"><option value="paper">Paper trade</option><option value="real">Real money</option></select></label>
+          <label class="field"><span>Shares *</span><input name="shares" type="number" step="any" min="0" required></label>
+          <label class="field"><span>Entry date &amp; time *</span><input name="entry_time" type="datetime-local" required></label>
+          <label class="field"><span>Entry price *</span><input name="entry_price" type="number" step="any" min="0" required></label>
+          <label class="field"><span>Exit date &amp; time</span><input name="exit_time" type="datetime-local"></label>
+          <label class="field"><span>Exit price</span><input name="exit_price" type="number" step="any" min="0"></label>
+          <label class="field"><span>Stop-loss</span><input name="stop_loss" type="number" step="any" min="0"></label>
+          <label class="field"><span>Target</span><input name="target" type="number" step="any" min="0"></label>
+          <label class="field"><span>Fees &amp; commissions ($)</span><input name="fees" type="number" step="any" min="0" value="0"></label>
+        </div>
+        <div class="live-calc num" id="live-calc"></div>
+      </div>
+
+      <div class="card">
+        <h2>Journal</h2>
+        <div class="form-grid">
+          <label class="field"><span>Setup type</span><select name="setup"></select><span class="hint">Edit this list on the My Rules page.</span></label>
+          <label class="field"><span>Emotion before</span><select name="emotion_before"></select></label>
+          <label class="field"><span>Emotion after</span><select name="emotion_after"></select></label>
+          <div class="field"><span>Followed my plan?</span>
+            <div class="radio-row">
+              <label><input type="radio" name="followed_plan" value="1"> Yes</label>
+              <label><input type="radio" name="followed_plan" value="0"> No</label>
+              <label><input type="radio" name="followed_plan" value=""> Not sure</label>
+            </div>
+          </div>
+          <label class="field wide"><span>Reason for entry</span><textarea name="reason" placeholder="What did you see? Why here?"></textarea></label>
+          <div class="field wide"><span>Mistakes made</span><div class="chips" id="mistake-chips"></div>
+            <input name="mistakes_extra" placeholder="Other mistakes (comma separated)"></div>
+          <label class="field wide"><span>Notes</span><textarea name="notes" placeholder="What happened? What would you do differently?"></textarea></label>
+          <div class="field wide"><span>Chart screenshot (optional)</span>
+            <input type="file" id="shot-input" accept="image/png,image/jpeg,image/gif,image/webp">
+            <div id="shot-preview"></div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <button class="primary" type="submit" id="save-btn">Save trade</button>
+        <button type="button" id="cancel-edit">Cancel</button>
+        <span class="spacer"></span>
+        <button type="button" class="danger" id="delete-trade" hidden>Delete this trade</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- IMPORT -->
+  <section class="page" id="page-import">
+    <div class="card">
+      <h2>1. Choose a CSV file</h2>
+      <p class="muted">Export your trade history from your broker as CSV, then choose it here. To test the app, try the samples:
+        <a href="/samples/sample_trades.csv">sample_trades.csv</a> (32 fake trades) and
+        <a href="/samples/sample_fills.csv">sample_fills.csv</a> (individual buys and sells).</p>
+      <div class="form-grid">
+        <label class="field"><span>CSV file</span><input type="file" id="csv-input" accept=".csv,text/csv,.txt"></label>
+        <div class="field"><span>How is your file laid out?</span>
+          <div class="radio-row">
+            <label><input type="radio" name="imp-mode" value="trades" checked> One row per trade (entry + exit)</label>
+            <label><input type="radio" name="imp-mode" value="fills"> One row per buy or sell</label>
+          </div>
+        </div>
+        <label class="field"><span>These trades are</span>
+          <select id="imp-account"><option value="paper">Paper trades</option><option value="real">Real money</option></select></label>
+        <label class="field"><span>Times in this file are in</span>
+          <select id="imp-tz">
+            <option value="0">Eastern (ET), no change</option>
+            <option value="1">Central (CT), add 1 hour</option>
+            <option value="2">Mountain (MT), add 2 hours</option>
+            <option value="3">Pacific (PT), add 3 hours</option>
+          </select></label>
+        <label class="field"><span>If there's no long/short column, assume</span>
+          <select id="imp-default-dir"><option value="long">Long</option><option value="short">Short</option></select></label>
+      </div>
+    </div>
+    <div class="card" id="imp-map-card" hidden>
+      <h2>2. Match your columns</h2>
+      <p class="muted">We guessed which of your columns goes where. Fix anything that's wrong. Fields marked * are required.</p>
+      <div class="form-grid" id="imp-map"></div>
+      <div id="imp-sample" class="table-wrap" style="margin-top:1rem"></div>
+      <div class="row" style="margin-top:1rem"><button class="primary" id="imp-preview-btn">Preview import</button></div>
+    </div>
+    <div class="card" id="imp-preview-card" hidden>
+      <h2>3. Check and import</h2>
+      <div id="imp-preview"></div>
+    </div>
+  </section>
+
+  <!-- MISTAKES -->
+  <section class="page" id="page-mistakes">
+    <div class="filter-slot"></div>
+    <div id="mistakes-body"></div>
+  </section>
+
+  <!-- PRE-TRADE CHECK -->
+  <section class="page" id="page-pretrade">
+    <div class="notice">This is advice only. It can't see the market and it never places orders. You make the final call.</div>
+    <div class="grid grid-2">
+      <form class="card" id="pt-form" autocomplete="off">
+        <h2>Planned trade</h2>
+        <div class="form-grid">
+          <label class="field"><span>Ticker</span><input name="ticker" placeholder="AAPL" style="text-transform:uppercase"></label>
+          <label class="field"><span>Direction</span><select name="direction"><option value="long">Long</option><option value="short">Short</option></select></label>
+          <label class="field"><span>Entry price *</span><input name="entry" type="number" step="any" min="0" required></label>
+          <label class="field"><span>Stop-loss</span><input name="stop" type="number" step="any" min="0"></label>
+          <label class="field"><span>Target</span><input name="target" type="number" step="any" min="0"></label>
+          <label class="field"><span>Shares *</span><input name="shares" type="number" step="any" min="0" required></label>
+          <label class="field"><span>Setup</span><select name="setup"></select></label>
+          <label class="field"><span>Account</span><select name="account_type"><option value="real">Real money</option><option value="paper">Paper</option></select></label>
+          <label class="field"><span>Time (ET)</span><input name="time" type="datetime-local"><span class="hint">Defaults to now. Change it to test other times.</span></label>
+        </div>
+        <div class="row" style="margin-top:1rem"><button class="primary" type="submit">Check this trade</button></div>
+      </form>
+      <div id="pt-result"><div class="card empty">Fill in a planned trade and press <b>Check this trade</b>.</div></div>
+    </div>
+  </section>
+
+  <!-- RULES -->
+  <section class="page" id="page-rules">
+    <form id="rules-form">
+      <div class="card">
+        <h2>My rules</h2>
+        <p class="muted">The advisor checks every trade against these. Start strict; most beginners risk 0.5% to 1% per trade.</p>
+        <div class="form-grid">
+          <label class="field"><span>Account size ($)</span><input name="account_size" type="number" step="any" min="0" required></label>
+          <label class="field"><span>Max risk per trade (% of account)</span><input name="max_risk_pct" type="number" step="any" min="0" required><span class="hint" id="risk-dollars"></span></label>
+          <label class="field"><span>Daily loss limit ($)</span><input name="daily_loss_limit" type="number" step="any" min="0" required></label>
+          <label class="field"><span>Max trades per day</span><input name="max_trades_per_day" type="number" step="1" min="0" required></label>
+          <label class="field"><span>Minimum reward/risk (e.g. 2 = 2:1)</span><input name="min_rr" type="number" step="any" min="0" required></label>
+          <label class="field"><span>Revenge-trade window (minutes after a loss)</span><input name="revenge_minutes" type="number" step="1" min="0" required></label>
+        </div>
+      </div>
+      <div class="card">
+        <h3>No-trade time windows (Eastern Time)</h3>
+        <div id="windows"></div>
+        <button type="button" class="small" id="add-window">+ Add window</button>
+      </div>
+      <div class="card">
+        <h3>My lists</h3>
+        <div class="form-grid">
+          <label class="field"><span>Setup types (one per line)</span><textarea name="setups" rows="7"></textarea></label>
+          <label class="field"><span>Emotions (one per line)</span><textarea name="emotions" rows="7"></textarea></label>
+          <label class="field"><span>Common mistakes (one per line)</span><textarea name="mistake_tags" rows="7"></textarea></label>
+        </div>
+      </div>
+      <div class="row"><button class="primary" type="submit">Save rules</button></div>
+    </form>
+    <div class="card" style="margin-top:2rem">
+      <h3>Your data</h3>
+      <p class="muted">Everything is stored in the <code>data</code> folder next to <code>app.py</code>. Copy that folder to back it up.</p>
+      <div class="row">
+        <a class="btn" href="/api/export.csv">Download all trades (CSV)</a>
+        <select id="del-scope" style="width:auto"><option value="paper">Delete all paper trades</option><option value="real">Delete all real-money trades</option><option value="all">Delete ALL trades</option></select>
+        <button class="danger" id="del-all">Delete…</button>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast" role="status"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

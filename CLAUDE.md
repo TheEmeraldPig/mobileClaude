@@ -17,3 +17,10 @@
 - The game is a roguelite: per-run state lives in `save.json` (deleted when a run ends), permanent upgrades in `meta.json` (`roguelite.go`). New per-run state must go in `serializeState`/`restoreState` in `save.go`.
 - Every push to `mote/` builds and releases `Mote.exe`, `Mote-steam.exe` and `Mote.apk` through `.github/workflows/mote.yml`.
 - Check layouts by running under Xvfb with the test hooks in `game/testhooks.go` (`MOTE_SCRIPT`, `MOTE_TOUCH=1`, `MOTE_NOAUDIO=1`).
+
+## trading-advisor/ (local day-trading journal and advisor)
+
+- Python standard library only (no pip installs), SQLite in `data/` (gitignored), vanilla JS front end in `static/`. Run with `python app.py`.
+- It must never connect to a brokerage or place orders, and must only listen on 127.0.0.1. Keep all data local and keep the front end working offline (no CDN scripts).
+- The user is a beginner: keep wording plain and keep `README.md` instructions step by step.
+- Run `python -m unittest discover tests` after changing `analysis.py` or `importer.py`.
