@@ -153,7 +153,8 @@ function cleanTrade(data) {
     t[f] = v;
   }
   if (!t.ticker) throw new Error("ticker is required");
-  t.ticker = String(t.ticker).toUpperCase();
+  // "NASDAQ:AAPL" (TradingView style) -> "AAPL"
+  t.ticker = String(t.ticker).toUpperCase().replace(/^[A-Z]+:/, "");
   t.direction = String(t.direction || "").toLowerCase();
   if (!["long", "short"].includes(t.direction)) throw new Error("direction must be long or short");
   if (!t.entry_time) throw new Error("entry date/time is required");

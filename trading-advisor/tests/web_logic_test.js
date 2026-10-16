@@ -58,6 +58,7 @@ assert.strictEqual(D("02-Mar-2026 14:05"), "2026-03-02T14:05:00");
 assert.strictEqual(D("Mar 2, 2026", "2:05 PM"), "2026-03-02T14:05:00");
 assert.strictEqual(D("03/02/2026 08:31", "", 1), "2026-03-02T09:31:00");
 assert.throws(() => D("yesterday"));
+assert.strictEqual(L.cleanTrade({ ticker: "nasdaq:aapl", direction: "long", entry_time: "2026-03-02T10:00", entry_price: 1, shares: 1 }).ticker, "AAPL");
 assert.throws(() => L.cleanTrade({ ticker: "X", direction: "long", entry_time: "2026-03-02T10:00", entry_price: 0, shares: 1 }));
 
 console.log("web logic: all checks passed");

@@ -119,6 +119,17 @@ To use it, just ask Claude: *"fetch market data for my trades"*. It needs a free
 
 The top of the Dashboard shows a scorecard built only from your **paper** trades. All 10 checks must pass before moving to real money: enough trades and days, a profitable average day, mostly green days, green days clearly bigger than red days, a solid profit factor, small drawdowns, few rule breaks, never blowing through your daily loss limit, and still profitable over your last 20 trades. Change the targets under **My Rules**, but don't lower them to get there faster.
 
+## Let Claude read your TradingView
+
+Claude can read your TradingView watchlist, charts and Paper Trading history, and copy your paper trades into the advisor. It only reads: it never places, changes or closes orders.
+
+1. Open the **Claude desktop app** on your computer (this needs your own computer, because TradingView is behind your login).
+2. Start a Claude Code session on this repo there, and turn on the built-in browser or Claude in Chrome when asked.
+3. Sign in to TradingView yourself in that browser. Never give Claude your password.
+4. Ask things like *"check my TradingView watchlist"*, *"look at my AAPL chart"* or *"sync my TradingView paper trades"*. Claude shows you the trades before adding them.
+
+No desktop app handy? In TradingView, open the Trading Panel → **Paper Trading → History**, export it as CSV, and import it on **Import CSV** with **One row per buy or sell**.
+
 ## Other traders' trades
 
 You can import other people's trade histories to study and compare them, for example a journal a friend or mentor shares with you as a CSV.
