@@ -113,7 +113,7 @@ jobs:
             sleep 40
             adb exec-out screencap -p > shot-menu.png
             # tap the gold Play button (top right of the main menu)
-            adb shell input tap 450 25
+            adb shell input swipe 450 30 450 30 600
             sleep 30
             adb exec-out screencap -p > shot-later.png
             adb logcat -d > logcat.txt
