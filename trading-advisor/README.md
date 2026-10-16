@@ -1,17 +1,38 @@
 # Day-Trading Advisor
 
-A personal trading journal and coach that runs **only on your own computer**.
+A personal trading journal and coach for US stocks.
 
 - It **never** connects to a brokerage and **never** places orders. It only analyzes the trades you give it and gives advice.
-- Everything is saved in the `data` folder inside this folder: a database file (`trades.db`) and your screenshots. Nothing is uploaded anywhere.
-- The app only accepts connections from your own computer (`127.0.0.1`). Other devices on your Wi-Fi can't open it.
-- It needs nothing but Python. There are no extra packages to install, and it works without internet.
+- Your trades are private to you.
+
+## Open it (no install)
+
+**https://claude.ai/artifact/VUNk24GVvv5xewtmwJEMHq**
+
+Open that link on your phone or computer while signed in to claude.ai. Bookmark it, or add it to your home screen.
+
+- Your trades, rules and screenshots are saved with the page on your claude.ai account. Only you can open it, and only you can see the data: nothing is stored in this public repo.
+- Claude can read your trades and improve the page in later chats. Just give it the link above.
+- Use **Download backup (CSV)** on the Trades page now and then for your own copy.
+
+### Your first 10 minutes
+
+1. **My Rules:** set your account size, max risk per trade (1% is a common start), daily loss limit, max trades per day, minimum reward/risk, and the times of day you don't want to trade. Click **Save rules**.
+2. **Import CSV:** click **32 fake trades** to load the sample, check the column matches, click **Preview import**, then **Import**.
+3. Look around **Dashboard**, **Mistakes** and **Pre-Trade Check**.
+4. When you're done exploring, go to **My Rules → Your data**, choose **Delete all paper trades**, and confirm. That clears the sample.
 
 ---
 
-## Step-by-step: first time setup
+## Optional: the offline version on your computer
 
-### Step 1: Install Python (one time only)
+This folder also has an older version that runs on your own computer with Python and keeps data in a local `data` folder.
+**The website above is the main version.** The offline version still works, but new features go to the website first.
+
+
+### Step-by-step: first time setup
+
+#### Step 1: Install Python (one time only)
 
 **Windows**
 1. Go to <https://www.python.org/downloads/> and click the big yellow **Download Python** button.
@@ -25,12 +46,12 @@ A personal trading journal and coach that runs **only on your own computer**.
 
 Any Python version from 3.9 up works.
 
-### Step 2: Get this folder onto your computer
+#### Step 2: Get this folder onto your computer
 
 You need the `trading-advisor` folder (the one this README is in) somewhere easy to find, like your Desktop or Documents.
-If you got it from GitHub: click the green **Code** button → **Download ZIP**, unzip it, and find the `trading-advisor` folder inside.
+Download it from GitHub as a ZIP: <https://github.com/TheEmeraldPig/mobileClaude/archive/refs/heads/tradingAdvisor.zip>. Unzip it and find the `trading-advisor` folder inside.
 
-### Step 3: Start the advisor
+#### Step 3: Start the advisor
 
 **Windows:** open the `trading-advisor` folder and double-click **`start-windows.bat`**.
 (If Windows shows "Windows protected your PC", click **More info** → **Run anyway**. It's just the 6-line file in this folder.)
@@ -60,13 +81,13 @@ python app.py        # on Mac use: python3 app.py
 ```
 </details>
 
-### Step 4: Stop it
+#### Step 4: Stop it
 
 Click on the terminal window and press **Ctrl + C**, or just close the window. Your data is saved automatically after every change.
 
 ---
 
-## Your first 10 minutes
+### Offline version: first 10 minutes
 
 1. **My Rules:** set your account size, max risk per trade (1% is a common starting point), daily loss limit, max trades per day, minimum reward/risk, and the times of day you don't want to trade. Click **Save rules**.
 2. **Try it with fake trades:** go to **Import CSV**, click the `sample_trades.csv` link to download it, then choose that file in the **CSV file** box. Check the column matches and click **Preview import**, then **Import**.
@@ -133,14 +154,15 @@ Broker files almost never include your stop-loss or target, so imported trades w
 
 ## Backups
 
-- Easiest: copy the whole `data` folder somewhere safe (a USB stick or cloud drive).
-- Or click **Download backup (CSV)** on the Trades page.
-- To restore from the `data` folder: put it back next to `app.py`.
+- **Website:** your trades are saved on your claude.ai account automatically. For your own copy, click **Download backup (CSV)** on the Trades page. To restore, import that CSV with **One row per trade** selected.
+- **Offline version:** copy the whole `data` folder somewhere safe. To restore, put it back next to `app.py`.
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---|---|
+| The website says "Can't open the journal" | Sign in to claude.ai with the account that owns the page, then reload. |
+| The website says "Preview: nothing is saved" | You opened a copy of the page outside claude.ai. Use the link at the top of this README. |
 | `'python' is not recognized` (Windows) | Python wasn't added to PATH. Run the Python installer again, choose **Modify**/**Repair**, and make sure "Add Python to PATH" is ticked. Or restart your computer after installing. |
 | `command not found: python3` (Mac) | Install Python from python.org (Step 1), then close and reopen the window. |
 | "Port 8765 is busy" | The advisor is probably already running in another window. Just open http://127.0.0.1:8765. |
@@ -151,12 +173,16 @@ Broker files almost never include your stop-loss or target, so imported trades w
 
 ## For the curious: how it's built
 
+- `web/`: the website. `index.html` (page), `app.js` (screens and saving), `logic.js` (all the trading math), `style.css`. Published to claude.ai; its data lives in the page's private database.
+- `tests/web_logic_test.js`: checks for the website's math. Run with `node tests/web_logic_test.js`.
+
+Offline version:
 - `app.py`: the small local web server (Python standard library only).
 - `db.py`: saves trades and settings in SQLite (`data/trades.db`).
 - `analysis.py`: all the stats, insights, mistake flags and the pre-trade check.
 - `importer.py`: CSV reading, date parsing and pairing fills into trades.
 - `static/`: the web pages (HTML, CSS, JavaScript; charts are drawn locally, no internet needed).
 - `samples/`: fake data to try things out.
-- `tests/`: automated checks. Run them with `python -m unittest discover tests`.
+- `tests/test_advisor.py`: checks for the offline version. Run with `python -m unittest discover tests`.
 
 *This tool gives educational analysis of your own trading history. It is not financial advice, and it can't predict the market.*

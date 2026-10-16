@@ -18,9 +18,10 @@
 - Every push to `mote/` builds and releases `Mote.exe`, `Mote-steam.exe` and `Mote.apk` through `.github/workflows/mote.yml`.
 - Check layouts by running under Xvfb with the test hooks in `game/testhooks.go` (`MOTE_SCRIPT`, `MOTE_TOUCH=1`, `MOTE_NOAUDIO=1`).
 
-## trading-advisor/ (local day-trading journal and advisor)
+## trading-advisor/ (day-trading journal and advisor)
 
-- Python standard library only (no pip installs), SQLite in `data/` (gitignored), vanilla JS front end in `static/`. Run with `python app.py`.
-- It must never connect to a brokerage or place orders, and must only listen on 127.0.0.1. Keep all data local and keep the front end working offline (no CDN scripts).
-- The user is a beginner: keep wording plain and keep `README.md` instructions step by step.
-- Run `python -m unittest discover tests` after changing `analysis.py` or `importer.py`.
+- The main version is the website in `web/`, published as a private claude.ai artifact: https://claude.ai/artifact/VUNk24GVvv5xewtmwJEMHq. Republish it by passing that URL with `file_path` `web/index.html` and `files` for `style.css`, `logic.js`, `app.js` and the two `samples/*.csv`. Omit `capabilities` on redeploys so the stored ones (owner-only db rules, assets, downloads, user) stay.
+- The user's trades live in that artifact's database (`trades/<id>`, `settings/main`), readable with the ArtifactData tool. Never copy them into this public repo.
+- It must never connect to a brokerage or place orders. The user is a beginner: keep wording plain and `README.md` steps simple.
+- All trading math is in `web/logic.js`; run `node tests/web_logic_test.js` after changing it. The page can't use `alert`/`confirm`/`prompt` or plain download links (use the inline confirm and the `downloads` capability).
+- The older offline version (`app.py`, Python standard library, SQLite in gitignored `data/`) is no longer kept in sync. Its tests: `python -m unittest discover tests`.
