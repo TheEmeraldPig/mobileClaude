@@ -2,6 +2,7 @@ package game
 
 import (
 	"math"
+	"math/rand"
 	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -54,6 +55,8 @@ func (g *Game) Update() error {
 			}
 		case scSeed:
 			openScreen(scMain)
+		case scUpgrades:
+			openScreen(upgradesFrom)
 		}
 	} else if bindJustPressed("inv") && (cur == scPlaying || cur == scInv) && listening == "" {
 		if cur == scInv {
@@ -110,6 +113,7 @@ func (g *Game) Update() error {
 
 	if !paused() {
 		worldTime = math.Mod(worldTime+1.0/dayFrames, 1)
+		trackRun()
 		updatePlayer()
 		followPlayer()
 		useHeld()
@@ -142,7 +146,15 @@ func (g *Game) Update() error {
 			mainMenuArt()
 		}
 		settingsMenu()
+	case scRunOver:
+		runOverMenu()
+	case scUpgrades:
+		if upgradesFrom == scMain {
+			mainMenuArt()
+		}
+		upgradesMenu()
 	}
+	shake *= 0.86
 	drawToast()
 
 	if frame >= autosaveAt {
@@ -153,9 +165,16 @@ func (g *Game) Update() error {
 	return nil
 }
 
+// screen shake strength in world px, set by explosions and hits
+var shake float64
+
 func placeCamera() {
 	cam.x = player.x + player.w/2 + peekSX/zoom - logicalW/2/zoom
 	cam.y = player.y + player.h/2 + peekSY/zoom - logicalH/2/zoom
+	if shake > 0.3 && !paused() {
+		cam.x += (rand.Float64()*2 - 1) * shake
+		cam.y += (rand.Float64()*2 - 1) * shake
+	}
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
@@ -191,13 +210,17 @@ func NewGame() *Game {
 	applyFOV()
 	// enough loaded width for the widest field of view plus looking around
 	initWorld(2844)
+	loadMeta()
 	if st := loadSave(); st != nil && restoreState(st) {
 		if os.Getenv("MOTE_RESUME") == "1" || hasArg("--resume") {
 			play()
 			toast("Updated to the newest version")
 		}
 	} else {
+		// a world to show behind the main menu; a run starts from "New run"
 		createWorld(prefs.Seed)
+		player.maxHP = baseMaxHP()
+		player.hp = player.maxHP
 		starterKit()
 	}
 	placeCamera()

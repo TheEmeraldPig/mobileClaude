@@ -28,14 +28,14 @@ type Player struct {
 	blink, nextBlink  int
 	idle              int
 	emptyWarned       bool
-	hp                int
+	hp                int // in half-hearts
+	maxHP             int
+	lavaTimer         int
 	invuln            int
 	regen             int
 }
 
-const maxHP = 10 // five hearts
-
-var player = Player{w: sprW * CELL, h: sprH * CELL, face: 1, energy: 1, nextBlink: 120, hp: maxHP}
+var player = Player{w: sprW * CELL, h: sprH * CELL, face: 1, energy: 1, nextBlink: 120, hp: 10, maxHP: 10}
 
 var px0, px1, py0, py1 int
 
@@ -90,8 +90,10 @@ func hurtPlayer(dmg, dir int) {
 	if p.invuln > 0 || p.hp <= 0 {
 		return
 	}
+	dmg = max(1, dmg-armorLevel())
 	p.hp -= dmg
 	p.invuln = 60
+	shake = math.Max(shake, 5)
 	p.regen = 0
 	if dir == 0 {
 		dir = -p.face
@@ -100,20 +102,8 @@ func hurtPlayer(dmg, dir int) {
 	burst(10, (p.x+p.w/2)/CELL, (p.y+p.h/2)/CELL, [3]int{240, 122, 106}, 1.4, 1.4, 22)
 	sfx("hurt")
 	if p.hp <= 0 {
-		respawn()
+		endRun(false)
 	}
-}
-
-// Back to the spawn point with full health; the inventory is kept
-func respawn() {
-	p := &player
-	shiftWindow(floorDiv(spawnWX, CW) - NCH/2 - baseChunk)
-	p.x = float64((spawnWX - baseChunk*CW) * CELL)
-	p.y = float64((surfaceAt(spawnWX) - 15) * CELL)
-	p.vx, p.vy, p.hp, p.energy, p.invuln = 0, 0, maxHP, 1, 90
-	unstick()
-	updatePlayerCells()
-	toast("You fainted and woke up at the start")
 }
 
 func unstick() {
@@ -162,7 +152,16 @@ func updatePlayer() {
 	if p.invuln > 0 {
 		p.invuln--
 	}
-	if p.hp < maxHP {
+	// lava burns
+	if cellAt(p.x+p.w/2, p.y+p.h-2) == LAVA || cellAt(p.x+p.w/2, p.y+p.h/2) == LAVA {
+		if p.lavaTimer++; p.lavaTimer%30 == 1 {
+			hurtPlayer(2, 0)
+			p.vy = -6
+		}
+	} else {
+		p.lavaTimer = 0
+	}
+	if p.hp < p.maxHP {
 		if p.regen++; p.regen >= 60*8 { // a half heart every 8 seconds
 			p.hp++
 			p.regen = 0
@@ -191,7 +190,7 @@ func updatePlayer() {
 	wantLift := input.lev || stick.up
 	p.lifting = wantLift && p.energy > 0
 	if p.lifting {
-		p.energy = math.Max(0, p.energy-1/(levSeconds*60))
+		p.energy = math.Max(0, p.energy-1/(levSecs()*60))
 		p.vy += (-2.2 - p.vy) * 0.15
 		p.emptyWarned = false
 		if rand.Float64() < 0.6 {

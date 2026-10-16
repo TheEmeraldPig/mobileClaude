@@ -23,6 +23,8 @@ const (
 	scPause
 	scInv
 	scSettings
+	scRunOver
+	scUpgrades
 )
 
 var (
@@ -116,7 +118,7 @@ var heartRows = []string{".XX.XX.", "XXXXXXX", "XXXXXXX", ".XXXXX.", "..XXX..", 
 
 func drawHearts(dst *ebiten.Image, x, y float64) {
 	const px = 3.0
-	for h := 0; h < maxHP/2; h++ {
+	for h := 0; h < (player.maxHP+1)/2; h++ {
 		hx := x + float64(h)*(8*px)
 		fullness := player.hp - h*2 // 2 full, 1 half, <=0 empty
 		for r, row := range heartRows {
@@ -140,6 +142,24 @@ func drawHearts(dst *ebiten.Image, x, y float64) {
 func hud() {
 	hudRects = hudRects[:0]
 	ops = append(ops, func(dst *ebiten.Image) { drawHearts(dst, 14, 12) })
+	// depth below the surface, and a hint toward the Core once you're deep
+	wx := baseChunk*CW + int((player.x+player.w/2)/CELL)
+	depth := int((player.y+player.h)/CELL) - surfaceAt(wx)
+	dtxt := "Surface"
+	if depth > 2 {
+		dtxt = fmt.Sprintf("Depth %d", depth)
+	}
+	if depth > 150 {
+		dx := coreX() - wx
+		dir := "below"
+		if dx < -40 {
+			dir = "to the left"
+		} else if dx > 40 {
+			dir = "to the right"
+		}
+		dtxt += "  -  the hum comes from " + dir
+	}
+	Text(dtxt, 14, 42, 12, colMuted, text.AlignStart)
 	// Hotbar
 	slot := hotbarSlotSize()
 	gap := 7.0
@@ -305,18 +325,25 @@ func mainMenu() {
 	if isTouch {
 		bh = 40
 	}
-	y := (logicalH - (bh+18)*4) / 2
-	label := "Play"
+	y := (logicalH - (bh+18)*5) / 2
 	if started {
-		label = "Continue"
+		if Button(Rect{cx, y, colW, bh}, "Continue", styleGold, true, icoPlay) {
+			play()
+		}
+		y += bh + 18
 	}
-	if Button(Rect{cx, y, colW, bh}, label, styleGold, true, icoPlay) {
-		play()
+	st := styleGold
+	if started {
+		st = styleViolet
 	}
-	y += bh + 18
-	if Button(Rect{cx, y, colW, bh}, "New world", styleViolet, true, icoWorld) {
+	if Button(Rect{cx, y, colW, bh}, "New run", st, true, icoWorld) {
 		seedEntry = ""
 		openScreen(scSeed)
+	}
+	y += bh + 18
+	if Button(Rect{cx, y, colW, bh}, fmt.Sprintf("Upgrades (%d)", meta.Essence), styleSlate, true, icoBag) {
+		upgradesFrom = scMain
+		openScreen(scUpgrades)
 	}
 	y += bh + 18
 	if Button(Rect{cx, y, colW, bh}, "Settings", styleSlate, true, icoGear) {
@@ -430,12 +457,8 @@ func seedMenu() {
 		Text("Type a seed (numbers or words). The same seed always makes the same world.", r.X+18, y+8, 13, colMuted, text.AlignStart)
 		y += 30
 	}
-	if Button(Rect{r.X + 18, y + 4, r.W - 36, 42}, "Create world", styleGold, true, nil) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
-		createWorld(seedEntry)
-		starterKit()
-		started = false
-		play()
-		saveGame()
+	if Button(Rect{r.X + 18, y + 4, r.W - 36, 42}, "Start run", styleGold, true, nil) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
+		startRun(seedEntry)
 	}
 }
 

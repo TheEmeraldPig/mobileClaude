@@ -10,14 +10,16 @@ Every push that changes `mote/` builds both through `.github/workflows/mote.yml`
 - `Mote.apk`, for Android. Open it on the phone to install. Each build installs over the last one and keeps the save.
 - `Mote-steam.exe`, the Steam build, with the built-in updater switched off because Steam does the updating.
 
-Saves and settings live in `%AppData%\Mote` on Windows and in the app's private storage on Android.
+Runs are roguelite: fainting ends the run and deletes `save.json`, while Essence and upgrades in `meta.json` carry over. Saves and settings live in `%AppData%\Mote` on Windows and in the app's private storage on Android.
 
 ## Layout
 
 - `game/` holds the whole game as a library:
   - `world.go`: seeded chunk world: terrain, caves, caverns, ores and crystals. Follow the rules at the top of the file when adding terrain.
   - `render.go`: lighting (fog of war), the day/night sky and background, and drawing the world.
-  - `entities.go`: cave creatures and dropped items.
+  - `entities.go`: creatures (gloomlings, bats, night shades, the Warden boss) and dropped items.
+  - `blueprints.go`: ready-made structures and the placement hologram. Add a structure by adding a template in `initBlueprints()`, an item and a recipe.
+  - `roguelite.go`: runs, Essence, permanent upgrades (`upgrades` list) and the run-over and upgrade screens. Upgrades are stored in `meta.json`.
   - `sim.go`: sand and water.
   - `player.go`: the mote, its physics and sprite.
   - `items.go`: items, inventory, crafting and item use.

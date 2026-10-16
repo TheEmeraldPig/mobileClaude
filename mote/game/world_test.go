@@ -18,7 +18,7 @@ func TestSeedsAreStable(t *testing.T) {
 		seed string
 		cx   int
 		sum  int32
-	}{{"12345", 0, -1605603133}, {"12345", -3, -220907905}, {"12345", 17, 1361306742}, {"hello", 0, 748796256}, {"hello", 5, 674686539}}
+	}{{"12345", 0, -628427592}, {"12345", -3, 1492155978}, {"12345", 17, -1171153157}, {"hello", 0, 958037013}, {"hello", 5, -1773515645}}
 	for _, w := range want {
 		seedN = seedFrom(w.seed)
 		a, b := chunkSum(w.cx), chunkSum(w.cx)
@@ -40,7 +40,7 @@ func TestWorldHasOresAndCaves(t *testing.T) {
 			count[v]++
 		}
 	}
-	for _, b := range []uint8{COAL, COPPER, IRON, GOLD, CRYSTAL} {
+	for _, b := range []uint8{COAL, COPPER, IRON, GOLD, CRYSTAL, LAVA, CHEST, CORE, BEDROCK} {
 		if count[b] == 0 {
 			t.Errorf("no block %d generated", b)
 		}

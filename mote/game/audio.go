@@ -134,6 +134,20 @@ func sfx(name string) {
 	case "die":
 		tone(400, 60, 0.35, 0.15, triangle)
 		noiseFx(0.25, 700, 0.15, 200)
+	case "chest":
+		tone(523, 784, 0.1, 0.08, triangle)
+		syn.add(&voice{w: triangle, f0: 784, f1: 1046, dur: 0.15, vol: 0.08, t: -0.1})
+		syn.add(&voice{w: triangle, f0: 1046, f1: 1568, dur: 0.2, vol: 0.07, t: -0.2})
+	case "eat":
+		noiseFx(0.06, 1500, 0.12, 0)
+		syn.add(&voice{w: noiseBand, f0: 1300, f1: 1300, dur: 0.06, vol: 0.12, t: -0.1})
+	case "build":
+		tone(200, 400, 0.15, 0.15, square)
+		noiseFx(0.2, 900, 0.2, 300)
+	case "levelup":
+		for k, f := range []float64{523, 659, 784, 1046} {
+			syn.add(&voice{w: square, f0: f, f1: f, dur: 0.12, vol: 0.06, t: -0.08 * float64(k)})
+		}
 	case "swing":
 		noiseFx(0.1, 2500, 0.1, 800)
 	}

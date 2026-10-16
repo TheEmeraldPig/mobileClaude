@@ -88,7 +88,7 @@ func computeLight(ox, oy, vw, vh int) {
 		}
 		// sky light reaches down until the first solid block in this column
 		top := 0
-		for top < H && !isSolid(grid[top*W+wx]) {
+		for top < H && !blocksLight(grid[top*W+wx]) {
 			top++
 		}
 		for r := 0; r < lightH; r++ {
@@ -124,7 +124,7 @@ func computeLight(ox, oy, vw, vh int) {
 					return
 				}
 				wx, wy := lightX0+nc, lightY0+nr
-				if wx < 0 || wx >= W || wy >= H || (wy >= 0 && isSolid(grid[wy*W+wx])) {
+				if wx < 0 || wx >= W || wy >= H || (wy >= 0 && blocksLight(grid[wy*W+wx])) {
 					cost *= 3
 				}
 				nl := lvl - cost
@@ -286,7 +286,7 @@ func drawWorld(screen *ebiten.Image) {
 			}
 			openSky := wy < surf[x]
 			switch {
-			case t == EMPTY || t == WATER || t == TORCH:
+			case t == EMPTY || t == WATER || t == TORCH || t == GLASS || t == LAVA:
 				var bg [3]int
 				if openSky {
 					bg = skyPixel(x, y, vw, vh, ox+baseChunk*CW, oy, avg)
@@ -306,6 +306,18 @@ func drawWorld(screen *ebiten.Image) {
 				if t == TORCH {
 					bg = torchPixel(wx, wy, bg)
 				}
+				if t == GLASS {
+					g := shadeRGB(blockRGB[GLASS], 0.3+0.7*lf)
+					if (wx+wy)%7 == 0 {
+						g = [3]int{240, 250, 255}
+					}
+					bg = mix(bg, g, 0.4)
+				}
+				if t == LAVA { // glowing, slowly churning
+					f := 0.85 + 0.15*math.Sin(float64(frame)*0.04+float64(wx)*0.7+float64(wy)*0.3)
+					lc := blockRGB[LAVA]
+					bg = shadeRGB([3]int{lc[0], lc[1] + sh*2, lc[2] + sh}, f)
+				}
 				set(o, bg)
 			default:
 				c := blockRGB[t]
@@ -313,6 +325,14 @@ func drawWorld(screen *ebiten.Image) {
 					c = blockRGB[STONE]
 				}
 				c = [3]int{c[0] + sh, c[1] + sh, c[2] + sh}
+				if t == CORE {
+					c = mix(c, [3]int{255, 240, 255}, 0.5+0.5*math.Sin(float64(frame)*0.08))
+					lf = 1
+				}
+				if t == FURNACE && (wx+wy)%3 == 0 {
+					c = [3]int{255, 150, 60}
+					lf = math.Max(lf, 0.9)
+				}
 				if t == CRYSTAL {
 					c = mix(c, [3]int{220, 250, 255}, 0.2+0.2*math.Sin(float64(frame)*0.05+float64(wx)))
 					lf = math.Max(lf, 0.85)
@@ -334,6 +354,16 @@ func drawWorld(screen *ebiten.Image) {
 		put(x, y, shadeRGB([3]int{c[0] + s, c[1] + s, c[2] + s}, f), 0)
 	}
 	drawEntities(lit, put, ox, oy)
+	blend := func(x, y int, c [3]int, a float64) {
+		if x < 0 || y < 0 || x >= vw || y >= vh {
+			return
+		}
+		o := (y*vw + x) * 4
+		for k := 0; k < 3; k++ {
+			pix[o+k] = clamp8(int(float64(pix[o+k])*(1-a) + float64(c[k])*a))
+		}
+	}
+	drawHologram(blend, ox, oy)
 	drawPlayer(put, ox, oy)
 	for _, q := range parts {
 		put(int(math.Floor(q.x))-ox, int(math.Floor(q.y))-oy, q.c, 0)

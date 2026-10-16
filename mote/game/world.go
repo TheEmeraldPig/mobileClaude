@@ -37,8 +37,27 @@ const (
 	COPPER  = 6
 	IRON    = 7
 	GOLD    = 8
-	CRYSTAL = 9
-	TORCH   = 10
+	CRYSTAL  = 9
+	TORCH    = 10
+	DIRT     = 11
+	GRASS    = 12
+	WOOD     = 13 // tree trunk (you can walk through it)
+	LEAVES   = 14
+	PLANK    = 15
+	GLASS    = 16
+	CHEST    = 17
+	LAVA     = 18
+	SOIL     = 19 // tilled ground for crops
+	CROP1    = 20
+	CROP2    = 21
+	CROP3    = 22 // ripe
+	FLOWER   = 23
+	BUSH     = 24 // berry bush
+	GRAVE    = 25
+	CORE     = 26 // the goal at the bottom of the world
+	OBSIDIAN = 27
+	BEDROCK  = 28
+	FURNACE  = 29
 )
 
 var blockRGB = map[uint8][3]int{
@@ -51,13 +70,46 @@ var blockRGB = map[uint8][3]int{
 	IRON:    {214, 190, 172},
 	GOLD:    {246, 204, 70},
 	CRYSTAL: {120, 232, 255},
-	TORCH:   {255, 204, 96},
+	TORCH:    {255, 204, 96},
+	DIRT:     {122, 86, 60},
+	GRASS:    {88, 168, 74},
+	WOOD:     {112, 78, 52},
+	LEAVES:   {58, 132, 66},
+	PLANK:    {178, 132, 84},
+	GLASS:    {190, 226, 240},
+	CHEST:    {170, 116, 52},
+	LAVA:     {250, 108, 40},
+	SOIL:     {84, 58, 40},
+	CROP1:    {110, 180, 80},
+	CROP2:    {150, 196, 80},
+	CROP3:    {232, 200, 90},
+	FLOWER:   {236, 120, 170},
+	BUSH:     {46, 112, 58},
+	GRAVE:    {150, 150, 162},
+	CORE:     {255, 120, 220},
+	OBSIDIAN: {44, 30, 64},
+	BEDROCK:  {26, 24, 32},
+	FURNACE:  {96, 90, 104},
 }
 
 // Ores are drawn as specks of their colour in stone
 func isOre(t uint8) bool { return t >= COAL && t <= GOLD }
 
-func isSolid(t uint8) bool { return t == SAND || t == STONE || t == BRICK || isOre(t) || t == CRYSTAL }
+func isSolid(t uint8) bool {
+	switch t {
+	case SAND, STONE, BRICK, CRYSTAL, DIRT, GRASS, PLANK, GLASS, SOIL, GRAVE, CORE, OBSIDIAN, BEDROCK, FURNACE:
+		return true
+	}
+	return isOre(t)
+}
+
+// Blocks that stop light (glass and plants let it through)
+func blocksLight(t uint8) bool { return isSolid(t) && t != GLASS }
+
+func isLiquid(t uint8) bool { return t == WATER || t == LAVA }
+
+// Cells you can build into or that falling sand can replace
+func isReplaceable(t uint8) bool { return t == EMPTY || t == WATER || t == FLOWER || t == LEAVES }
 
 // Light given off by a block (0-64)
 func blockLight(t uint8) int {
@@ -66,13 +118,22 @@ func blockLight(t uint8) int {
 		return 60
 	case CRYSTAL:
 		return 22
+	case LAVA:
+		return 40
+	case CORE:
+		return 64
+	case FURNACE:
+		return 30
 	}
 	return 0
 }
 
 // The item you get for mining a block
+// (BEDROCK, CHEST and CORE are handled specially)
 var blockItem = map[uint8]string{SAND: "sand", STONE: "stone", BRICK: "brick", COAL: "coal", COPPER: "copper",
-	IRON: "iron", GOLD: "gold", CRYSTAL: "crystal", TORCH: "torch"}
+	IRON: "iron", GOLD: "gold", CRYSTAL: "crystal", TORCH: "torch", DIRT: "dirt", GRASS: "dirt", WOOD: "wood",
+	LEAVES: "leaves", PLANK: "plank", GLASS: "glass", SOIL: "dirt", CROP1: "seeds", CROP2: "seeds", CROP3: "wheat",
+	FLOWER: "seeds", BUSH: "berries", GRAVE: "stone", OBSIDIAN: "obsidian", FURNACE: "furnace"}
 
 const (
 	CELL = 2   // world px per cell
@@ -166,17 +227,23 @@ func surfaceAt(x int) int {
 type genPass func(buf []uint8, cx, x0 int)
 
 var genPasses = []genPass{
-	// sand over stone
+	// grass and dirt over stone; sand in deserts and on beaches
 	func(buf []uint8, cx, x0 int) {
 		for lx := 0; lx < CW; lx++ {
 			x := x0 + lx
 			s := surfaceAt(x)
-			sandDepth := 6 + int(math.Floor((noise1(float64(x), 40, 4)+1)*6))
+			topDepth := 6 + int(math.Floor((noise1(float64(x), 40, 4)+1)*6))
+			sandy := isDesert(x) || s >= waterLevel-3
 			for y := max(0, s); y < H; y++ {
-				if y < s+sandDepth {
-					buf[y*CW+lx] = SAND
-				} else {
+				switch {
+				case y >= s+topDepth:
 					buf[y*CW+lx] = STONE
+				case sandy:
+					buf[y*CW+lx] = SAND
+				case y == s:
+					buf[y*CW+lx] = GRASS
+				default:
+					buf[y*CW+lx] = DIRT
 				}
 			}
 		}
@@ -196,6 +263,207 @@ var genPasses = []genPass{
 	},
 	placeOres,
 	placeCrystals,
+	fillLava,
+	plantTrees,
+	plantFlowers,
+	placeGraves,
+	placeDungeons,
+	placeCore,
+	// unbreakable floor at the very bottom
+	func(buf []uint8, cx, x0 int) {
+		for y := H - 3; y < H; y++ {
+			for lx := 0; lx < CW; lx++ {
+				buf[y*CW+lx] = BEDROCK
+			}
+		}
+	},
+}
+
+// Deserts: long sandy stretches with no trees
+func isDesert(x int) bool { return noise1(float64(x), 900, 61) > 0.5 }
+
+const lavaLevel = H - 70
+
+// Lava pools the deepest caves
+func fillLava(buf []uint8, cx, x0 int) {
+	for y := lavaLevel; y < H; y++ {
+		for lx := 0; lx < CW; lx++ {
+			if buf[y*CW+lx] == EMPTY {
+				buf[y*CW+lx] = LAVA
+			}
+		}
+	}
+}
+
+// set writes a cell only if it falls inside the chunk being built
+func set(buf []uint8, x0, x, y int, t uint8) {
+	lx := x - x0
+	if lx >= 0 && lx < CW && y >= 0 && y < H {
+		buf[y*CW+lx] = t
+	}
+}
+
+func get(buf []uint8, x0, x, y int) uint8 {
+	lx := x - x0
+	if lx >= 0 && lx < CW && y >= 0 && y < H {
+		return buf[y*CW+lx]
+	}
+	return EMPTY
+}
+
+// Trees: one may grow in each 11-cell-wide slot of grassland. Canopies cross chunk
+// borders, so slots from the neighbouring chunks are checked too.
+func plantTrees(buf []uint8, cx, x0 int) {
+	const slot = 11
+	for sl := floorDiv(x0, slot) - 1; sl <= floorDiv(x0+CW, slot)+1; sl++ {
+		if hash01(sl, 0, 71) > 0.55 {
+			continue
+		}
+		x := sl*slot + 2 + int(hash01(sl, 1, 71)*float64(slot-4))
+		s := surfaceAt(x)
+		if isDesert(x) || s >= waterLevel-3 {
+			continue
+		}
+		height := 9 + int(hash01(sl, 2, 71)*8)
+		top := s - height
+		for y := top; y < s; y++ {
+			set(buf, x0, x, y, WOOD)
+			if hash01(x, y, 72) < 0.15 && y < s-3 { // a little branch
+				set(buf, x0, x+[]int{-1, 1}[int(hash01(x, y, 73)*2)], y, WOOD)
+			}
+		}
+		r := 4 + int(hash01(sl, 3, 71)*2)
+		for dy := -r; dy <= r; dy++ {
+			for dx := -r - 1; dx <= r+1; dx++ {
+				if dx*dx+dy*dy*2 <= r*r+2 && get(buf, x0, x+dx, top+dy) == EMPTY {
+					set(buf, x0, x+dx, top+dy, LEAVES)
+				}
+			}
+		}
+	}
+}
+
+// Flowers and berry bushes on the grass
+func plantFlowers(buf []uint8, cx, x0 int) {
+	for lx := 0; lx < CW; lx++ {
+		x := x0 + lx
+		s := surfaceAt(x)
+		if s < 1 || buf[s*CW+lx] != GRASS || buf[(s-1)*CW+lx] != EMPTY {
+			continue
+		}
+		switch h := hash01(x, 0, 81); {
+		case h < 0.05:
+			buf[(s-1)*CW+lx] = FLOWER
+		case h < 0.08:
+			buf[(s-1)*CW+lx] = BUSH
+			if s >= 2 && buf[(s-2)*CW+lx] == EMPTY {
+				buf[(s-2)*CW+lx] = BUSH
+			}
+		}
+	}
+}
+
+// Graves on the surface, each with a chest buried beneath it
+func placeGraves(buf []uint8, cx, x0 int) {
+	const slot = 90
+	for sl := floorDiv(x0, slot) - 1; sl <= floorDiv(x0+CW, slot)+1; sl++ {
+		if hash01(sl, 0, 91) > 0.35 {
+			continue
+		}
+		x := sl*slot + 8 + int(hash01(sl, 1, 91)*float64(slot-16))
+		s := surfaceAt(x)
+		if s >= waterLevel-3 {
+			continue
+		}
+		// headstone, 3 wide and 5 tall, with a cross cut in
+		for y := s - 5; y < s; y++ {
+			for dx := -1; dx <= 1; dx++ {
+				set(buf, x0, x+dx, y, GRAVE)
+			}
+		}
+		set(buf, x0, x-1, s-5, EMPTY)
+		set(buf, x0, x+1, s-5, EMPTY)
+		chestAt(buf, x0, x-1, s+4)
+	}
+}
+
+// A 3x2 chest with its top-left at (x, y)
+func chestAt(buf []uint8, x0, x, y int) {
+	for dy := 0; dy < 2; dy++ {
+		for dx := 0; dx < 3; dx++ {
+			set(buf, x0, x+dx, y+dy, CHEST)
+		}
+	}
+}
+
+// Brick dungeon rooms underground, with a chest and a torch-less dark inside
+func placeDungeons(buf []uint8, cx, x0 int) {
+	for c := cx - 1; c <= cx+1; c++ {
+		r := chunkRng(c, 101)
+		if r() > 0.4 {
+			continue
+		}
+		w, h := 26+int(r()*14), 16+int(r()*6)
+		rx := c*CW + int(r()*float64(CW-w))
+		ry := int(H*0.62 + r()*H*0.22)
+		for y := ry; y < ry+h; y++ {
+			for x := rx; x < rx+w; x++ {
+				wall := x < rx+2 || x >= rx+w-2 || y < ry+2 || y >= ry+h-2
+				if wall {
+					// cracked walls: a few gaps so you can get in
+					if hash01(x, y, 102) < 0.08 {
+						set(buf, x0, x, y, EMPTY)
+					} else {
+						set(buf, x0, x, y, BRICK)
+					}
+				} else {
+					set(buf, x0, x, y, EMPTY)
+				}
+			}
+		}
+		// doorways on both sides
+		for y := ry + h - 2 - 14; y < ry+h-2; y++ {
+			set(buf, x0, rx, y, EMPTY)
+			set(buf, x0, rx+1, y, EMPTY)
+			set(buf, x0, rx+w-1, y, EMPTY)
+			set(buf, x0, rx+w-2, y, EMPTY)
+		}
+		chestAt(buf, x0, rx+w/2-1, ry+h-4)
+		if r() < 0.6 {
+			chestAt(buf, x0, rx+4, ry+h-4)
+		}
+	}
+}
+
+// The Core: one per world, sealed in obsidian near the bottom, close to where you start
+func coreX() int { return int(hash01(0, 0, 111)*float64(CW*6)) - CW*3 }
+
+const coreY = H - 40
+
+func placeCore(buf []uint8, cx, x0 int) {
+	x := coreX()
+	if x < x0-30 || x > x0+CW+30 {
+		return
+	}
+	// a round chamber with an obsidian shell and a flat floor to stand on
+	for dy := -22; dy <= 22; dy++ {
+		for dx := -24; dx <= 24; dx++ {
+			d := dx*dx + dy*dy
+			switch {
+			case d <= 17*17 && dy < 9:
+				set(buf, x0, x+dx, coreY+dy, EMPTY)
+			case d <= 21*21:
+				set(buf, x0, x+dx, coreY+dy, OBSIDIAN)
+			}
+		}
+	}
+	for dy := -2; dy <= 2; dy++ {
+		for dx := -2; dx <= 2; dx++ {
+			if dx*dx+dy*dy <= 5 {
+				set(buf, x0, x+dx, coreY+dy, CORE)
+			}
+		}
+	}
 }
 
 // Smooth 2D value noise in 0..1
@@ -462,11 +730,11 @@ func createWorld(text string) {
 	parts = parts[:0]
 	sx := 0
 	for d := 0; d < 20000; d++ {
-		if surfaceAt(d) < waterLevel {
+		if surfaceAt(d) < waterLevel-4 && !isDesert(d) {
 			sx = d
 			break
 		}
-		if surfaceAt(-d) < waterLevel {
+		if surfaceAt(-d) < waterLevel-4 && !isDesert(-d) {
 			sx = -d
 			break
 		}
@@ -476,7 +744,7 @@ func createWorld(text string) {
 		loadSlot(i)
 	}
 	player.vx, player.vy, player.energy, player.squash = 0, 0, 1, 0
-	player.hp = maxHP
+	player.hp = player.maxHP
 	spawnWX = sx
 	ents = ents[:0]
 	worldTime = 0.32 // morning

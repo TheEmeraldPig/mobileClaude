@@ -100,6 +100,77 @@ func runScript() {
 					grid[y*W+x] = SAND
 				}
 			}
+		case "hurt":
+			n, _ := strconv.Atoi(arg)
+			player.invuln = 0
+			hurtPlayer(n, 1)
+		case "essence":
+			n, _ := strconv.Atoi(arg)
+			meta.Essence += n
+		case "upgrades":
+			upgradesFrom = scMain
+			openScreen(scUpgrades)
+		case "tpchest": // move next to the nearest chest (graves first, dungeons with arg=deep)
+			teleportTo(func(t uint8, y int) bool { return t == CHEST && (arg != "deep" || y > H*55/100) })
+		case "tpcore":
+			shiftWindow(floorDiv(coreX(), CW) - NCH/2 - baseChunk)
+			teleportTo(func(t uint8, y int) bool { return t == CORE })
+		case "selectid":
+			for i := 0; i < hotbarN; i++ {
+				if inv[i] != nil && inv[i].ID == arg {
+					selected = i
+				}
+			}
+		case "openchest":
+			for i, t := range grid {
+				if t == CHEST {
+					openChest(i%W, i/W)
+					break
+				}
+			}
+		case "aimcore":
+			aimSX = (float64((coreX()-baseChunk*CW)*CELL) - cam.x) * zoom
+			aimSY = (float64(coreY*CELL) - cam.y) * zoom
+			useActive, scriptAim = true, true
+		case "soil":
+			for i, t := range grid {
+				if t == SOIL {
+					fmt.Printf("soil at %d,%d above=%d player cells x %d-%d y %d-%d aim=%d,%d\n", i%W, i/W, grid[i-W], px0, px1, py0, py1, aimX, aimY)
+				}
+			}
+		case "aimfeet": // aim at the cell arg rows below the mote's feet, a few cells in front
+			dy, _ := strconv.Atoi(arg)
+			wx := player.x + player.w/2 + float64(player.face*16)
+			wy := player.y + player.h + float64(dy*CELL) - 1
+			aimSX, aimSY = (wx-cam.x)*zoom, (wy-cam.y)*zoom
+			useActive, scriptAim = true, true
+		case "around":
+			aimCell()
+			for y := aimY - 3; y <= aimY+3; y++ {
+				row := ""
+				for x := aimX - 6; x <= aimX+6; x++ {
+					row += fmt.Sprintf("%3d", grid[y*W+x])
+				}
+				fmt.Println("around", y, row)
+			}
+		case "useonce":
+			useOnce()
+		case "grow": // ripen every crop in the loaded window
+			for i, t := range grid {
+				if t == CROP1 || t == CROP2 {
+					grid[i] = CROP3
+				}
+			}
+		case "count":
+			c := map[uint8]int{}
+			for _, t := range grid {
+				c[t]++
+			}
+			fmt.Printf("frame %d blocks: plank=%d brick=%d glass=%d soil=%d crop1=%d crop3=%d furnace=%d chest=%d core=%d\n", frame, c[PLANK], c[BRICK], c[GLASS], c[SOIL], c[CROP1], c[CROP3], c[FURNACE], c[CHEST], c[CORE])
+		case "state":
+			fmt.Printf("frame %d screen=%d run=%+v essence=%d\n", frame, cur, run, meta.Essence)
+		case "newrun":
+			startRun(arg)
 		case "shot":
 			shotPath = arg
 		case "quit":
@@ -163,4 +234,28 @@ func invSummary() string {
 		}
 	}
 	return b.String()
+}
+
+// Put the mote in open space next to the first matching block in the loaded window
+func teleportTo(match func(t uint8, y int) bool) {
+	for y := 0; y < H; y++ {
+		for x := 20; x < W-20; x++ {
+			if !match(grid[y*W+x], y) {
+				continue
+			}
+			for dx := 0; dx < 40; dx++ {
+				for _, sx := range []int{x - dx, x + dx} {
+					for sy := y - 16; sy < y+6; sy++ {
+						if sx > 6 && sx < W-12 && sy > 0 && boxFree(sx, sy, 11, 14) {
+							player.x, player.y = float64(sx*CELL), float64(sy*CELL)
+							player.vx, player.vy = 0, 0
+							updatePlayerCells()
+							return
+						}
+					}
+				}
+			}
+			return
+		}
+	}
 }

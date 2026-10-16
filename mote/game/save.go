@@ -84,6 +84,8 @@ type SaveState struct {
 	HP        int              `json:"hp"`
 	SpawnWX   int              `json:"spawnWX"`
 	Drops     []SavedDrop      `json:"drops"`
+	MaxHP     int              `json:"maxHP"`
+	Run       RunStats         `json:"run"`
 }
 
 type SavedDrop struct {
@@ -113,7 +115,8 @@ func serializeState() SaveState {
 	}
 	return SaveState{V: 1, Seed: seedText, BaseChunk: baseChunk, Chunks: chunks, Started: started,
 		PlayerWX: player.x + float64(baseChunk*CW*CELL), PlayerY: player.y, Energy: player.energy, Face: player.face,
-		Inv: append([]*Stack(nil), inv...), Selected: selected, Time: worldTime, HP: player.hp, SpawnWX: spawnWX, Drops: drops}
+		Inv: append([]*Stack(nil), inv...), Selected: selected, Time: worldTime, HP: player.hp, SpawnWX: spawnWX, Drops: drops,
+		MaxHP: player.maxHP, Run: run}
 }
 
 func restoreState(st *SaveState) bool {
@@ -152,8 +155,12 @@ func restoreState(st *SaveState) bool {
 		selected = -1
 	}
 	worldTime, player.hp, spawnWX = st.Time, st.HP, st.SpawnWX
+	player.maxHP, run = st.MaxHP, st.Run
+	if player.maxHP <= 0 {
+		player.maxHP = baseMaxHP()
+	}
 	if player.hp <= 0 {
-		player.hp = maxHP
+		player.hp = player.maxHP
 	}
 	ents = ents[:0]
 	for _, d := range st.Drops {

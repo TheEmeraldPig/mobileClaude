@@ -247,6 +247,12 @@ var (
 )
 
 func startWorldPointer(id int, x, y float64) {
+	// tapping a chest within reach opens it, whatever you are holding
+	aimSX, aimSY = x, y
+	if aimCell() && aimX >= 0 && aimX < W && aimY >= 0 && aimY < H && grid[aimY*W+aimX] == CHEST {
+		openChest(aimX, aimY)
+		return
+	}
 	if selected >= 0 && inv[selected] != nil && useID == -99 {
 		useID, useActive = id, true
 		aimSX, aimSY = x, y
