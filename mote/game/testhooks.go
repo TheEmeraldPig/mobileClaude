@@ -58,6 +58,39 @@ func runScript() {
 			worldTime, _ = strconv.ParseFloat(arg, 64)
 		case "deep": // drop the mote into a cave far below
 			teleportDeep()
+		case "arena": // a closed room with a wall between the mote and its right side, and a tunnel under the wall
+			px, py := int(player.x/CELL), int((player.y+player.h)/CELL)
+			for y := py - 60; y < py+40; y++ {
+				for x := px - 30; x < px+110; x++ {
+					t := uint8(STONE)
+					if y < py && x > px-28 && x < px+108 && y > py-58 {
+						t = EMPTY
+					}
+					grid[y*W+x] = t
+				}
+			}
+			for y := py - 45; y < py; y++ { // the wall
+				for x := px + 40; x < px+46; x++ {
+					grid[y*W+x] = STONE
+				}
+			}
+			dig := func(x0, y0, w, h int) {
+				for y := y0; y < y0+h; y++ {
+					for x := x0; x < x0+w; x++ {
+						grid[y*W+x] = EMPTY
+					}
+				}
+			}
+			dig(px+56, py, 12, 8) // shaft down on the right
+			dig(px+18, py+8, 50, 8)
+			dig(px+18, py, 12, 8) // shaft up on the left
+			for i := range dirty {
+				dirty[i] = true
+			}
+		case "foe": // foe=kind, spawned to the right of the mote
+			k, _ := strconv.Atoi(arg)
+			e := newFoe(entKind(k), int(player.x/CELL)+80, int(player.y/CELL)-4)
+			ents = append(ents, e)
 		case "spawn":
 			for k := 0; k < 6; k++ {
 				ents = append(ents, &Entity{kind: entGloom, x: player.x + float64(30+k*14), y: player.y - 10, w: 8 * CELL, h: 6 * CELL, hp: 4, face: -1})
@@ -100,6 +133,8 @@ func runScript() {
 					grid[y*W+x] = SAND
 				}
 			}
+		case "god": // lots of health, for watching creatures
+			player.maxHP, player.hp = 999, 999
 		case "hurt":
 			n, _ := strconv.Atoi(arg)
 			player.invuln = 0
@@ -173,7 +208,9 @@ func runScript() {
 		case "ents": // list creatures near the mote
 			for _, e := range ents {
 				if e.kind != entItem {
-					fmt.Printf("ent kind=%d at (%.0f,%.0f) hp=%d\n", e.kind, e.x/CELL, e.y/CELL, e.hp)
+					ki := kinds[e.kind]
+					px, py, steps, ok := pathDir(!ki.fly, (e.x+e.w/2)/CELL, (e.y+e.h/2)/CELL, 999)
+					fmt.Printf("ent kind=%d at (%.0f,%.0f) v=(%.2f,%.2f) hp=%d aware=%d path=(%.2f,%.2f) steps=%d ok=%v mote=(%.0f,%.0f) mhp=%d\n", e.kind, e.x/CELL, e.y/CELL, e.vx, e.vy, e.hp, e.aware, px, py, steps, ok, player.x/CELL, player.y/CELL, player.hp)
 				}
 			}
 		case "state":

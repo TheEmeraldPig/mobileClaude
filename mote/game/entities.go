@@ -11,12 +11,35 @@ import (
 type entKind int
 
 const (
-	entGloom  entKind = iota // crawls along cave floors and hops at you
-	entBat                   // flutters through dark caves
-	entItem                  // a dropped item
-	entShade                 // prowls the surface at night
-	entWarden                // the boss guarding the Core
+	entGloom   entKind = iota // crawls along cave floors and hops at you
+	entBat                    // flutters through dark caves and swoops
+	entItem                   // a dropped item
+	entShade                  // prowls the surface at night
+	entWarden                 // the boss guarding the Core
+	entSkitter                // small, quick and skittish
+	entWisp                   // a cold glowing spirit of the deep caves; hovers, then dives
+	entBrute                  // big, slow and tough, deep underground
 )
+
+// What each creature is like. Every speed stays below the mote's, so you can always outrun them.
+type kindInfo struct {
+	w, h, hp, dmg int
+	speed         float64 // fraction of the mote's top speed (always under 1)
+	fly           bool
+	sense         int // how far along a path (in cells) it notices the mote
+}
+
+var kinds = map[entKind]kindInfo{
+	entGloom:   {8, 6, 4, 2, 0.55, false, 100},
+	entBat:     {7, 5, 2, 1, 0.75, true, 130},
+	entShade:   {8, 6, 5, 2, 0.75, false, 140},
+	entWarden:  {16, 12, 40, 4, 0.85, true, 240},
+	entSkitter: {6, 4, 2, 1, 0.85, false, 90},
+	entWisp:    {6, 6, 3, 1, 0.6, true, 140},
+	entBrute:   {12, 9, 12, 3, 0.4, false, 110},
+}
+
+func foeSpeed(k entKind) float64 { return speed * kinds[k].speed }
 
 type Entity struct {
 	kind        entKind
@@ -31,30 +54,56 @@ type Entity struct {
 	n           int
 	pickupDelay int
 	attackTimer int
+	aware       int     // frames left chasing after losing track of the mote
+	stuck       int     // frames spent barely moving while trying to
+	mood        float64 // per-creature random offset so they don't all move alike
 }
 
 var ents []*Entity
 
-const maxCreatures = 10
+const (
+	maxCreatures = 3   // creatures alive at once (not counting the Warden)
+	spawnEvery   = 420 // frames between spawn attempts
+)
+
+func newFoe(k entKind, cx, cy int) *Entity {
+	ki := kinds[k]
+	return &Entity{kind: k, x: float64(cx * CELL), y: float64(cy * CELL), w: float64(ki.w * CELL), h: float64(ki.h * CELL),
+		hp: ki.hp, face: 1, mood: rand.Float64()}
+}
+
+// Pick a creature for this depth (in cells below the surface)
+func foeForDepth(depth int) entKind {
+	type pick struct {
+		k entKind
+		w float64
+	}
+	table := []pick{{entGloom, 45}, {entBat, 35}, {entSkitter, 20}}
+	if depth > 120 {
+		table = append(table, pick{entWisp, 25})
+	}
+	if depth > 240 {
+		table = append(table, pick{entBrute, 22})
+	}
+	sum := 0.0
+	for _, p := range table {
+		sum += p.w
+	}
+	r := rand.Float64() * sum
+	for _, p := range table {
+		if r -= p.w; r < 0 {
+			return p.k
+		}
+	}
+	return entGloom
+}
 
 // ---- Spawning ----
 
 func spawnCreatures() {
-	if frame%45 != 0 {
-		return
-	}
-	n := 0
-	for _, e := range ents {
-		if e.kind != entItem {
-			n++
-		}
-	}
-	if n >= maxCreatures {
-		return
-	}
 	pcx, pcy := (player.x+player.w/2)/CELL, (player.y+player.h/2)/CELL
 	// the Warden wakes when you come near the Core
-	if !run.BossDown {
+	if !run.BossDown && frame%30 == 0 {
 		kx, ky := float64(coreX()-baseChunk*CW), float64(coreY)
 		near := math.Hypot(kx-pcx, ky-pcy) < 90
 		awake := false
@@ -62,46 +111,58 @@ func spawnCreatures() {
 			awake = awake || e.kind == entWarden
 		}
 		if near && !awake {
-			ents = append(ents, &Entity{kind: entWarden, x: kx * CELL, y: (ky - 20) * CELL, w: 16 * CELL, h: 12 * CELL, hp: 40, face: 1})
+			e := newFoe(entWarden, int(kx), int(ky)-20)
+			ents = append(ents, e)
 			toast("The Warden of the Core awakens!")
 			sfx("boom")
 			shake = 8
 			return
 		}
 	}
+	if frame%spawnEvery != 0 || rand.Float64() > 0.4 {
+		return
+	}
+	n := 0
+	for _, e := range ents {
+		if e.kind != entItem && e.kind != entWarden {
+			n++
+		}
+	}
+	if n >= maxCreatures {
+		return
+	}
 	// shades creep over the surface at night
 	if isNight() && rand.Float64() < 0.5 {
-		cx := int(pcx) + []int{-1, 1}[rand.Intn(2)]*(55+rand.Intn(40))
+		cx := int(pcx) + []int{-1, 1}[rand.Intn(2)]*(60+rand.Intn(40))
 		if cx > 8 && cx < W-8 {
 			cy := surfaceAt(baseChunk*CW+cx) - 6
 			if cy > 8 && boxFree(cx-4, cy-4, 8, 6) && lightAt(cx, cy) < 36 {
-				ents = append(ents, &Entity{kind: entShade, x: float64(cx * CELL), y: float64((cy - 4) * CELL), w: 8 * CELL, h: 6 * CELL, hp: 5, face: 1})
+				ents = append(ents, newFoe(entShade, cx-4, cy-4))
 				return
 			}
 		}
 	}
 	for try := 0; try < 12; try++ {
 		ang := rand.Float64() * 2 * math.Pi
-		dist := 45 + rand.Float64()*70
+		dist := 55 + rand.Float64()*70
 		cx, cy := int(pcx+math.Cos(ang)*dist), int(pcy+math.Sin(ang)*dist*0.6)
-		if cx < 4 || cx >= W-4 || cy < 4 || cy >= H-4 {
+		if cx < 8 || cx >= W-8 || cy < 8 || cy >= H-8 {
 			continue
 		}
-		if cy < surfaceAt(baseChunk*CW+cx)+18 || lightAt(cx, cy) > 8 { // only deep and in the dark
+		depth := cy - surfaceAt(baseChunk*CW+cx)
+		if depth < 18 || lightAt(cx, cy) > 8 { // only deep and in the dark
 			continue
 		}
-		if !boxFree(cx-3, cy-3, 7, 7) {
+		k := foeForDepth(depth)
+		ki := kinds[k]
+		if !boxFree(cx-1, cy-1, ki.w+2, ki.h+2) {
 			continue
 		}
-		e := &Entity{x: float64(cx * CELL), y: float64(cy * CELL), face: 1}
-		if rand.Float64() < 0.55 {
-			e.kind, e.w, e.h, e.hp = entGloom, 8*CELL, 6*CELL, 4
-			// drop it to the floor
+		e := newFoe(k, cx, cy)
+		if !ki.fly { // drop it to the floor
 			for i := 0; i < 80 && !entHits(e, e.x, e.y+CELL); i++ {
 				e.y += CELL
 			}
-		} else {
-			e.kind, e.w, e.h, e.hp = entBat, 7*CELL, 5*CELL, 2
 		}
 		ents = append(ents, e)
 		return
@@ -175,6 +236,12 @@ func entMove(e *Entity) bool {
 
 func updateEntities() {
 	spawnCreatures()
+	for _, e := range ents {
+		if e.kind != entItem {
+			updateFields()
+			break
+		}
+	}
 	pcx, pcy := player.x+player.w/2, player.y+player.h/2
 	out := ents[:0]
 	for _, e := range ents {
@@ -186,63 +253,8 @@ func updateEntities() {
 		dx, dy := pcx-ex, pcy-ey
 		dist := math.Hypot(dx, dy) / CELL
 		switch e.kind {
-		case entGloom:
-			e.vy = math.Min(e.vy+0.4, 8)
-			if dist < 70 && math.Abs(dy)/CELL < 30 {
-				e.face = sign(dx)
-				e.vx += (float64(e.face)*1.3 - e.vx) * 0.1
-				if e.onGround && (dy < -CELL*6 || rand.Float64() < 0.01) {
-					e.vy = -5.5
-				}
-			} else {
-				if e.t%120 == 0 {
-					e.face = []int{-1, 1}[rand.Intn(2)]
-				}
-				e.vx += (float64(e.face)*0.5 - e.vx) * 0.1
-			}
-			if entMove(e) && e.onGround {
-				e.vy = -5
-			}
-		case entShade:
-			e.vy = math.Min(e.vy+0.4, 8)
-			e.face = sign(dx)
-			e.vx += (float64(e.face)*1.7 - e.vx) * 0.1
-			if e.onGround && (dy < -CELL*6 || rand.Float64() < 0.015) {
-				e.vy = -6
-			}
-			if entMove(e) && e.onGround {
-				e.vy = -6
-			}
-			// shades fade away in daylight
-			if !isNight() && rand.Float64() < 0.01 {
-				e.hp = 0
-			}
-		case entWarden:
-			e.face = sign(dx)
-			if e.t%200 < 40 && e.t > 100 { // charge
-				e.vx += (dx/(dist*CELL+1)*5 - e.vx) * 0.2
-				e.vy += (dy/(dist*CELL+1)*5 - e.vy) * 0.2
-			} else {
-				e.vx += (dx/(dist*CELL+1)*1.4 - e.vx) * 0.05
-				e.vy += (dy/(dist*CELL+1)*1.4 + math.Sin(float64(e.t)*0.05)*0.8 - e.vy) * 0.05
-			}
-			entMove(e)
-		case entBat:
-			wob := math.Sin(float64(e.t) * 0.15)
-			if dist < 80 {
-				e.vx += (dx/(dist*CELL+1)*1.8 - e.vx) * 0.05
-				e.vy += (dy/(dist*CELL+1)*1.8 + wob*0.6 - e.vy) * 0.05
-			} else {
-				e.vx += (math.Cos(float64(e.t)*0.01)*0.8 - e.vx) * 0.05
-				e.vy += (wob*0.5 - e.vy) * 0.05
-			}
-			// bats shy away from bright light
-			if lightAt(int(ex/CELL), int(ey/CELL)) > 44 {
-				e.vx -= float64(sign(dx)) * 0.3
-				e.vy -= 0.2
-			}
-			e.face = sign(e.vx)
-			entMove(e)
+		default:
+			think(e, dx, dy, dist)
 		case entItem:
 			e.vy = math.Min(e.vy+0.35, 6)
 			e.vx *= 0.92
@@ -266,7 +278,7 @@ func updateEntities() {
 		}
 		// creatures hurt the mote on contact
 		if e.kind != entItem && e.hp > 0 && overlap(e) {
-			hurtPlayer(map[entKind]int{entGloom: 2, entBat: 1, entShade: 2, entWarden: 4}[e.kind], sign(dx))
+			hurtPlayer(kinds[e.kind].dmg, sign(dx))
 		}
 		if e.hp <= 0 {
 			killEntity(e)
@@ -280,6 +292,149 @@ func updateEntities() {
 		out = append(out, e)
 	}
 	ents = out
+}
+
+// Creature behaviour: follow the path to the mote when they've noticed it, each in its own way
+func think(e *Entity, dx, dy, dist float64) {
+	ki := kinds[e.kind]
+	ex, ey := (e.x+e.w/2)/CELL, (e.y+e.h/2)/CELL
+	top := foeSpeed(e.kind)
+	if cellAt(e.x+e.w/2, e.y+e.h/2) == WATER {
+		top *= 0.55 // the mote is slowed in water too, but less
+	}
+	// notice the mote when it is near along a real path; keep chasing a while after
+	reach := ki.sense / fbs
+	if e.aware > 0 {
+		reach *= 2
+	}
+	px, py, steps, chasing := pathDir(!ki.fly, ex, ey, reach)
+	if chasing {
+		e.aware = 240
+	} else if e.aware > 0 {
+		e.aware--
+	}
+	if dist < 9 { // right next to the mote: go straight for it
+		px, py, chasing = dx/(dist*CELL+0.01), dy/(dist*CELL+0.01), true
+	}
+	phase := (e.t + int(e.mood*600)) % 600
+
+	if ki.fly {
+		wob := math.Sin(float64(e.t)*0.12 + e.mood*6)
+		wx, wy := 0.0, 0.0
+		switch {
+		case !chasing:
+			// drift about
+			wx = math.Cos(float64(e.t)*0.01+e.mood*9) * 0.5 * top
+			wy = wob * 0.4 * top
+		case e.kind == entBat && phase%200 < 45 && dist < 30:
+			// swoop away, then come back around
+			wx, wy = -px*top+(-py)*0.6*top, -py*top-0.5*top
+		case e.kind == entWisp && phase < 300 && steps*fbs < 40:
+			// hover at a distance, circling the mote, before diving
+			ox, oy := -py, px // sideways
+			keep := (float64(steps*fbs) - 22) / 22
+			wx = (ox*0.8+px*keep)*top + wob*0.2
+			wy = (oy*0.8+py*keep)*top + wob*0.2
+		case e.kind == entWarden && e.t%240 < 60 && e.t > 120:
+			wx, wy = px*top, py*top // charge
+		default:
+			slow := 1.0
+			if e.kind == entWarden {
+				slow = 0.55
+			}
+			wx = (px - py*wob*0.35) * top * slow
+			wy = (py + px*wob*0.35) * top * slow
+		}
+		// bats shy away from torches, lanterns and daylight (but not the mote's own glow)
+		if e.kind == entBat && lightAt(int(ex), int(ey)) > 52 {
+			wx -= float64(sign(dx)) * top
+			wy -= 0.5 * top
+		}
+		e.vx += (wx - e.vx) * 0.08
+		e.vy += (wy - e.vy) * 0.08
+		if e.hurt == 0 {
+			if l := math.Hypot(e.vx, e.vy); l > top {
+				e.vx, e.vy = e.vx/l*top, e.vy/l*top
+			}
+		}
+		if e.vx != 0 {
+			e.face = sign(e.vx)
+		}
+		x0, y0 := e.x, e.y
+		entMove(e)
+		unstickFoe(e, x0, y0, top)
+		return
+	}
+
+	// walkers
+	e.vy = math.Min(e.vy+0.4, 8)
+	want := 0.0
+	jump := false
+	switch {
+	case chasing:
+		if math.Abs(px) > 0.15 {
+			e.face = sign(px)
+		}
+		want = float64(e.face) * top
+		if math.Abs(px) < 0.3 && py < -0.5 { // the way on is straight up: hop
+			want *= 0.3
+			jump = true
+		} else if py < -0.45 {
+			jump = true
+		}
+		// skitters lose their nerve now and then and scuttle back
+		if e.kind == entSkitter && phase%240 < 50 {
+			want = -want * 0.8
+		}
+	default:
+		// wander, turning now and then and at walls
+		if e.t%150 == 0 && rand.Float64() < 0.5 {
+			e.face = -e.face
+		}
+		want = float64(e.face) * top * 0.35
+		if e.kind == entShade {
+			want = float64(sign(dx)) * top * 0.5 // shades drift toward the mote even unseen
+		}
+	}
+	e.vx += (want - e.vx) * 0.12
+	if e.hurt == 0 {
+		e.vx = math.Max(-top, math.Min(top, e.vx))
+	}
+	jv := map[entKind]float64{entGloom: 5.6, entShade: 6, entSkitter: 5.4, entBrute: 5.4}[e.kind] // all clear 4 blocks
+	if jump && e.onGround {
+		e.vy = -jv
+	}
+	x0, y0 := e.x, e.y
+	bumped := entMove(e)
+	unstickFoe(e, x0, y0, top)
+	if bumped && e.onGround {
+		if chasing {
+			e.vy = -jv
+		} else {
+			e.face = -e.face
+		}
+	}
+	// shades fade away in daylight
+	if e.kind == entShade && !isNight() && rand.Float64() < 0.01 {
+		e.hp = 0
+	}
+}
+
+// A creature that keeps trying to move but goes nowhere gets a shove in a random direction
+func unstickFoe(e *Entity, x0, y0, top float64) {
+	if math.Hypot(e.x-x0, e.y-y0) < 0.05 && e.hurt == 0 {
+		e.stuck++
+	} else {
+		e.stuck = 0
+	}
+	if e.stuck > 25 {
+		a := rand.Float64() * 2 * math.Pi
+		e.vx, e.vy = math.Cos(a)*top, math.Sin(a)*top
+		if !kinds[e.kind].fly && e.onGround {
+			e.vy = -4
+		}
+		e.stuck = 0
+	}
 }
 
 func overlap(e *Entity) bool {
@@ -300,6 +455,20 @@ func killEntity(e *Entity) {
 	case entShade:
 		if rand.Float64() < 0.5 {
 			dropItem("seeds", 1+rand.Intn(3), e.x, e.y, 0)
+		}
+	case entSkitter:
+		if rand.Float64() < 0.6 {
+			dropItem("copper", 1+rand.Intn(2), e.x, e.y, 0)
+		}
+	case entWisp:
+		dropItem("crystal", 1+rand.Intn(2), e.x, e.y, 0)
+		if rand.Float64() < 0.15 {
+			dropItem("gem", 1, e.x, e.y, 0)
+		}
+	case entBrute:
+		dropItem("iron", 2+rand.Intn(3), e.x, e.y, 0)
+		if rand.Float64() < 0.3 {
+			dropItem("heart", 1, e.x, e.y, 0)
 		}
 	case entWarden:
 		run.BossDown = true
@@ -376,7 +545,48 @@ var batSprite = [][]string{{
 	"O.O.O.O",
 }}
 
-var entCol = map[byte][3]int{'O': {30, 22, 46}, 'G': {82, 64, 120}, 'S': {40, 34, 70}, 'P': {150, 60, 140}, 'K': {255, 120, 220}}
+var skitterSprite = [][]string{{
+	".O..O.",
+	"ORRRRO",
+	"OeRReO",
+	"O.OO.O",
+}, {
+	"O....O",
+	"ORRRRO",
+	"OeRReO",
+	".O..O.",
+}}
+
+var wispSprite = [][]string{{
+	"..WW..",
+	".WVVW.",
+	"WVeeVW",
+	"WVVVVW",
+	".WVVW.",
+	"..W.W.",
+}, {
+	"..WW..",
+	".WVVW.",
+	"WVeeVW",
+	"WVVVVW",
+	".WVVW.",
+	".W.W..",
+}}
+
+var bruteSprite = []string{
+	"...OOOOOO...",
+	"..OBBBBBBO..",
+	".OBBBBBBBBO.",
+	"OBBeBBBBeBBO",
+	"OBBBBBBBBBBO",
+	"OBMBBBBBBMBO",
+	".OBBBBBBBBO.",
+	".OBO....OBO.",
+	".OO......OO.",
+}
+
+var entCol = map[byte][3]int{'O': {30, 22, 46}, 'G': {82, 64, 120}, 'S': {40, 34, 70}, 'P': {150, 60, 140}, 'K': {255, 120, 220},
+	'R': {128, 74, 54}, 'W': {120, 200, 255}, 'V': {200, 240, 255}, 'B': {84, 78, 96}, 'M': {70, 110, 66}}
 
 var wardenSprite = []string{
 	"..OO........OO..",
@@ -421,6 +631,12 @@ func drawEntities(lit, put func(x, y int, c [3]int, s int), ox, oy int) {
 				rows = batSprite[(e.t/6)%2]
 			case entWarden:
 				rows = wardenSprite
+			case entSkitter:
+				rows = skitterSprite[(e.t/4)%2]
+			case entWisp:
+				rows = wispSprite[(e.t/10)%2]
+			case entBrute:
+				rows = bruteSprite
 			}
 			for y, r := range rows {
 				for x := 0; x < len(r); x++ {
@@ -437,8 +653,8 @@ func drawEntities(lit, put func(x, y int, c [3]int, s int), ox, oy int) {
 						put(bx+x, by+y, [3]int{255, 255, 255}, 0)
 					case e.kind == entShade && ch == 'G':
 						lit(bx+x, by+y, entCol['S'], 0)
-					case e.kind == entWarden:
-						put(bx+x, by+y, entCol[ch], 0) // the Warden glows with the Core's light
+					case e.kind == entWarden || e.kind == entWisp:
+						put(bx+x, by+y, entCol[ch], 0) // these glow, visible in the dark
 					default:
 						lit(bx+x, by+y, entCol[ch], 0)
 					}
