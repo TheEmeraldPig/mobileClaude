@@ -89,6 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: android
@@ -118,7 +119,8 @@ jobs:
             PID=$(adb shell pidof com.theemeraldpig.mote || true); echo "Mote pid: $PID"
             if [ -n "$PID" ]; then grep " $PID " logcat.txt | tail -150; fi
             grep -E "GoLog|Mote|FATAL|DEBUG  :|libc  " logcat.txt | tail -100 || true
-            for f in shot-menu.png shot-later.png; do echo "== $f"; convert $f -resize 200x200 png:- | base64 -w0; echo; done
+            adb shell dumpsys activity top | grep -iE "ACTIVITY|mote" | head -5 || true
+            for f in shot-menu.png shot-later.png; do echo "== $f"; python3 mote/android/tools/shrink_png.py $f 128 || true; done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
