@@ -18,6 +18,9 @@ const DEFAULT_SETTINGS = {
   setups: ["Breakout", "Pullback", "Gap and Go", "VWAP Reclaim", "Reversal", "Momentum", "Other"],
   emotions: ["Calm", "Confident", "Excited", "FOMO", "Anxious", "Frustrated", "Bored", "Greedy"],
   mistake_tags: ["Chased entry", "Moved stop", "No plan", "Exited too early", "Oversized", "Ignored rules"],
+  // What paper trading must show before moving to real money (see readiness()).
+  readiness: { min_trades: 100, min_days: 20, min_profit_factor: 1.5, min_green_days_pct: 60, min_day_ratio: 1.5,
+    max_drawdown_pct: 10, max_rule_break_pct: 10 },
 };
 
 const TRADE_FIELDS = ["ticker", "direction", "entry_time", "entry_price", "exit_time", "exit_price", "shares",
@@ -91,6 +94,46 @@ function inWindow(dt, windows) {
 }
 function journalMistakes(t) {
   return String(t.mistakes || "").split(",").map(s => s.trim()).filter(Boolean);
+}
+
+// ---------- market conditions (from the "context" saved for each trade) ----------
+
+const CONTEXT_GROUPS = {
+  gap: ["Stock's gap at the open", c => {
+    const g = c.daily?.gap_pct;
+    if (g === null || g === undefined) return null;
+    if (g >= 2) return ["Gapped up 2%+", "trades on days the stock gapped up 2% or more"];
+    if (g <= -2) return ["Gapped down 2%+", "trades on days the stock gapped down 2% or more"];
+    return ["Small gap (under 2%)", "trades on days the stock had only a small gap"];
+  }],
+  rel_volume: ["Stock's volume vs normal", c => {
+    const v = c.daily?.rel_volume;
+    if (v === null || v === undefined) return null;
+    if (v >= 2) return ["Heavy (2× normal or more)", "trades on heavy-volume days (2× normal or more)"];
+    if (v >= 1) return ["Normal to 2×", "trades on normal-volume days"];
+    return ["Below normal", "trades on quieter-than-normal days"];
+  }],
+  market: ["Overall market (SPY) that day", c => {
+    const m = c.market?.spy_change_pct;
+    if (m === null || m === undefined) return null;
+    if (m >= 0.3) return ["Market up", "trades on days the overall market rose"];
+    if (m <= -0.3) return ["Market down", "trades on days the overall market fell"];
+    return ["Market flat", "trades on flat market days"];
+  }],
+  vwap: ["Entry vs VWAP", c => c.entry_vs_vwap === "above" ? ["Above VWAP", "trades entered above VWAP"]
+    : c.entry_vs_vwap === "below" ? ["Below VWAP", "trades entered below VWAP"] : null],
+  news: ["News that day", c => !Array.isArray(c.news) ? null
+    : c.news.length ? ["Had news", "trades on days the stock had news"] : ["No news", "trades on days the stock had no news"]],
+};
+const CONTEXT_ORDER = {
+  gap: ["Gapped up 2%+", "Small gap (under 2%)", "Gapped down 2%+"],
+  rel_volume: ["Heavy (2× normal or more)", "Normal to 2×", "Below normal"],
+  market: ["Market up", "Market flat", "Market down"],
+  vwap: ["Above VWAP", "Below VWAP"],
+  news: ["Had news", "No news"],
+};
+function contextBucket(key, ctx) {
+  return ctx ? CONTEXT_GROUPS[key][1](ctx) : null;
 }
 
 // ---------- validate one trade ----------
@@ -303,6 +346,16 @@ function group(closed, keyfunc, { order, byCount } = {}) {
   return keys.map(k => groupStats(k, groups.get(k), phrases[k]));
 }
 
+function contextBreakdowns(closed) {
+  const out = {};
+  for (const key of Object.keys(CONTEXT_GROUPS)) {
+    const withCtx = closed.filter(t => contextBucket(key, t.ctx));
+    if (!withCtx.length) continue;
+    out["ctx_" + key] = { title: CONTEXT_GROUPS[key][0], context: true, rows: group(withCtx, t => contextBucket(key, t.ctx), { order: CONTEXT_ORDER[key] }) };
+  }
+  return out;
+}
+
 function breakdowns(closed) {
   const planLabel = { 1: "Followed plan", 0: "Broke plan", null: "Not recorded" };
   const planPhrase = { 1: "trades where you followed your plan", 0: "trades where you broke your plan", null: "trades with no plan answer" };
@@ -314,6 +367,7 @@ function breakdowns(closed) {
     hold_time: { title: "Hold time", rows: group(closed, t => [holdBucket(t), `trades held ${holdBucket(t).toLowerCase()}`], { order: [...HOLD_BUCKETS.map(b => b[1]), "Overnight or longer"] }) },
     plan: { title: "Followed my plan?", rows: group(closed, t => [planLabel[t.followed_plan ?? null], planPhrase[t.followed_plan ?? null]], { order: Object.values(planLabel) }) },
     emotion: { title: "Emotion before entry", rows: group(closed, t => t.emotion_before ? [t.emotion_before, `trades when you felt "${t.emotion_before}"`] : ["(not recorded)", "trades with no emotion recorded"], { byCount: true }) },
+    ...contextBreakdowns(closed),
   };
 }
 
@@ -356,7 +410,7 @@ function insights(closed, s, bd, costs) {
     add("bad", `Your average loss (${plainMoney(s.avg_loss)}) is bigger than your average win (${plainMoney(s.avg_win)}). At that size you need to win more than ${pctText(need)} of trades just to break even; you win ${pctText(s.win_rate)}.`,
       (s.avg_loss - s.avg_win) * s.losses);
   }
-  for (const key of ["time_of_day", "day_of_week", "ticker", "setup", "hold_time", "emotion"]) {
+  for (const key of ["time_of_day", "day_of_week", "ticker", "setup", "hold_time", "emotion", ...Object.keys(bd).filter(k => k.startsWith("ctx_"))]) {
     for (const g of bd[key].rows) {
       if (g.count < MIN_SAMPLE || g.label.startsWith("(")) continue;
       const detail = `(${g.total_pnl < 0 ? g.losses : g.wins} of ${g.count} trades, ${money(g.total_pnl)} total)`;
@@ -400,6 +454,67 @@ function insights(closed, s, bd, costs) {
   return [...out.filter(i => i.pinned), ...pick("bad", 7), ...pick("good", 4), ...pick("info", 2)];
 }
 
+// ---------- days ----------
+
+function dailyResults(closed) {
+  const days = new Map();
+  for (const t of closed) {
+    const d = t.exit_dt.date;
+    if (!days.has(d)) days.set(d, { date: d, pnl: 0, trades: 0 });
+    const x = days.get(d);
+    x.pnl += t.pnl; x.trades++;
+  }
+  return [...days.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+function dayStats(days) {
+  const green = days.filter(d => d.pnl > 0), red = days.filter(d => d.pnl < 0);
+  const avgGreen = green.length ? sum(green.map(d => d.pnl)) / green.length : null;
+  const avgRed = red.length ? -sum(red.map(d => d.pnl)) / red.length : null;
+  return { days: days.length, green: green.length, red: red.length,
+    green_pct: days.length ? green.length / days.length : null,
+    avg_day: days.length ? sum(days.map(d => d.pnl)) / days.length : null,
+    avg_green: avgGreen, avg_red: avgRed,
+    day_ratio: avgGreen !== null && avgRed ? avgGreen / avgRed : avgGreen !== null ? Infinity : null,
+    best: days.length ? Math.max(...days.map(d => d.pnl)) : null, worst: days.length ? Math.min(...days.map(d => d.pnl)) : null };
+}
+
+// ---------- ready for real money? ----------
+// Judged only on YOUR PAPER trades. Every check must pass.
+
+function readiness(trades, settings) {
+  const R = { ...DEFAULT_SETTINGS.readiness, ...(settings.readiness || {}) };
+  const mine = prepare(trades, settings).filter(t => !t.trader && t.account_type === "paper" && t.closed);
+  const s = summary(mine, settings);
+  const days = dailyResults(mine);
+  const d = dayStats(days);
+  const acct = Number(settings.account_size) || 1;
+  const ddPct = s.max_drawdown / acct * 100;
+  const breaks = mine.length ? mine.filter(t => t.flags.length).length / mine.length * 100 : null;
+  const limit = Number(settings.daily_loss_limit) || 0;
+  const overLimit = limit ? days.filter(x => x.pnl <= -limit).length : 0;
+  const recent = [...mine].sort(byExit).slice(-20);
+  const recentExp = recent.length ? sum(recent.map(t => t.pnl)) / recent.length : null;
+  const c = (label, value, target, pass, progress, why) => ({ label, value, target, pass: !!pass, progress: Math.max(0, Math.min(1, progress ?? (pass ? 1 : 0))), why });
+  const criteria = [
+    c("Paper trades", `${s.trades}`, `${R.min_trades} or more`, s.trades >= R.min_trades, s.trades / R.min_trades, "Enough trades for the numbers to mean something."),
+    c("Trading days", `${d.days}`, `${R.min_days} or more`, d.days >= R.min_days, d.days / R.min_days, "Shows it works across different market days, not one lucky week."),
+    c("Average day", d.avg_day === null ? "–" : money(d.avg_day), "above $0", d.avg_day > 0, null, "You make money per day on average, after fees."),
+    c("Green days", d.green_pct === null ? "–" : pctText(d.green_pct), `${R.min_green_days_pct}% or more`, d.green_pct !== null && d.green_pct * 100 >= R.min_green_days_pct,
+      d.green_pct === null ? 0 : d.green_pct * 100 / R.min_green_days_pct, "Most days end up, not down."),
+    c("Average green day vs average red day", d.day_ratio === null ? "–" : d.day_ratio === Infinity ? "no red days" : `${d.day_ratio.toFixed(2)}×`, `${R.min_day_ratio}× or more`,
+      d.day_ratio !== null && d.day_ratio >= R.min_day_ratio, d.day_ratio === null ? 0 : d.day_ratio / R.min_day_ratio, "Good days are clearly bigger than bad days."),
+    c("Profit factor", s.profit_factor === null ? (s.wins ? "no losses" : "–") : s.profit_factor.toFixed(2), `${R.min_profit_factor} or more`,
+      s.profit_factor === null ? s.wins > 0 && s.trades >= R.min_trades : s.profit_factor >= R.min_profit_factor,
+      s.profit_factor === null ? (s.wins ? 1 : 0) : s.profit_factor / R.min_profit_factor, "Total won is well above total lost."),
+    c("Worst drawdown", `${ddPct.toFixed(1)}% of account`, `${R.max_drawdown_pct}% or less`, s.trades > 0 && ddPct <= R.max_drawdown_pct, null, "Losing streaks stay small enough to survive."),
+    c("Trades that broke a rule", breaks === null ? "–" : `${breaks.toFixed(0)}%`, `${R.max_rule_break_pct}% or less`, breaks !== null && breaks <= R.max_rule_break_pct, null, "You trade your plan; the results aren't luck."),
+    c("Days past your daily loss limit", `${overLimit}`, "0", s.trades > 0 && overLimit === 0, null, "You always stop when you hit your limit."),
+    c("Last 20 trades", recentExp === null ? "–" : `${money(recentExp)} per trade`, "above $0", recent.length >= 20 && recentExp > 0, null, "You're still profitable lately, not just early on."),
+  ];
+  return { ready: criteria.every(x => x.pass), passed: criteria.filter(x => x.pass).length, criteria, days, day_stats: d, summary: s };
+}
+
 // ---------- top level ----------
 
 function prepare(trades, settings) {
@@ -436,15 +551,18 @@ function filterTrades(trades, f = {}) {
   });
 }
 
-function fullReport(trades, settings, f = {}) {
+function fullReport(trades, settings, f = {}, contexts = {}) {
   const enriched = filterTrades(prepare(trades, settings), f);
+  for (const t of enriched) t.ctx = contexts[t.id] || null;
   const closed = enriched.filter(t => t.closed);
   const s = summary(closed, settings);
   const bd = breakdowns(closed);
   const costs = mistakeCosts(closed);
   let ins = insights(closed, s, bd, costs);
   if (f.who && f.who !== "me") ins = ins.map(i => ({ ...i, text: aboutSomeoneElse(i.text, whoLabel(f.who)) }));
-  return { summary: s, breakdowns: bd, mistakes: costs, insights: ins,
+  const days = dailyResults(closed);
+  return { summary: s, breakdowns: bd, mistakes: costs, insights: ins, days, day_stats: dayStats(days),
+    with_context: closed.filter(t => t.ctx).length,
     open_trades: enriched.filter(t => !t.closed).length, trades: enriched };
 }
 
@@ -476,7 +594,8 @@ function traderComparison(trades, settings, f = {}) {
 
 // ---------- pre-trade check ----------
 
-function preTradeCheck(plan, trades, settings, nowStr) {
+// plan.conditions (optional): { gap, rel_volume, market, vwap } using the bucket labels in CONTEXT_ORDER.
+function preTradeCheck(plan, trades, settings, nowStr, contexts = {}) {
   const direction = (plan.direction || "long").toLowerCase();
   const entry = Number(plan.entry), shares = Number(plan.shares);
   if (!(entry > 0)) throw new Error("Entry price must be a number above 0.");
@@ -535,6 +654,7 @@ function preTradeCheck(plan, trades, settings, nowStr) {
   }
 
   const closed = enriched.filter(t => t.closed);
+  for (const t of closed) t.ctx = contexts[t.id] || null;
   const [bucket] = timeBucket(when);
   const history = [];
   const hist = (title, subset) => {
@@ -551,6 +671,10 @@ function preTradeCheck(plan, trades, settings, nowStr) {
   judged.push(hist(`Any trade at ${bucket}`, closed.filter(t => timeBucket(t.entry_dt)[0] === bucket)));
   if (ticker) hist(`${ticker} trades`, closed.filter(t => t.ticker === ticker));
   hist(`${direction[0].toUpperCase() + direction.slice(1)} trades`, closed.filter(t => t.direction === direction));
+  for (const [key, label] of Object.entries(plan.conditions || {})) {
+    if (!label || !CONTEXT_GROUPS[key]) continue;
+    judged.push(hist(`${CONTEXT_GROUPS[key][0]}: ${label}`, closed.filter(t => contextBucket(key, t.ctx)?.[0] === label)));
+  }
   // Other traders: shown for learning, never counted as your own history
   const others = everyone.filter(t => t.trader && t.closed);
   const otherRows = [];

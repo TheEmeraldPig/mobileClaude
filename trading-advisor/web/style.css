@@ -224,3 +224,32 @@ details summary { cursor: pointer; color: var(--text-2); }
 .confirm-box .row { margin-top: .5rem; }
 .link-btn { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+
+/* readiness scorecard */
+.score { display: grid; gap: .45rem; }
+.score-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: .6rem; align-items: center; }
+.score-row .meter { grid-column: 2 / -1; height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.score-row .meter i { display: block; height: 100%; background: var(--warn); }
+.score-row.pass .meter i { background: var(--good); }
+.score-row .val { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .85rem; text-align: right; }
+.score-head { display: flex; flex-wrap: wrap; gap: .4rem 1rem; align-items: baseline; margin-bottom: .6rem; }
+.pill { display: inline-block; border-radius: 999px; padding: .15rem .65rem; font-weight: 600; font-size: .85rem; }
+.pill.ready { background: var(--good-bg); color: var(--text); border: 1px solid var(--good); }
+.pill.notyet { background: var(--warn-bg); color: var(--text); border: 1px solid var(--warn); }
+/* candles */
+.candles .up { fill: var(--pos); stroke: var(--pos); }
+.candles .down { fill: var(--neg); stroke: var(--neg); }
+.candles .wick { stroke-width: 1; }
+.candles .entry { stroke: var(--text); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.candles .lvl-stop { stroke: var(--neg); stroke-width: 1; stroke-dasharray: 6 4; }
+.candles .lvl-target { stroke: var(--good); stroke-width: 1; stroke-dasharray: 6 4; }
+.candles .mark { stroke: var(--surface); stroke-width: 2; }
+.candles .mark.in { fill: var(--text); }
+.candles .mark.out { fill: var(--warn); }
+.candles .vol { fill: var(--text-3); opacity: .35; }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: .5rem .9rem; margin: .7rem 0; font-size: .88rem; }
+.facts b { display: block; font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 600; }
+.news { list-style: none; padding: 0; margin: .3rem 0 0; font-size: .88rem; display: grid; gap: .3rem; }
+.news time { color: var(--text-3); font-family: "IBM Plex Mono", ui-monospace, monospace; margin-right: .4rem; }
+.legend { display: flex; flex-wrap: wrap; gap: .3rem 1rem; font-size: .78rem; color: var(--text-2); }
+.legend i { display: inline-block; width: 14px; height: 0; border-top: 2px dashed; vertical-align: middle; margin-right: .3rem; }

@@ -87,6 +87,8 @@
         <div class="live-calc num" id="live-calc"></div>
       </div>
 
+      <div class="card" id="ctx-card" hidden></div>
+
       <div class="card">
         <h2>Journal</h2>
         <div class="form-grid">
@@ -188,6 +190,14 @@
           <label class="field"><span>Account</span><select name="account_type"><option value="real">Real money</option><option value="paper">Paper</option></select></label>
           <label class="field"><span>Time (ET)</span><input name="time" type="datetime-local"><span class="hint">Defaults to now. Change it to test other times.</span></label>
         </div>
+        <h3 style="margin-top:1rem">Today's conditions <small class="muted">(optional)</small></h3>
+        <p class="hint">Fill these in from your chart and the advisor shows how your past trades did in the same conditions.</p>
+        <div class="form-grid">
+          <label class="field"><span>Stock's gap at the open</span><select name="cond_gap"><option value="">Don't know</option><option>Gapped up 2%+</option><option>Small gap (under 2%)</option><option>Gapped down 2%+</option></select></label>
+          <label class="field"><span>Stock's volume vs normal</span><select name="cond_rel_volume"><option value="">Don't know</option><option>Heavy (2× normal or more)</option><option>Normal to 2×</option><option>Below normal</option></select></label>
+          <label class="field"><span>Overall market (SPY) today</span><select name="cond_market"><option value="">Don't know</option><option>Market up</option><option>Market flat</option><option>Market down</option></select></label>
+          <label class="field"><span>Entry vs VWAP</span><select name="cond_vwap"><option value="">Don't know</option><option>Above VWAP</option><option>Below VWAP</option></select></label>
+        </div>
         <div class="row" style="margin-top:1rem"><button class="primary" type="submit">Check this trade</button></div>
       </form>
       <div id="pt-result"><div class="card empty">Fill in a planned trade and press <b>Check this trade</b>.</div></div>
@@ -213,6 +223,19 @@
         <h3>No-trade time windows (Eastern Time)</h3>
         <div id="windows"></div>
         <button type="button" class="small" id="add-window">+ Add window</button>
+      </div>
+      <div class="card">
+        <h3>Ready for real money: my targets</h3>
+        <p class="muted">The Dashboard's scorecard checks your <b>paper</b> trades against these. Every check must pass before moving to real money. Don't lower them to get there faster.</p>
+        <div class="form-grid">
+          <label class="field"><span>Paper trades, at least</span><input name="r_min_trades" type="number" step="1" min="1" required></label>
+          <label class="field"><span>Trading days, at least</span><input name="r_min_days" type="number" step="1" min="1" required></label>
+          <label class="field"><span>Green days, at least (%)</span><input name="r_min_green_days_pct" type="number" step="any" min="0" max="100" required></label>
+          <label class="field"><span>Avg green day ÷ avg red day, at least</span><input name="r_min_day_ratio" type="number" step="any" min="0" required></label>
+          <label class="field"><span>Profit factor, at least</span><input name="r_min_profit_factor" type="number" step="any" min="0" required></label>
+          <label class="field"><span>Worst drawdown, at most (% of account)</span><input name="r_max_drawdown_pct" type="number" step="any" min="0" required></label>
+          <label class="field"><span>Trades breaking a rule, at most (%)</span><input name="r_max_rule_break_pct" type="number" step="any" min="0" max="100" required></label>
+        </div>
       </div>
       <div class="card">
         <h3>My lists</h3>

@@ -98,6 +98,27 @@ Click on the terminal window and press **Ctrl + C**, or just close the window. Y
 
 ---
 
+## Market context: what the stock was doing
+
+For each trade, Claude can fetch what the market looked like and save it with the trade:
+
+- the stock's **5-minute chart** for that day, with your entry, exit, stop and target drawn on it
+- the **gap** at the open, **volume vs normal**, the day's range and ATR
+- what the **overall market (SPY)** did that day
+- **VWAP** when you entered, and whether you bought above or below it
+- **news headlines** about the stock that day
+
+The Dashboard then breaks your results down by these conditions (gap ups vs gap downs, heavy vs quiet volume, market up vs down days, above vs below VWAP, news days). On **Pre-Trade Check** you can enter today's conditions and see how your past trades did in the same situation.
+
+To use it, just ask Claude: *"fetch market data for my trades"*. It needs a free Alpaca account's market-data keys, set up once:
+1. Sign up at alpaca.markets and create API keys (paper account keys are fine; they're only used to read data).
+2. In this Claude Code environment's settings (cloud environment menu in the session title bar → **Edit**), add them as secrets named `ALPACA_DATA_KEY_ID` and `ALPACA_DATA_SECRET_KEY`. Never paste keys into the chat.
+3. In the same settings, under **Network access**, allow `data.alpaca.markets`.
+
+## Ready for real money?
+
+The top of the Dashboard shows a scorecard built only from your **paper** trades. All 10 checks must pass before moving to real money: enough trades and days, a profitable average day, mostly green days, green days clearly bigger than red days, a solid profit factor, small drawdowns, few rule breaks, never blowing through your daily loss limit, and still profitable over your last 20 trades. Change the targets under **My Rules**, but don't lower them to get there faster.
+
 ## Other traders' trades
 
 You can import other people's trade histories to study and compare them, for example a journal a friend or mentor shares with you as a CSV.
@@ -187,6 +208,7 @@ Broker files almost never include your stop-loss or target, so imported trades w
 
 - `web/`: the website. `index.html` (page), `app.js` (screens and saving), `logic.js` (all the trading math), `style.css`. Published to claude.ai; its data lives in the page's private database.
 - `tests/web_logic_test.js`: checks for the website's math. Run with `node tests/web_logic_test.js`.
+- `tools/market_context.py`: fetches market context (read-only; it never places orders). Tested by `tests/test_market_context.py`.
 
 Offline version:
 - `app.py`: the small local web server (Python standard library only).

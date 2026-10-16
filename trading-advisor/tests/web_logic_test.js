@@ -8,7 +8,7 @@ const root = path.join(__dirname, "..");
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(root, "web/logic.js"), "utf8") +
-  ";this.L={parseCSV,importRows,fullReport,preTradeCheck,DEFAULT_SETTINGS,parseBrokerDate,cleanTrade,traderComparison};", ctx);
+  ";this.L={parseCSV,importRows,fullReport,preTradeCheck,DEFAULT_SETTINGS,parseBrokerDate,cleanTrade,traderComparison,readiness};", ctx);
 const L = ctx.L;
 const read = f => fs.readFileSync(path.join(root, "samples", f), "utf8");
 const map = (csv, m) => L.parseCSV(csv).rows.map(r => Object.fromEntries(Object.entries(m).map(([k, h]) => [k, r[h]])));
@@ -88,3 +88,42 @@ assert.ok(pt.others_history.some(h => h.label === 'Others: setup "Pullback"' && 
 assert.strictEqual(pt.numbers.trades_today, 2);
 
 console.log("other traders: all checks passed");
+
+// market conditions: breakdowns, insights and pre-trade history use the saved context
+const ctxFor = (gap, rv, spy, vwap) => ({ daily: { gap_pct: gap, rel_volume: rv }, market: { spy_change_pct: spy }, entry_vs_vwap: vwap, news: [] });
+const contexts = {};
+all.forEach((t, i) => { contexts[t.id] = i % 2 ? ctxFor(3, 2.5, 0.8, "above") : ctxFor(0.5, 0.7, -0.6, "below"); });
+const withCtx = L.fullReport(all, L.DEFAULT_SETTINGS, {}, contexts);
+assert.ok(withCtx.breakdowns.ctx_gap && withCtx.breakdowns.ctx_rel_volume && withCtx.breakdowns.ctx_market && withCtx.breakdowns.ctx_vwap);
+assert.strictEqual(withCtx.with_context, 36);
+assert.strictEqual(withCtx.breakdowns.ctx_gap.rows.reduce((a, r) => a + r.count, 0), 36);
+assert.ok(!L.fullReport(all, L.DEFAULT_SETTINGS, {}).breakdowns.ctx_gap); // no context, no section
+const ptc = L.preTradeCheck({ direction: "long", entry: 100, stop: 99, target: 103, shares: 100, time: "2026-03-02T10:30", account_type: "paper",
+  conditions: { gap: "Gapped up 2%+", vwap: "Above VWAP" } }, all, L.DEFAULT_SETTINGS, null, contexts);
+assert.ok(ptc.history.some(h => h.label === "Stock's gap at the open: Gapped up 2%+" && h.count > 0));
+
+// readiness: only your paper trades count, and a short good run isn't enough
+const rd = L.readiness(withOthers, L.DEFAULT_SETTINGS);
+assert.strictEqual(rd.summary.trades, 32);            // sample paper trades only (fills were real, other trader excluded)
+assert.strictEqual(rd.ready, false);
+assert.ok(rd.criteria.find(c => c.label === "Paper trades").pass === false);
+// a long, steady, rule-following paper record passes every check
+const good = [];
+let day = new Date(Date.UTC(2026, 0, 5));
+for (let d = 0; d < 25; d++) {
+  while ([0, 6].includes(day.getUTCDay())) day = new Date(day.getTime() + 864e5);
+  const ds = day.toISOString().slice(0, 10);
+  for (let k = 0; k < 4; k++) {
+    const win = !(d % 3 === 0 && k < 2) && k !== 3; // most days 3 wins / 1 loss, every third day 1 win / 3 losses
+    good.push({ id: `g${d}-${k}`, ticker: "AAPL", direction: "long", account_type: "paper", fees: 0,
+      entry_time: `${ds}T1${k}:00:00`, exit_time: `${ds}T1${k}:20:00`, entry_price: 100, stop_loss: 99.5, target: 101.5,
+      exit_price: win ? 101.2 : 99.6, shares: 100 });
+  }
+  day = new Date(day.getTime() + 864e5);
+}
+const settingsNoWindows = { ...L.DEFAULT_SETTINGS, no_trade_windows: [] };
+const rg = L.readiness(good, settingsNoWindows);
+assert.strictEqual(rg.ready, true, JSON.stringify(rg.criteria.filter(c => !c.pass)));
+assert.strictEqual(rg.criteria.length, 10);
+
+console.log("market conditions and readiness: all checks passed");

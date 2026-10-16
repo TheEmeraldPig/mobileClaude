@@ -16,6 +16,7 @@ let csvData = null;   // {headers, rows} from the chosen CSV file
 const store = {
   mode: "loading",     // loading | cloud | preview | locked
   trades: [],
+  contexts: {},        // market context per trade id, saved by Claude from market data
   settings: structuredClone(DEFAULT_SETTINGS),
   db: null, assets: null, downloads: null,
   loaded: { trades: false, settings: false },
@@ -33,6 +34,10 @@ const store = {
     db.collection("trades").onSnapshot(snap => {
       this.trades = snap.docs.map(d => ({ ...d.data(), id: d.id }));
       this.loaded.trades = true;
+      dataChanged();
+    }, e => storageError(e));
+    db.collection("context").onSnapshot(snap => {
+      this.contexts = Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
       dataChanged();
     }, e => storageError(e));
     db.doc("settings/main").onSnapshot(snap => {
@@ -81,6 +86,7 @@ const store = {
       return dataChanged();
     }
     await withRetry(() => this.db.doc("trades/" + id).delete());
+    if (this.contexts[id]) await this.db.doc("context/" + id).delete().catch(() => {});
     if (t?.screenshot) await this.deleteShot(t.screenshot);
   },
   async saveSettings(s) {
@@ -133,6 +139,7 @@ function dataChanged() {
   if (!store.ready()) return;
   refreshTraderLists();
   if (["dashboard", "trades", "mistakes"].includes(currentPage)) render();
+  else if (currentPage === "edit" && editing) renderContext(store.trades.find(t => t.id === editing.id) || editing);
   else if (currentPage === "rules" && !$("#rules-form").dataset.dirty) renderRules();
 }
 
@@ -284,12 +291,13 @@ function filterChanged() { saveFilter(); syncFilters(); render(); }
 
 function renderDashboard() {
   const body = $("#dash-body");
-  const r = fullReport(store.trades, S(), filter);
+  const r = fullReport(store.trades, S(), filter, store.contexts);
   const s = r.summary;
   const who = whoLabel(filter.who);
   const viewing = filter.who === "me" ? "" : `<div class="notice">Showing <b>${esc(who.possessive)}</b> trades. Switch "Whose trades" to <b>Mine</b> to see your own.</div>`;
+  const ready = filter.who === "me" ? readinessCard() : "";
   if (!s.trades) {
-    body.innerHTML = viewing + `<div class="card empty"><h2>No closed trades yet</h2>
+    body.innerHTML = viewing + ready + `<div class="card empty"><h2>No closed trades yet</h2>
       <p>Add a trade, or import a CSV from your broker. To see how it works first, load the sample trades on the
       <button type="button" class="link-btn" data-page="import">Import CSV</button> page.</p>
       ${r.open_trades ? `<p>You have ${r.open_trades} open trade(s). They're counted once you add an exit.</p>` : ""}</div>`;
@@ -299,7 +307,7 @@ function renderDashboard() {
   const cs = s.current_streak;
   const cur = cs.kind ? `${cs.length} ${cs.kind === "loss" ? (cs.length > 1 ? "losses" : "loss") : (cs.length > 1 ? "wins" : "win")}` : "–";
   const tile = (k, v, sub = "") => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
-  body.innerHTML = viewing + `
+  body.innerHTML = viewing + ready + `
     <div class="tiles">
       ${tile("Total P&L", pnlSpan(s.total_pnl), `${s.trades} closed trades${r.open_trades ? ` · ${r.open_trades} open` : ""}`)}
       ${tile("Win rate", pct(s.win_rate), `${s.wins} wins · ${s.losses} losses${s.breakeven ? ` · ${s.breakeven} even` : ""}`)}
@@ -315,15 +323,76 @@ function renderDashboard() {
         <small>Starts at your account size (${fmtMoney(S().account_size, false)}), one point per closed trade</small></div>
       <div class="chart" id="equity-chart"></div>
     </div>
+    ${dailyCard(r)}
     ${comparisonCard()}
     <div class="card">
       <h2>What the advisor sees</h2>
       <ul class="insights">${r.insights.map(i => `<li class="${i.tone}">${icon(i.tone)}<span>${esc(i.text)}</span></li>`).join("")}</ul>
     </div>
     <h2 style="margin-top:1.5rem">Breakdowns</h2>
-    <p class="muted">Blue bars are total profit, red bars are total loss. Groups with fewer than ${MIN_SAMPLE} trades are greyed out because they're too small to trust.</p>
+    <p class="muted">Blue bars are total profit, red bars are total loss. Groups with fewer than ${MIN_SAMPLE} trades are greyed out because they're too small to trust.
+      ${r.with_context ? `Market-condition breakdowns use the ${r.with_context} trade(s) that have market data.` : "Market-condition breakdowns (gap, volume, overall market, VWAP, news) appear once Claude has fetched market data for your trades."}</p>
     <div class="grid grid-2">${Object.values(r.breakdowns).map(breakdownCard).join("")}</div>`;
   drawEquity($("#equity-chart"), s.equity_curve);
+  if (r.days.length) drawDays($("#days-chart"), r.days);
+}
+
+function readinessCard() {
+  const rd = readiness(store.trades, S());
+  return `<div class="card"><div class="score-head"><h2 style="margin:0">Ready for real money?</h2>
+      <span class="pill ${rd.ready ? "ready" : "notyet"}">${rd.ready ? "Yes: every check passes" : `Not yet: ${rd.passed} of ${rd.criteria.length} checks pass`}</span></div>
+    <p class="muted">Based only on your <b>paper</b> trades. Keep practicing until every check passes. Targets are on the My Rules page.</p>
+    <div class="score">${rd.criteria.map(c => `<div class="score-row ${c.pass ? "pass" : ""}" title="${esc(c.why)}">${icon(c.pass ? "green" : "yellow")}
+      <span>${esc(c.label)} <small class="muted">· target ${esc(c.target)}</small></span><span class="val">${esc(c.value)}</span>
+      <span class="meter" aria-hidden="true"><i style="width:${Math.round(c.progress * 100)}%"></i></span></div>`).join("")}</div></div>`;
+}
+
+function dailyCard(r) {
+  const d = r.day_stats;
+  if (!d.days) return "";
+  const tile = (k, v, sub = "") => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+  return `<div class="card"><h2>Day by day</h2>
+    <div class="tiles">
+      ${tile("Average day", pnlSpan(d.avg_day), `${d.days} trading days`)}
+      ${tile("Green days", pct(d.green_pct), `${d.green} green · ${d.red} red`)}
+      ${tile("Avg green / red day", `<span class="pos">${fmtMoney(d.avg_green, false)}</span> / <span class="neg">${fmtMoney(d.avg_red, false)}</span>`,
+        d.day_ratio === null ? "" : d.day_ratio === Infinity ? "no red days" : `green days are ${num(d.day_ratio)}× red days`)}
+      ${tile("Best / worst day", `<span class="pos">${fmtMoney(d.best)}</span> / <span class="neg">${fmtMoney(d.worst)}</span>`)}
+    </div>
+    <div class="chart" id="days-chart"></div></div>`;
+}
+
+function drawDays(el, days) {
+  const W = 900, H = 200, L = 64, R = 14, T = 12, B = 26;
+  const max = Math.max(1, ...days.map(d => Math.abs(d.pnl)));
+  const y = v => T + (max - v) / (2 * max) * (H - T - B);
+  const slot = (W - L - R) / days.length, bw = Math.max(2, Math.min(24, slot - 2));
+  const bars = days.map((d, i) => {
+    const x = L + i * slot + (slot - bw) / 2, y0 = y(0), y1 = y(d.pnl);
+    return `<rect x="${x.toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, Math.abs(y1 - y0)).toFixed(1)}"
+      rx="2" fill="var(${d.pnl >= 0 ? "--pos" : "--neg"})" data-i="${i}"/>`;
+  }).join("");
+  const lbl = v => `<text class="axis-label" x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${fmtMoney(v, v !== 0).replace(".00", "")}</text>`;
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Profit or loss for each trading day">
+    <line class="gridline" x1="${L}" x2="${W - R}" y1="${y(max)}" y2="${y(max)}"/><line class="gridline" x1="${L}" x2="${W - R}" y1="${y(-max)}" y2="${y(-max)}"/>
+    <line class="baseline" x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" style="stroke-dasharray:none"/>
+    ${lbl(max)}${lbl(0)}${lbl(-max)}${bars}
+    <text class="axis-label" x="${L}" y="${H - 6}">${days[0].date}</text><text class="axis-label" x="${W - R}" y="${H - 6}" text-anchor="end">${days[days.length - 1].date}</text>
+    </svg><div class="tooltip"></div>`;
+  const svg = $("svg", el), tip = $(".tooltip", el);
+  const show = ev => {
+    const rect = svg.getBoundingClientRect();
+    const i = Math.max(0, Math.min(days.length - 1, Math.floor(((ev.clientX - rect.left) / rect.width * W - L) / slot)));
+    const d = days[i];
+    tip.innerHTML = `<b>${d.date}</b><br>${pnlSpan(d.pnl)} · ${d.trades} trade(s)`;
+    tip.style.display = "block";
+    const tw = tip.offsetWidth, sx = (L + (i + 0.5) * slot) / W * rect.width;
+    tip.style.left = Math.max(0, Math.min(rect.width - tw, sx - tw / 2)) + "px";
+    tip.style.top = "0px";
+  };
+  svg.addEventListener("pointermove", show);
+  svg.addEventListener("pointerdown", show);
+  svg.addEventListener("pointerleave", () => (tip.style.display = "none"));
 }
 
 function comparisonCard() {
@@ -469,7 +538,86 @@ function openEditor(id) {
   $$("[name=followed_plan]", f).forEach(r => (r.checked = r.value === fp));
   renderMistakeChips(String(t.mistakes || "").split(",").map(s => s.trim()).filter(Boolean));
   showScreenshot(t.screenshot);
+  renderContext(editing);
   liveCalc();
+}
+
+function renderContext(trade) {
+  const card = $("#ctx-card");
+  if (!trade) { card.hidden = true; return; }
+  card.hidden = false;
+  const c = store.contexts[trade.id];
+  if (!c) {
+    card.innerHTML = `<h2>Market context</h2><p class="muted">No market data for this trade yet. Ask Claude to "fetch market data for my trades":
+      it saves the day's 5-minute chart, the gap, volume, what the overall market did, VWAP at your entry and that day's news.</p>`;
+    return;
+  }
+  const d = c.daily || {}, m = c.market || {};
+  const signed = (x, unit = "%") => x === null || x === undefined ? "–" : `${x > 0 ? "+" : ""}${x}${unit}`;
+  const fact = (k, v) => `<div>${k}<b>${v}</b></div>`;
+  card.innerHTML = `<h2>Market context: ${esc(c.symbol)} on ${esc(c.date)}</h2>
+    <div class="legend"><span><i style="border-color:var(--text)"></i>entry / exit</span><span><i style="border-color:var(--neg)"></i>stop-loss</span><span><i style="border-color:var(--good)"></i>target</span></div>
+    <div class="chart candles" id="candle-chart"></div>
+    <div class="facts">
+      ${fact("Gap at the open", signed(d.gap_pct))}${fact("Day's change", signed(d.change_pct))}
+      ${fact("Volume vs normal", d.rel_volume ? d.rel_volume + "×" : "–")}${fact("Day's range", d.low !== undefined ? `$${num(d.low)} – $${num(d.high)}` : "–")}
+      ${fact("ATR (14 days)", d.atr14 ? "$" + num(d.atr14) : "–")}${fact("Market (SPY) that day", signed(m.spy_change_pct))}
+      ${fact("VWAP at entry", c.vwap_at_entry ? "$" + num(c.vwap_at_entry) : "–")}${fact("Entry vs VWAP", c.entry_vs_vwap || "–")}
+    </div>
+    ${Array.isArray(c.news) ? (c.news.length ? `<h3>News</h3><ul class="news">${c.news.map(n => `<li><time>${esc(fmtDT(n.time).slice(5))}</time>${esc(n.headline)} <small class="muted">${esc(n.source)}</small></li>`).join("")}</ul>`
+      : '<p class="muted">No news about this stock that day.</p>') : ""}
+    <p class="hint">Source: ${esc(c.source || "market data")}, saved ${esc(String(c.fetched_at || "").slice(0, 10))}.</p>`;
+  if (c.bars?.length) drawCandles($("#candle-chart"), c, trade);
+}
+
+function drawCandles(el, c, t) {
+  const bars = c.bars, W = 900, H = 330, L = 60, R = 14, T = 12, VOL = 50, B = 26;
+  const pane = H - T - B - VOL - 8;
+  const lv = [t.stop_loss, t.target, t.entry_price, t.exit_price].filter(v => v);
+  let lo = Math.min(...bars.map(b => b[3]), ...lv), hi = Math.max(...bars.map(b => b[2]), ...lv);
+  const pad = (hi - lo) * 0.05 || 1; lo -= pad; hi += pad;
+  const slot = (W - L - R) / bars.length, cw = Math.max(1.5, slot * 0.65);
+  const x = i => L + i * slot + slot / 2, y = v => T + (hi - v) / (hi - lo) * pane;
+  const maxV = Math.max(1, ...bars.map(b => b[5]));
+  const idx = hm => { let k = 0; bars.forEach((b, i) => { if (b[0] <= hm) k = i; }); return k; };
+  let g = "";
+  for (let k = 0; k <= 4; k++) {
+    const v = lo + (hi - lo) * k / 4;
+    g += `<line class="gridline" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="axis-label" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">$${v.toFixed(2)}</text>`;
+  }
+  const candles = bars.map((b, i) => {
+    const up = b[4] >= b[1], top = y(Math.max(b[1], b[4])), h = Math.max(1, Math.abs(y(b[1]) - y(b[4])));
+    const vh = b[5] / maxV * VOL;
+    return `<line class="wick ${up ? "up" : "down"}" x1="${x(i)}" x2="${x(i)}" y1="${y(b[2])}" y2="${y(b[3])}"/>
+      <rect class="${up ? "up" : "down"}" x="${(x(i) - cw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${cw.toFixed(1)}" height="${h.toFixed(1)}"/>
+      <rect class="vol" x="${(x(i) - cw / 2).toFixed(1)}" y="${(H - B - vh).toFixed(1)}" width="${cw.toFixed(1)}" height="${vh.toFixed(1)}"/>`;
+  }).join("");
+  const level = (v, cls) => v ? `<line class="${cls}" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/>` : "";
+  const sameDay = d => d && String(d).slice(0, 10) === c.date;
+  const ei = idx(String(t.entry_time).replace(" ", "T").slice(11, 16));
+  const entryMark = `<line class="entry" x1="${x(ei)}" x2="${x(ei)}" y1="${T}" y2="${T + pane}"/><circle class="mark in" cx="${x(ei)}" cy="${y(t.entry_price)}" r="5"/>`;
+  let exitMark = "";
+  if (t.exit_price && sameDay(t.exit_time)) {
+    const xi = idx(String(t.exit_time).replace(" ", "T").slice(11, 16));
+    exitMark = `<line class="entry" x1="${x(xi)}" x2="${x(xi)}" y1="${T}" y2="${T + pane}"/><circle class="mark out" cx="${x(xi)}" cy="${y(t.exit_price)}" r="5"/>`;
+  }
+  const ticks = [0, Math.floor(bars.length / 2), bars.length - 1].map(i => `<text class="axis-label" x="${x(i)}" y="${H - 6}" text-anchor="middle">${bars[i][0]}</text>`).join("");
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="5-minute chart of ${esc(c.symbol)} with entry and exit">${g}${candles}
+    ${level(t.stop_loss, "lvl-stop")}${level(t.target, "lvl-target")}${entryMark}${exitMark}${ticks}</svg><div class="tooltip"></div>`;
+  const svg = $("svg", el), tip = $(".tooltip", el);
+  const show = ev => {
+    const rect = svg.getBoundingClientRect();
+    const i = Math.max(0, Math.min(bars.length - 1, Math.floor(((ev.clientX - rect.left) / rect.width * W - L) / slot)));
+    const b = bars[i];
+    tip.innerHTML = `<b>${b[0]}</b> · O ${b[1]} H ${b[2]} L ${b[3]} C ${b[4]}<br>Volume ${Number(b[5]).toLocaleString("en-US")}`;
+    tip.style.display = "block";
+    const tw = tip.offsetWidth;
+    tip.style.left = Math.max(0, Math.min(rect.width - tw, x(i) / W * rect.width - tw / 2)) + "px";
+    tip.style.top = "0px";
+  };
+  svg.addEventListener("pointermove", show);
+  svg.addEventListener("pointerdown", show);
+  svg.addEventListener("pointerleave", () => (tip.style.display = "none"));
 }
 
 function showScreenshot(id) {
@@ -721,8 +869,9 @@ function runPretrade(ev) {
   ev.preventDefault();
   const f = ev.target.elements;
   const plan = Object.fromEntries(["ticker", "direction", "entry", "stop", "target", "shares", "setup", "account_type", "time"].map(k => [k, f[k].value]));
+  plan.conditions = { gap: f.cond_gap.value, rel_volume: f.cond_rel_volume.value, market: f.cond_market.value, vwap: f.cond_vwap.value };
   let r;
-  try { r = preTradeCheck(plan, store.trades, S(), nowET()); } catch (e) { toast(e.message, 5000); return; }
+  try { r = preTradeCheck(plan, store.trades, S(), nowET(), store.contexts); } catch (e) { toast(e.message, 5000); return; }
   const n = r.numbers;
   const verdictText = {
     red: "Stop. This trade breaks one or more of your rules.",
@@ -763,6 +912,8 @@ function renderRules() {
   delete form.dataset.dirty;
   for (const k of ["account_size", "max_risk_pct", "daily_loss_limit", "max_trades_per_day", "min_rr", "revenge_minutes"]) f[k].value = S()[k];
   for (const k of ["setups", "emotions", "mistake_tags"]) f[k].value = S()[k].join("\n");
+  const rd = { ...DEFAULT_SETTINGS.readiness, ...(S().readiness || {}) };
+  for (const k of Object.keys(DEFAULT_SETTINGS.readiness)) f["r_" + k].value = rd[k];
   $("#windows").innerHTML = "";
   S().no_trade_windows.forEach(addWindowRow);
   updateRiskHint();
@@ -811,6 +962,12 @@ async function saveRules(ev) {
     data[k] = v;
   }
   for (const k of ["setups", "emotions", "mistake_tags"]) data[k] = [...new Set(f[k].value.split("\n").map(s => s.trim()).filter(Boolean))];
+  data.readiness = {};
+  for (const k of Object.keys(DEFAULT_SETTINGS.readiness)) {
+    const v = Number(f["r_" + k].value);
+    if (!isFinite(v) || v < 0) { toast("Readiness targets must be numbers of 0 or more."); return; }
+    data.readiness[k] = v;
+  }
   data.no_trade_windows = $$("#windows .windows-row").map(r => ({ start: $(".w-start", r).value, end: $(".w-end", r).value, label: $(".w-label", r).value.trim() }))
     .filter(w => w.start && w.end);
   if (data.no_trade_windows.some(w => w.end <= w.start)) { toast("Each no-trade window must end after it starts."); return; }
