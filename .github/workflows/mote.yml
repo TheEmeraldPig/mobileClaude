@@ -116,12 +116,16 @@ jobs:
             adb shell input swipe 450 30 450 30 600
             sleep 30
             adb exec-out screencap -p > shot-later.png
+            # then Start on the New world screen, and look at the game itself
+            adb shell input swipe 320 227 320 227 600
+            sleep 45
+            adb exec-out screencap -p > shot-game.png
             adb logcat -d > logcat.txt
             PID=$(adb shell pidof com.theemeraldpig.mote || true); echo "Mote pid: $PID"
             if [ -n "$PID" ]; then grep " $PID " logcat.txt | tail -150; fi
             grep -E "GoLog|Mote|FATAL|DEBUG  :|libc  " logcat.txt | tail -100 || true
             adb shell dumpsys activity top | grep -iE "ACTIVITY|mote" | head -5 || true
-            for f in shot-menu.png shot-later.png; do echo "== $f"; python3 mote/android/tools/shrink_png.py $f 192 || true; done
+            for f in shot-menu.png shot-later.png shot-game.png; do echo "== $f"; python3 mote/android/tools/shrink_png.py $f 192 || true; done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
