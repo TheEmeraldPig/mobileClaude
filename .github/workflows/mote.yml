@@ -115,7 +115,10 @@ jobs:
             sleep 20
             adb exec-out screencap -p > shot-later.png
             adb logcat -d > logcat.txt
-            grep -E "GoLog|Mote|Go |AndroidRuntime|FATAL|ebiten" logcat.txt | tail -200 || true
+            PID=$(adb shell pidof com.theemeraldpig.mote || true); echo "Mote pid: $PID"
+            if [ -n "$PID" ]; then grep " $PID " logcat.txt | tail -150; fi
+            grep -E "GoLog|Mote|FATAL|DEBUG  :|libc  " logcat.txt | tail -100 || true
+            for f in shot-menu.png shot-later.png; do echo "== $f"; convert $f -resize 200x200 png:- | base64 -w0; echo; done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
