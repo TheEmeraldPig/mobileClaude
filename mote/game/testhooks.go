@@ -167,8 +167,17 @@ func runScript() {
 				c[t]++
 			}
 			fmt.Printf("frame %d blocks: plank=%d brick=%d glass=%d soil=%d crop1=%d crop3=%d furnace=%d chest=%d core=%d\n", frame, c[PLANK], c[BRICK], c[GLASS], c[SOIL], c[CROP1], c[CROP3], c[FURNACE], c[CHEST], c[CORE])
+		case "spawninfo":
+			x := int((player.x + player.w/2) / CELL)
+			fmt.Printf("spawninfo x=%d top=%d safe=%v px=%.0f surface=%d\n", x, groundTop(x), safeSpawn(x), player.x/CELL, surfaceAt(x+baseChunk*CW)-0)
+		case "ents": // list creatures near the mote
+			for _, e := range ents {
+				if e.kind != entItem {
+					fmt.Printf("ent kind=%d at (%.0f,%.0f) hp=%d\n", e.kind, e.x/CELL, e.y/CELL, e.hp)
+				}
+			}
 		case "state":
-			fmt.Printf("frame %d screen=%d run=%+v essence=%d\n", frame, cur, run, meta.Essence)
+			fmt.Printf("frame %d screen=%d run=%+v essence=%d hp=%d pos=%.0f,%.0f\n", frame, cur, run, meta.Essence, player.hp, player.x/CELL, player.y/CELL)
 		case "newrun":
 			startRun(arg)
 		case "shot":

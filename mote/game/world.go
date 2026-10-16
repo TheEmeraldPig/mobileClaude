@@ -745,13 +745,62 @@ func createWorld(text string) {
 	}
 	player.vx, player.vy, player.energy, player.squash = 0, 0, 1, 0
 	player.hp = player.maxHP
+	// the noise surface ignores lakes and caves, so look at the real blocks for a safe spot
+	lx := sx - baseChunk*CW
+	for d := 0; d < W/2-40; d++ {
+		if safeSpawn(lx + d) {
+			lx += d
+			break
+		}
+		if safeSpawn(lx - d) {
+			lx -= d
+			break
+		}
+	}
+	sx = lx + baseChunk*CW
 	spawnWX = sx
 	ents = ents[:0]
 	worldTime = 0.32 // morning
-	player.x = float64((sx - baseChunk*CW) * CELL)
-	player.y = float64((surfaceAt(sx) - 15) * CELL)
+	player.x = float64(lx * CELL)
+	player.y = float64((groundTop(lx) - 15) * CELL)
 	unstick()
 	updatePlayerCells()
+}
+
+// The first solid or liquid cell from the top of a loaded column
+func groundTop(x int) int {
+	for y := 0; y < H; y++ {
+		if t := grid[y*W+x]; isSolid(t) || isLiquid(t) {
+			return y
+		}
+	}
+	return H - 1
+}
+
+// Dry, fairly flat ground with no cave right under it and no lake or lava nearby
+func safeSpawn(x int) bool {
+	if x < 40 || x >= W-40 {
+		return false
+	}
+	top := groundTop(x)
+	for c := x - 30; c <= x+30; c++ {
+		t := groundTop(c)
+		if isLiquid(grid[t*W+c]) {
+			return false
+		}
+		if c < x-6 || c > x+6 {
+			continue
+		}
+		if abs(t-top) > 4 || abs(t-surfaceAt(c+baseChunk*CW)) > 6 { // not down in a ravine
+			return false
+		}
+		for y := t; y < t+12; y++ {
+			if !isSolid(grid[y*W+c]) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func cellAt(px, py float64) uint8 {
