@@ -9,8 +9,6 @@ import (
 	"image/color"
 	"math"
 	"math/rand"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -82,10 +80,8 @@ func NewGame() *Game {
 	return g
 }
 
-func savePath() string { return filepath.Join(DataDir, "dig_save.json") }
-
 func (g *Game) load() {
-	b, err := os.ReadFile(savePath())
+	b, err := readSave()
 	if err != nil {
 		return
 	}
@@ -100,10 +96,7 @@ func (g *Game) load() {
 func (g *Game) Save() {
 	g.s.LastSeen = g.now()
 	b, _ := json.Marshal(g.s)
-	tmp := savePath() + ".tmp"
-	if os.WriteFile(tmp, b, 0o644) == nil {
-		os.Rename(tmp, savePath())
-	}
+	writeSave(b)
 }
 
 func (g *Game) Layout(w, h int) (int, int) {

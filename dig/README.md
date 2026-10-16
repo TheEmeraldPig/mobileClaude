@@ -21,6 +21,11 @@ Screenshots without a person, under Xvfb:
 
 Commands are in `game/testhooks.go`.
 
+## Web version
+
+`web/build.sh` builds a WebAssembly version into `web/out` (saves go to the browser's localStorage).
+It is published as a Claude artifact at https://claude.ai/artifact/Kn58gXi11btKxoKsDA1bNQ for quick play-testing.
+
 ## Builds
 
 Every push to `dig/` runs `.github/workflows/dig.yml`, which publishes `DeepDig.apk` and
