@@ -30,6 +30,10 @@ func applyFOV() {
 type Game struct{}
 
 func (g *Game) Update() error {
+	if Crashed() {
+		return nil
+	}
+	defer CatchCrash()
 	frame++
 	ops = ops[:0]
 	runScript()
@@ -178,6 +182,11 @@ func placeCamera() {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	if Crashed() {
+		DrawCrash(screen)
+		return
+	}
+	defer CatchCrash()
 	screen.Fill(colNight)
 	drawWorld(screen)
 	for _, op := range ops {

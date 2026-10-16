@@ -15,20 +15,33 @@ import (
 type lazy struct{ g ebiten.Game }
 
 func (l *lazy) Update() error {
+	if game.Crashed() {
+		return nil
+	}
 	if l.g == nil {
-		l.g = game.NewGame()
+		func() {
+			defer game.CatchCrash()
+			l.g = game.NewGame()
+		}()
+		if l.g == nil {
+			return nil
+		}
 	}
 	return l.g.Update()
 }
 
 func (l *lazy) Draw(screen *ebiten.Image) {
+	if game.Crashed() {
+		game.DrawCrash(screen)
+		return
+	}
 	if l.g != nil {
 		l.g.Draw(screen)
 	}
 }
 
 func (l *lazy) Layout(w, h int) (int, int) {
-	if l.g == nil {
+	if l.g == nil || game.Crashed() {
 		return w, h
 	}
 	return l.g.Layout(w, h)

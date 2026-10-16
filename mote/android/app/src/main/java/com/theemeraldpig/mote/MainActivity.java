@@ -6,12 +6,16 @@ import android.view.View;
 
 import com.theemeraldpig.mote.mobile.Mobile;
 
+import go.Seq;
+
 public class MainActivity extends Activity {
     private MoteView view;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Ebitengine needs the app context to read the screen size and density
+        Seq.setContext(getApplicationContext());
         // Tell the game where to keep its settings and save, before its first frame
         Mobile.setDataDir(getFilesDir().getAbsolutePath());
         setContentView(R.layout.main);
