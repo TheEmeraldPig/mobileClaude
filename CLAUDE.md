@@ -18,8 +18,8 @@
 - Every push to `mote/` builds and releases `Mote.exe`, `Mote-steam.exe` and `Mote.apk` through `.github/workflows/mote.yml`.
 - Check layouts by running under Xvfb with the test hooks in `game/testhooks.go` (`MOTE_SCRIPT`, `MOTE_TOUCH=1`, `MOTE_NOAUDIO=1`).
 
-## dig/ (the game "Deep Dig")
+## hop/ (the game "Orbit Hop")
 
-- An idle mining game for Android, Go + Ebitengine like `mote/`. See `dig/README.md`. Every push to `dig/` builds `DeepDig.apk` and `DeepDig.exe` through `.github/workflows/dig.yml`.
-- **After every change to `dig/`, rebuild the web version and republish it** so the user can play it from the Claude app: run `dig/web/build.sh`, then publish `dig/web/out/index.html` with the Artifact tool to `url` https://claude.ai/artifact/Kn58gXi11btKxoKsDA1bNQ, with `root` `dig/web/out` and `files` `wasm_exec.js` and `dig.gz.wasm`. Give the user the link in the reply.
-- `go test ./game` must pass. Check layouts under Xvfb with `DIG_SCRIPT` (see `game/testhooks.go`).
+- A one-tap space arcade game for Android with a shop, Go + Ebitengine like `mote/`. See `hop/README.md`. Every push to `hop/` builds `OrbitHop.apk` and `OrbitHop.exe` through `.github/workflows/hop.yml`.
+- **After every change to `hop/`, rebuild the web version and republish it** so the user can play it from the Claude app: run `hop/web/build.sh`, then publish `hop/web/out/index.html` with the Artifact tool to `url` https://claude.ai/artifact/Kn58gXi11btKxoKsDA1bNQ, with `root` `hop/web/out` and `files` `wasm_exec.js` and `hop.gz.wasm`. Give the user the link in the reply.
+- `go test ./game` must pass. Check layouts under Xvfb with `HOP_SCRIPT` (see `game/testhooks.go`).
