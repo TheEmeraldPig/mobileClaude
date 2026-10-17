@@ -1,0 +1,47 @@
+plugins {
+    id 'com.android.application'
+}
+
+// CI passes the build number so each build installs over the last one
+def deckVersion = (project.findProperty('deckVersion') ?: '1').toString()
+
+android {
+    namespace 'com.theemeraldpig.deck'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.theemeraldpig.deck'
+        minSdk 23
+        targetSdk 34
+        versionCode deckVersion.toInteger()
+        versionName "build-" + deckVersion
+    }
+
+    // A fixed key for installing the APK directly on your phone, so new builds update the old one.
+    // For Google Play, sign with your own private upload key instead.
+    signingConfigs {
+        sideload {
+            storeFile rootProject.file('deck-sideload.keystore')
+            storePassword 'android'
+            keyAlias 'mote'
+            keyPassword 'android'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.sideload
+        }
+        debug {
+            signingConfig signingConfigs.sideload
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.aar'])
+}
