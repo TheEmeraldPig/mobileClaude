@@ -7,7 +7,7 @@ The native version of Mote, built with Go and [Ebitengine](https://ebitengine.or
 Every push that changes `mote/` builds both through `.github/workflows/mote.yml` and publishes a GitHub release named `build-<number>`, containing:
 
 - `Mote.exe`, for Windows. Run it; there's nothing to install. It checks for new releases every minute and restarts itself into the new version, keeping your save.
-- `Mote.apk`, for Android. Open it on the phone to install. Each build installs over the last one and keeps the save.
+- `Mote.apk`, for Android. Open it on the phone to install. Each build installs over the last one and keeps the save. From this version on, the app checks for new builds when it starts and every 5 minutes, downloads them itself and opens Android's install screen, so updating is one tap (`android/.../Updater.java`). Android never lets a sideloaded app update silently; the very first time it also asks you to allow Mote to install apps.
 - `Mote-steam.exe`, the Steam build, with the built-in updater switched off because Steam does the updating.
 
 Each world is its own save in `worlds/<id>.json`, listed in `worlds.json`, and holds the terrain, your character and inventory. A world's game mode is chosen when it is made: Easy (less damage, keep everything when you die), Normal (drop blocks and materials, keep tools and gear), Hard (more damage, drop everything, respawn with a temporary kit) and Hardcore (like Hard, but dying deletes the world). Saves and settings live in `%AppData%\Mote` on Windows and in the app's private storage on Android. A `save.json` from older versions is turned into a Normal world.

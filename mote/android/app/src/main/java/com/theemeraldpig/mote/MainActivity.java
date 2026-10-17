@@ -10,6 +10,7 @@ import go.Seq;
 
 public class MainActivity extends Activity {
     private MoteView view;
+    private Updater updater;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -21,6 +22,8 @@ public class MainActivity extends Activity {
         setContentView(R.layout.main);
         view = findViewById(R.id.ebitenview);
         hideSystemBars();
+        updater = new Updater(this);
+        updater.start();
     }
 
     @Override
@@ -35,6 +38,7 @@ public class MainActivity extends Activity {
         super.onResume();
         view.resumeGame();
         hideSystemBars();
+        if (updater != null) updater.onResume();
     }
 
     @Override
