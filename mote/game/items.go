@@ -530,7 +530,7 @@ func craft(r Recipe) string {
 		removeItem(nd[0].(string), nd[1].(int))
 	}
 	addItem(r.out, r.n)
-	sfx("give")
+	sfx("craft")
 	if r.n > 1 {
 		return fmt.Sprintf("Crafted %d %s.", r.n, items[r.out].name)
 	}
@@ -771,7 +771,14 @@ func useHeld() {
 			return
 		}
 		if n := applyCells(brushCells()); n > 0 && useTick%4 == 1 {
-			sfx("place")
+			switch heldBuildKind() {
+			case buildPaint:
+				sfx("paint")
+			case buildWall, buildHammer:
+				sfx("wall")
+			default:
+				sfx("place")
+			}
 		}
 	}
 }

@@ -51,7 +51,7 @@ func toggleDoor(x, y int) {
 		}
 		markDirty(c[0])
 	}
-	sfx("place")
+	sfx("door")
 }
 
 func removeDoor(x, y int) {

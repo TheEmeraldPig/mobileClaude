@@ -61,6 +61,8 @@ type Entity struct {
 
 var ents []*Entity
 
+var fullWarnAt = -1000
+
 const (
 	maxCreatures = 3   // creatures alive at once (not counting the Warden), one more on Hard
 	spawnEvery   = 420 // frames between spawn attempts
@@ -271,6 +273,9 @@ func updateEntities() {
 					e.n -= got
 					sfx("pickup")
 					popItem(e.item, got)
+				} else if frame-fullWarnAt > 240 {
+					fullWarnAt = frame
+					toast("Your inventory is full")
 				}
 				if e.n <= 0 {
 					continue

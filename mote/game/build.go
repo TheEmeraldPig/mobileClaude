@@ -298,7 +298,7 @@ func undoBuild() {
 		n++
 	}
 	if n > 0 {
-		sfx("dig")
+		sfx("undo")
 		toast("Undone")
 	} else {
 		toast("Nothing left to undo there")

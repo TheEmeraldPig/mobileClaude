@@ -150,6 +150,18 @@ func sfx(name string) {
 		}
 	case "swing":
 		noiseFx(0.1, 2500, 0.1, 800)
+	case "door": // a wooden creak and thud
+		tone(180, 140, 0.12, 0.1, triangle)
+		noiseFx(0.08, 400, 0.14, 200)
+	case "paint":
+		noiseFx(0.05, 2600+rand.Float64()*600, 0.05, 1800)
+	case "wall":
+		noiseFx(0.05, 600+rand.Float64()*200, 0.08, 0)
+	case "craft":
+		tone(660, 880, 0.06, 0.08, square)
+		syn.add(&voice{w: triangle, f0: 1320, f1: 1320, dur: 0.1, vol: 0.06, t: -0.06})
+	case "undo":
+		tone(700, 400, 0.1, 0.07, triangle)
 	}
 }
 
