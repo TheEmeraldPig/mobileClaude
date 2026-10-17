@@ -1,0 +1,36 @@
+# Lens hub settings. setup.sh copies this to config.toml; edit that copy.
+# Anything left out uses the default shown here.
+
+data_dir = "~/lens-data"          # notes, photos, logs, doctor reports
+
+[claude]
+model = "sonnet"                  # sonnet = quick and smart; haiku = quickest; opus = smartest, slowest
+effort = "low"                    # low keeps spoken answers fast
+web_search = true
+timeout = 90                      # seconds before giving up on an answer
+
+[ears]
+engine = "whisper"                # "none" = no microphone (use --console or /ask)
+whisper_bin = "~/whisper.cpp/build/bin/whisper-cli"
+whisper_model = "~/whisper.cpp/models/ggml-base.en.bin"   # tiny.en is faster, small.en more accurate
+language = "en"
+device = "default"                # ALSA device; `arecord -L` lists them
+max_seconds = 15
+silence_seconds = 1.2             # stop listening after this much quiet
+level = 500                       # loudness that counts as talking; raise it if noise triggers it
+
+[mouth]
+engine = "piper"                  # piper, espeak, or none (prints answers)
+piper_bin = "~/piper/piper"
+piper_voice = "~/piper/voices/en_US-lessac-medium.onnx"
+device = "default"                # `aplay -L` lists them; Bluetooth earbuds show up once paired
+
+[eyes]
+source = "glasses"                # glasses, picam, usb, none, or file:/path/to/test.jpg
+glasses_url = "http://lens-glasses.local/capture"
+send_view = true                  # attach what you're looking at to every question
+keep_views = false                # also save every picture sent to Claude in captures/
+
+[hub]
+port = 8765
+token = "change-me"               # the glasses send this; set the same value in the firmware

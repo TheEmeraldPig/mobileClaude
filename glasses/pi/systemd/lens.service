@@ -1,0 +1,18 @@
+[Unit]
+Description=Lens smart glasses hub
+After=network-online.target sound.target
+# Crashing 5 times in 5 minutes means it's really broken: hand over to the doctor.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+OnFailure=lens-doctor.service
+
+[Service]
+WorkingDirectory=%h/mobileClaude/glasses/pi
+# Claude Code installs to ~/.local/bin, which services don't have on PATH
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 %h/mobileClaude/glasses/pi/lens.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

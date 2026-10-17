@@ -1,0 +1,10 @@
+[Unit]
+Description=Lens doctor: Claude Code repairs the hub after repeated crashes
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/mobileClaude/glasses/pi
+# Claude Code installs to ~/.local/bin, which services don't have on PATH
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 %h/mobileClaude/glasses/pi/doctor.py
+TimeoutStartSec=1200

@@ -2,12 +2,23 @@
 
 A home-made take on camera + AI glasses: you look at something, ask out loud, and hear an answer. Personal project, not for sale.
 
-It's built in two halves:
+The glasses stay as normal-looking as possible by carrying almost nothing: a thumb-sized camera board, a button and a recording light. The thinking happens on a Raspberry Pi in your pocket, which runs Claude Code logged into your own Claude account, so there's no API bill.
 
-1. **The phone app** (`index.html`, this folder): does the thinking. It shows the camera, listens to you, sends what you see to Claude and speaks the answer. It works right now on its own, using the phone's camera.
-2. **The glasses** (to build): a tiny camera board on a frame with a button and a light. Later it sends its camera picture to the phone app over Bluetooth, so the phone can stay in your pocket.
+```
+ glasses (XIAO ESP32S3 Sense)         pocket (Raspberry Pi)                          internet
+ camera, button, light  ── Wi-Fi ──►  lens.py: listen → whisper.cpp → Claude Code ──► Claude
+                                       speak ◄─ Piper ◄─ answer                  ◄──
+                                       doctor.py: fixes the hub if it keeps crashing
+ earbuds ◄──── Bluetooth ────────────  (phone hotspot gives the Pi and glasses internet)
+```
 
-## Using the phone app
+| Folder | What it is |
+|---|---|
+| `pi/` | The pocket hub: `lens.py`, the repair doctor, services and `setup.sh` |
+| `firmware/lens_glasses/` | Arduino sketch for the glasses board |
+| `index.html` | The phone-only version (uses an API key). Handy for trying features without any hardware |
+
+## The phone-only version
 
 Open the page on your phone (see "Hosting" below), tap **MENU**, paste a Claude API key from [console.anthropic.com](https://console.anthropic.com), and allow camera and microphone.
 
@@ -37,31 +48,48 @@ To try it on a computer without Pages: `npx serve glasses` (or `python3 -m http.
 
 ## Building the glasses
 
-### Parts (about $35–60)
+### Parts (about $90–130, one time)
 
 | Part | Why | Rough price |
 |---|---|---|
-| **Seeed Studio XIAO ESP32S3 Sense** | Thumb-sized board with a camera, microphone, Wi-Fi, Bluetooth and battery charging built in. This is the brain of the glasses. | $14–18 |
-| 3.7 V LiPo battery, 250–500 mAh, with JST plug | Power. Smaller = lighter, larger = longer. | $5–8 |
-| Small push button (6 mm tactile) | Press to talk / take a photo, like the button on Meta's glasses | $1 |
-| Small LED (white or red) + 220 Ω resistor | Recording light so people know when the camera is on | $1 |
-| Slide switch | On/off | $1 |
-| Cheap sunglasses or safety glasses | The frame to mount everything on | $5–10 |
-| Thin wire, heat-shrink, hot glue or zip ties | Holding it together | $5 |
-| *Later:* MAX98357A amp + small 8 Ω speaker | Hear answers from the glasses instead of earbuds | $5–8 |
-| *Optional:* 3D-printed case for the temple arm | Neater than hot glue; any print service can make it | $5–15 |
+| **Raspberry Pi 5 (4 GB)** | The pocket hub. Runs Claude Code, speech-to-text and the voice. A Pi 4 works too, a bit slower. The Pi Zero 2 W is too short on memory for Claude Code plus speech recognition. | $60 |
+| microSD card, 32 GB | The Pi's drive | $8 |
+| USB-C power bank (5 V 3 A / 15 W or more) | Powers the Pi in your pocket | $15–25 |
+| **Seeed Studio XIAO ESP32S3 Sense** | The glasses: camera, Wi-Fi and battery charging on a thumb-sized board | $14–18 |
+| 3.7 V LiPo, 250–500 mAh, JST plug | Powers the glasses | $5–8 |
+| 6 mm push button | Short press: talk / stop. Long press: take a photo | $1 |
+| Small LED + 220 Ω resistor | Recording light, on whenever the camera takes a picture | $1 |
+| Cheap sunglasses or safety glasses | The frame | $5–10 |
+| Wire, heat-shrink, hot glue | Holding it together | $5 |
+| Bluetooth earbuds (or a USB mic headset) | You probably own some. The Pi listens through their mic and talks through them | $0 |
 
-Tools: a soldering iron, a USB-C cable, and a computer with the Arduino IDE (free).
+### Pocket hub (Raspberry Pi)
 
-### Plan
+1. Flash **Raspberry Pi OS (64-bit)** with Raspberry Pi Imager. In its settings, add your phone's hotspot as the Wi-Fi network.
+2. On the Pi: `git clone https://github.com/TheEmeraldPig/mobileClaude ~/mobileClaude && bash ~/mobileClaude/glasses/pi/setup.sh`
+3. Run `claude` once and log in with your Claude account.
+4. Pair your earbuds (Bluetooth icon on the desktop, or `bluetoothctl`).
+5. `python3 lens.py --selftest --deep`, then `systemctl --user start lens`.
 
-1. **Phone app** (done): `index.html`. Try it, decide which features matter.
-2. **Board on the desk.** Flash the XIAO with firmware that, over Bluetooth, takes a JPEG when the phone asks for one and sends it in chunks, and tells the phone when the button is pressed. The LED is wired so it's on whenever the camera runs.
-3. **App talks to the glasses.** Add "Camera: glasses" to MENU using Web Bluetooth: button press on the glasses starts listening on the phone, and the question uses the glasses' picture instead of the phone's. Web Bluetooth works in Chrome on Android; on an iPhone it needs the Bluefy browser (or a small native app later).
-4. **Put it on a frame.** Camera at the hinge pointing forward, board and battery along one temple arm, button on top of the arm, LED next to the camera.
-5. **Audio on the glasses** (optional): speaker by the ear, then the glasses' own mic so the phone can stay in your pocket.
+Try it before the glasses exist: set `source = "picam"` or `"usb"` in `config.toml` for a Pi camera or webcam, or run `python3 lens.py --console` to type questions. It also runs on any Linux or Mac computer with Claude Code installed.
 
-Bluetooth is used instead of Wi-Fi because a page served from `https://` isn't allowed to talk to a plain `http://` device on your Wi-Fi.
+How it stays fast: Claude Code is started once and kept running, so a question doesn't wait for it to start up (about 0.5 s to the first word on a follow-up, versus 2 s or more starting fresh). Answers are spoken sentence by sentence while the rest is still being written. "What time is it", "take a photo", "stop" and "new conversation" are handled on the Pi without asking Claude at all.
+
+How it stays running: systemd starts the hub on boot and restarts it if it crashes. If it crashes 5 times in 5 minutes, `doctor.py` runs: it saves the code in git, has Claude Code read the logs and fix the problem inside `glasses/pi/` only, keeps the fix if the self-test passes (otherwise rolls it back), and restarts the hub. It runs at most 3 times a day, and writes what it did to `~/lens-data/doctor-report.md`. Its fixes go on a local `pi-fixes` branch: push that branch so the fix can be checked and merged into the main code.
+
+The hub also answers on the network, for the glasses and for testing: `GET /status`, `POST /ask {"text": "..."}` and `POST /button {"event": "press"|"long"}` on port 8765, with the `X-Lens-Token` header from `config.toml`.
+
+### The glasses (XIAO ESP32S3 Sense)
+
+1. Arduino IDE → install the **esp32** boards package by Espressif → board **XIAO_ESP32S3**, **Tools → PSRAM → OPI PSRAM**.
+2. Copy `firmware/lens_glasses/secrets.example.h` to `secrets.h` and fill in the hotspot name, password and the hub token.
+3. Upload. The light blinks twice when it's on Wi-Fi.
+4. Wiring: button between **D1** and **GND**; LED (through the 220 Ω resistor) from **D0** to **GND**; battery to the BAT pads on the back.
+5. Mount it: camera at the hinge pointing forward, board and battery along one temple arm, button on top of the arm, light next to the camera where people can see it.
+
+The glasses find the Pi as `lens-hub.local` and the Pi finds the glasses as `lens-glasses.local`, so it doesn't matter what addresses the hotspot hands out.
+
+Later upgrades: a small speaker by the ear (MAX98357A amp + 8 Ω speaker), and streaming the board's own microphone so earbuds become optional.
 
 ### Be a good camera wearer
 

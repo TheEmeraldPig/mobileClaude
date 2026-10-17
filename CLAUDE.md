@@ -22,7 +22,8 @@
 
 ## glasses/ (Lens: DIY smart glasses)
 
-- `glasses/index.html` is the single-file phone app: camera view, voice in/out, and Claude answers about what the camera sees. See `glasses/README.md` for the hardware plan (XIAO ESP32S3 Sense, Web Bluetooth link to the app).
-- It calls the Claude API from the browser with the user's own key (kept in localStorage) through the Anthropic SDK from jsDelivr, pinned to an exact version.
-- Keep phone (touch, portrait and landscape) and computer layouts working. Test with Playwright in both, with Chromium's fake camera flags (`--use-fake-device-for-media-stream --use-fake-ui-for-media-stream`) and the API mocked with `page.route`.
-- `.github/workflows/glasses.yml` publishes the folder to GitHub Pages on pushes that touch `glasses/`.
+- The main design: glasses with only a XIAO ESP32S3 Sense (camera, button, recording LED; `firmware/lens_glasses/`) talk over Wi-Fi to a Raspberry Pi hub in the pocket (`pi/`). See `glasses/README.md`.
+- `pi/lens.py` runs Claude Code as one long-lived `claude -p --input-format stream-json` process logged into the owner's own account (no API key), with whisper.cpp for speech-to-text and Piper for speech. Keep it to the Python standard library. Notes are saved from `[[note: ...]]` tags in answers.
+- `pi/doctor.py` is the on-device repair agent: systemd runs it after repeated crashes, it lets Claude Code fix only `glasses/pi/`, keeps a fix only if `lens.py --selftest` passes, and commits it to a local `pi-fixes` branch. When the owner pushes `pi-fixes`, review it and merge what's right.
+- Test the hub anywhere with Claude Code installed: a `config.toml` with `[ears] engine = "none"`, `[mouth] engine = "none"`, `[eyes] source = "file:<some.jpg>"`, then `lens.py --console` or `POST /ask`. `lens.py --selftest` must pass.
+- `index.html` is the phone-only version: it calls the Claude API from the browser with the user's own API key through the Anthropic SDK from jsDelivr, pinned to an exact version. Keep phone (touch, portrait and landscape) and computer layouts working; test with Playwright with Chromium's fake camera flags (`--use-fake-device-for-media-stream --use-fake-ui-for-media-stream`) and the API mocked with `page.route`. `.github/workflows/glasses.yml` publishes it to GitHub Pages.
