@@ -254,7 +254,6 @@ var tapObj struct {
 	sx, sy float64
 }
 
-func isPick(id string) bool { return id == "pickaxe" || id == "ironpick" || id == "corepick" }
 
 func startWorldPointer(id int, x, y float64) {
 	// tapping a chest within reach opens it, whatever you are holding

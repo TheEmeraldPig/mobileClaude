@@ -346,6 +346,11 @@ func drawWorld(screen *ebiten.Image) {
 					set(o, doorPixel(t, wx, wy, c, lf))
 					continue
 				}
+				if len(mineDmg) > 0 && wx >= 0 && wx < W && wy >= 0 && wy < H {
+					if k := crackAt(wy*W + wx); k > 0 && crackPattern(wx+baseChunk*CW, wy) < k {
+						c = shadeRGB(c, 0.45) // cracks spread as the block wears down
+					}
+				}
 				if t == CORE {
 					c = mix(c, [3]int{255, 240, 255}, 0.5+0.5*math.Sin(float64(frame)*0.08))
 					lf = 1

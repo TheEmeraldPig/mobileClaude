@@ -72,7 +72,7 @@ func blockIcon(a, d byte) []string {
 // A rolled-up blueprint
 var bpIcon = []string{"........", ".OOOOOO.", "OwWWWWwO", "OWwWWwWO", "OWWwwWWO", "OwWWWWwO", ".OOOOOO.", "........"}
 
-var itemOrder = []string{"pickaxe", "ironpick", "corepick", "hoe", "hammer", "paintbrush", "bucket", "coppersword", "ironsword",
+var itemOrder = []string{"pickaxe", "copperpick", "ironpick", "goldpick", "corepick", "hoe", "hammer", "paintbrush", "bucket", "coppersword", "ironsword",
 	"copperarmor", "ironarmor", "lantern", "torch", "workbench", "furnace", "anvil", "bed", "storage", "door",
 	"bp_hut", "bp_tower", "bp_bridge", "bp_farm", "bp_bunker",
 	"dirt", "sand", "stone", "brick", "plank", "wood", "glass", "leaves", "obsidian", "water",
@@ -81,9 +81,13 @@ var itemOrder = []string{"pickaxe", "ironpick", "corepick", "hoe", "hammer", "pa
 	"seeds", "wheat", "berries", "bread", "heart", "gem", "bomb"}
 
 var items = map[string]*Item{
-	"pickaxe": {name: "Pickaxe", tool: true, desc: "Digs blocks and opens chests", reach: 4, dmg: 1, icon: []string{
+	"pickaxe": {name: "Stone pickaxe", tool: true, desc: "Digs soft blocks, stone, coal and copper. Opens chests", reach: 4, dmg: 1, icon: []string{
 		".SSSSSs.", "S..hH..s", "...hH...", "...hH...", "...hH...", "...hH...", "...hH...", "...hh..."}},
-	"ironpick": {name: "Iron pickaxe", tool: true, desc: "Digs a much bigger area", reach: 6, dmg: 2, icon: []string{
+	"copperpick": {name: "Copper pickaxe", tool: true, desc: "Faster, and strong enough for iron, gold and crystal", reach: 4, dmg: 1, icon: []string{
+		".ccccC..", "c..hH.C.", "...hH...", "...hH...", "...hH...", "...hH...", "...hH...", "...hh..."}},
+	"goldpick": {name: "Gold pickaxe", tool: true, desc: "Very fast with a wide reach", reach: 6, dmg: 3, icon: []string{
+		".uuuuuU.", "u..hH..U", "u..hH..U", "...hH...", "...hH...", "...hH...", "...hH...", "...hh..."}},
+	"ironpick": {name: "Iron pickaxe", tool: true, desc: "Faster and wider, and strong enough for obsidian", reach: 5, dmg: 2, icon: []string{
 		".iiiiiI.", "i..hH..I", "i..hH..I", "...hH...", "...hH...", "...hH...", "...hH...", "...hh..."}},
 	"hoe": {name: "Hoe", tool: true, desc: "Turns dirt into soil for seeds, and harvests crops", reach: 2, icon: []string{
 		"..SSSs..", ".S..hH..", "....hH..", "....hH..", "....hH..", "....hH..", "....hH..", "....hh.."}},
@@ -119,7 +123,7 @@ var items = map[string]*Item{
 		"......qa", ".....qaa", "....OqO.", "...OhO..", "..OhO...", ".OhO....", "OhO.....", "OO......"}},
 	"coreshard": {name: "Core shard", desc: "A piece of the Core. Forge it into the Core pickaxe", icon: []string{
 		"...OO...", "..OqAO..", ".OqAAqO.", "OqAAAAqO", ".OqAAqO.", "..OqqO..", "...OO...", "........"}},
-	"corepick": {name: "Core pickaxe", tool: true, desc: "Digs a huge area and hits hard", reach: 9, dmg: 5, icon: []string{
+	"corepick": {name: "Core pickaxe", tool: true, desc: "Digs a huge area very fast and hits hard", reach: 8, dmg: 5, icon: []string{
 		".qqqqqA.", "q..hH..A", "q..hH..A", "...hH...", "...hH...", "...hH...", "...hH...", "...hh..."}},
 	"sand":     {name: "Sand", place: SAND, desc: "Falls when nothing holds it up", icon: blockIcon('Y', 'y')},
 	"dirt":     {name: "Dirt", place: DIRT, desc: "Ground. Till it with a hoe for crops", icon: blockIcon('d', 'P')},
@@ -438,7 +442,7 @@ var recipes = []Recipe{
 	{"hammer", 1, [][2]any{{"wood", 4}, {"stone", 6}}, "workbench"},
 	{"paintbrush", 1, [][2]any{{"wood", 2}, {"plank", 2}, {"berries", 1}}, "workbench"},
 	{"furnace", 1, [][2]any{{"stone", 20}, {"coal", 4}}, "workbench"},
-	{"anvil", 1, [][2]any{{"ironbar", 6}, {"stone", 10}}, "workbench"},
+	{"anvil", 1, [][2]any{{"copperbar", 6}, {"stone", 10}}, "workbench"},
 	{"bed", 1, [][2]any{{"plank", 12}, {"leaves", 10}}, "workbench"},
 	{"storage", 1, [][2]any{{"plank", 20}}, "workbench"},
 	{"door", 1, [][2]any{{"plank", 14}}, "workbench"},
@@ -467,7 +471,9 @@ var recipes = []Recipe{
 	{"coppersword", 1, [][2]any{{"copperbar", 6}, {"wood", 2}}, "anvil"},
 	{"copperarmor", 1, [][2]any{{"copperbar", 10}}, "anvil"},
 	{"ironsword", 1, [][2]any{{"ironbar", 6}, {"wood", 2}}, "anvil"},
+	{"copperpick", 1, [][2]any{{"copperbar", 8}, {"wood", 4}}, "anvil"},
 	{"ironpick", 1, [][2]any{{"ironbar", 8}, {"wood", 4}}, "anvil"},
+	{"goldpick", 1, [][2]any{{"goldbar", 10}, {"ironbar", 4}}, "anvil"},
 	{"ironarmor", 1, [][2]any{{"ironbar", 12}}, "anvil"},
 	{"lantern", 1, [][2]any{{"crystal", 4}, {"goldbar", 2}}, "anvil"},
 	{"gem", 1, [][2]any{{"crystal", 2}, {"goldbar", 1}}, "anvil"},
@@ -643,79 +649,11 @@ func useHeld() {
 	}
 	useTick++
 	switch {
-	case id == "pickaxe" || id == "ironpick" || id == "corepick":
-		mineObjects(digRadius(it))
-		got := map[string]int{}
-		chest, core, door := [2]int{-1, -1}, 0, [2]int{-1, -1}
-		eachInCircle(digRadius(it), func(x, y, i int) {
-			t := grid[i]
-			switch t {
-			case CHEST:
-				chest = [2]int{x, y}
-				return
-			case DOOR, DOOROPEN:
-				door = [2]int{x, y}
-				return
-			case CORE:
-				if bossDown {
-					grid[i] = EMPTY
-					core++
-				} else {
-					core = -1000
-				}
-				return
-			}
-			name := blockItem[t]
-			if name == "" {
-				return
-			}
-			got[name]++
-			if t == CROP3 {
-				got["seeds"] += 1 + rand.Intn(2)
-			}
-			if t == LEAVES && rand.Float64() < 0.08 {
-				got["seeds"]++
-			}
-			grid[i] = EMPTY
-			if rand.Float64() < 0.12 {
-				burst(1, float64(x), float64(y), blockRGB[t], 0.8, 0.8, 18)
-			}
-		})
-		if got["leaves"] > 0 { // leaves mostly crumble away
-			got["leaves"] = (got["leaves"] + 3) / 4
-		}
-		for name, n := range got {
-			giveItem(name, n)
-		}
-		if len(got) > 0 && useTick%4 == 0 {
-			sfx("dig")
-		}
-		if chest[0] >= 0 {
-			openChest(chest[0], chest[1])
-		}
-		if door[0] >= 0 {
-			if doorHits++; doorHits > 20 { // hold the pickaxe on a door to take it down
-				removeDoor(door[0], door[1])
-				doorHits = 0
-			}
+	case isPick(id):
+		if mineBack || backHeld {
+			mineWalls(it)
 		} else {
-			doorHits = 0
-		}
-		switch {
-		case core > 0:
-			coreDust += core
-			if coreDust >= 10 {
-				giveItem("coreshard", coreDust/10)
-				coreDust %= 10
-			}
-			if useTick%6 == 0 {
-				burst(3, float64(aimX), float64(aimY), blockRGB[CORE], 1.4, 1.4, 24)
-			}
-		case core < 0 && useTick%40 == 1:
-			toast("The Warden's power still holds the Core")
-		}
-		if useTick%20 == 1 {
-			hitCreatures(aimX, aimY, digRadius(it), it.dmg)
+			mineBlocks(it)
 		}
 	case id == "hoe":
 		n := 0
@@ -931,7 +869,7 @@ func drawAim(put func(x, y int, c [3]int, s int), ox, oy int) {
 	ok := aimCell()
 	r := it.reach
 	switch {
-	case id == "pickaxe" || id == "ironpick" || id == "corepick":
+	case isPick(id):
 		r = digRadius(it)
 	case id == "bomb":
 		r = 12

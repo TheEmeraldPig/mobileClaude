@@ -768,6 +768,7 @@ func shiftWindow(dc int) {
 		e.x -= shift
 	}
 	shiftPopups(shift)
+	clearWear()
 	updatePlayerCells()
 }
 

@@ -437,6 +437,25 @@ var buildPaletteOpen bool
 
 func buildBar(hotbarTop float64) {
 	k := heldBuildKind()
+	if k == buildNone && isTouch && selected >= 0 && inv[selected] != nil && isPick(inv[selected].ID) {
+		// a pickaxe on a phone: choose between mining blocks and the background
+		label := "Front"
+		if mineBack {
+			label = "Back walls"
+		}
+		bh := 34.0
+		w := 150.0
+		r := Rect{(logicalW - w) / 2, hotbarTop - bh - 16, w, bh}
+		hudRects = append(hudRects, r)
+		st := styleSlate
+		if mineBack {
+			st = styleViolet
+		}
+		if Button(r, "Mining: "+label, st, true, nil) {
+			mineBack = !mineBack
+		}
+		return
+	}
 	if k == buildNone {
 		buildPaletteOpen = false
 		return

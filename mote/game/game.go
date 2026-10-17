@@ -123,6 +123,7 @@ func (g *Game) Update() error {
 		// right-click opens a station
 		if !isTouch && inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
 			x, y := int(math.Floor((cam.x+hoverX/zoom)/CELL)), int(math.Floor((cam.y+hoverY/zoom)/CELL))
+			rightOnObj = true
 			if x >= 0 && x < W && y >= 0 && y < H && isDoor(grid[y*W+x]) {
 				if cellInBuildReach(x, y) {
 					toggleDoor(x, y)
@@ -133,6 +134,21 @@ func (g *Game) Update() error {
 				} else {
 					toast("Get closer to use the " + stations[o.kind].name)
 				}
+			} else {
+				rightOnObj = false
+			}
+		}
+		// holding right-click with a pickaxe mines the background walls
+		if !isTouch {
+			held := selected >= 0 && inv[selected] != nil && isPick(inv[selected].ID)
+			if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) && held && !rightOnObj && !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+				backHeld, useActive = true, true
+				aimSX, aimSY = hoverX, hoverY
+			} else if backHeld {
+				backHeld, useActive = false, false
+			}
+			if !ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
+				rightOnObj = false
 			}
 		}
 		buildKeys()
@@ -150,6 +166,7 @@ func (g *Game) Update() error {
 		useHeld()
 		updateEntities()
 		checkObjects()
+		healWear()
 		updateParticles()
 	}
 	setHum(player.lifting && !paused(), player.energy)
