@@ -1,0 +1,94 @@
+name: Build Bug Brigade
+
+# Builds BugBrigade.apk (Android) and BugBrigade.exe (Windows) on every push that changes
+# the game, then publishes them as a release named bugs-build-<number>.
+on:
+  push:
+    paths:
+      - 'bugs/**'
+      - '.github/workflows/bugs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bugs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: bugs/go.sum
+      - name: Install libraries for tests
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxxf86vm-dev libasound2-dev xvfb
+      - name: Test
+        run: xvfb-run -a go test ./game
+      - name: Build BugBrigade.exe
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
+            -ldflags "-s -w -H windowsgui -X github.com/TheEmeraldPig/mobileClaude/bugs/game.Version=${{ github.run_number }}" \
+            -o BugBrigade.exe ./cmd/bugs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bugs-windows
+          path: bugs/BugBrigade.exe
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: bugs/go.sum
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Use the Android SDK and NDK that come with the runner
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> $GITHUB_ENV
+      - name: Build the game library (.aar)
+        working-directory: bugs
+        run: |
+          mkdir -p android/app/libs
+          go install github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@v2.8.8
+          ebitenmobile bind -target android -androidapi 23 -javapkg com.theemeraldpig.bugs \
+            -ldflags "-X github.com/TheEmeraldPig/mobileClaude/bugs/game.Version=${{ github.run_number }}" \
+            -o android/app/libs/bugs.aar ./mobile
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build BugBrigade.apk
+        working-directory: bugs/android
+        run: |
+          gradle assembleRelease -PbugsVersion=${{ github.run_number }} --no-daemon -q
+          cp app/build/outputs/apk/release/app-release.apk ../BugBrigade.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bugs-android
+          path: bugs/BugBrigade.apk
+
+  release:
+    needs: [windows, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bugs-*
+          merge-multiple: true
+      # Not marked "latest": Mote's updater reads the latest release.
+      - name: Publish release bugs-build-${{ github.run_number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "bugs-build-${{ github.run_number }}" BugBrigade.apk BugBrigade.exe \
+            --repo "${{ github.repository }}" --target "${{ github.sha }}" --latest=false \
+            --title "Bug Brigade build ${{ github.run_number }}" \
+            --notes "Android: download BugBrigade.apk on your phone and open it to install. Windows: download BugBrigade.exe and run it."
