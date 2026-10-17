@@ -257,6 +257,28 @@ func runScript() {
 			y, _ := strconv.ParseFloat(b, 64)
 			startWorldPointer(77, x, y)
 			endWorldPointer(77)
+		case "lightdbg":
+			pcx, pcy := int((player.x+player.w/2)/CELL), int((player.y+player.h/2)/CELL)
+			for dy := -12; dy <= 12; dy += 3 {
+				row := ""
+				for dx := -12; dx <= 12; dx += 3 {
+					x, y := pcx+dx, pcy+dy
+					row += fmt.Sprintf("%2d/%d/%2d ", lightAt(x, y), grid[y*W+x], lightSrc[(y-lightY0)*lightW+x-lightX0])
+				}
+				fmt.Println("L", row)
+			}
+			if lightImg != nil {
+				vw := lightImg.Bounds().Dx()
+				vh := lightImg.Bounds().Dy()
+				for dy := -12; dy <= 12; dy += 6 {
+					row := ""
+					for dx := -12; dx <= 12; dx += 6 {
+						o := ((vh/2+dy)*vw + vw/2 + dx) * 4
+						row += fmt.Sprintf("%3d,%3d,%3d|%3d,%3d,%3d,%3d ", lightPix[o], lightPix[o+1], lightPix[o+2], worldPix[o], worldPix[o+1], worldPix[o+2], emitPix[o+3])
+					}
+					fmt.Println("P", row)
+				}
+			}
 		case "useonce":
 			useOnce()
 			fmt.Printf("useonce sel=%d toast=%q objs=%d aim=%.0f,%.0f\n", selected, toastText, len(objs), aimSX, aimSY)

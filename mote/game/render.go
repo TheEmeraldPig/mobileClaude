@@ -25,7 +25,7 @@ func smoothstep(a, b, x float64) float64 {
 // 0 at night, 1 in full day
 func daylight() float64 { return smoothstep(-0.15, 0.25, sunHeight()) }
 
-func skyLevel() int { return 20 + int(math.Round(44*daylight())) }
+func skyLevel() int { return 30 + int(math.Round(34*daylight())) }
 
 func isNight() bool { return daylight() < 0.3 }
 
@@ -33,10 +33,11 @@ func isNight() bool { return daylight() < 0.3 }
 // Light flows out from the sky, the mote, torches and crystals. It travels easily
 // through air and water and only a little way into solid blocks. Unlit = black.
 
-const lightMax = 64 // light falls by 2 per cell through air (3 diagonally), 6 through solid blocks
+const lightMax = 64 // light falls by 2 per cell through air (3 diagonally), 4 through solid blocks
 
 var (
 	light            []uint8
+	lightSrc         []uint8 // which kind of light reached each cell (see lightTints)
 	lightW, lightH   int
 	lightX0, lightY0 int
 	buckets          [lightMax + 1][]int32
@@ -54,7 +55,7 @@ func playerLightLevel() int {
 	if countItem("lantern") > 0 {
 		return 64
 	}
-	return 48
+	return 54
 }
 
 func computeLight(ox, oy, vw, vh int) {
@@ -65,18 +66,24 @@ func computeLight(ox, oy, vw, vh int) {
 		light = make([]uint8, n)
 	}
 	light = light[:n]
+	if cap(lightSrc) < n {
+		lightSrc = make([]uint8, n)
+	}
+	lightSrc = lightSrc[:n]
 	for i := range light {
 		light[i] = 0
+		lightSrc[i] = 0
 	}
 	for i := range buckets {
 		buckets[i] = buckets[i][:0]
 	}
-	seed := func(idx, lvl int) {
+	seed := func(idx, lvl int, src uint8) {
 		if lvl > lightMax {
 			lvl = lightMax
 		}
 		if lvl > int(light[idx]) {
 			light[idx] = uint8(lvl)
+			lightSrc[idx] = src
 			buckets[lvl] = append(buckets[lvl], int32(idx))
 		}
 	}
@@ -94,29 +101,41 @@ func computeLight(ox, oy, vw, vh int) {
 		for r := 0; r < lightH; r++ {
 			wy := lightY0 + r
 			if wy < 0 {
-				seed(r*lightW+c, sky)
+				seed(r*lightW+c, sky, srcSky)
 				continue
 			}
 			if wy >= H {
 				break
 			}
 			if wy < top {
-				seed(r*lightW+c, sky)
+				seed(r*lightW+c, sky, srcSky)
 			}
-			if l := blockLight(grid[wy*W+wx]); l > 0 {
-				seed(r*lightW+c, l)
+			if t := grid[wy*W+wx]; t != EMPTY {
+				if l := blockLight(t); l > 0 {
+					seed(r*lightW+c, l, blockLightSrc(t))
+				}
 			}
 		}
 	}
 	objLights(func(lx, ly, lvl int) {
 		c, r := lx-lightX0, ly-lightY0
 		if c >= 0 && r >= 0 && c < lightW && r < lightH {
-			seed(r*lightW+c, lvl)
+			seed(r*lightW+c, lvl, srcFurnace)
+		}
+	})
+	entityLights(func(lx, ly, lvl int, src uint8) {
+		c, r := lx-lightX0, ly-lightY0
+		if c >= 0 && r >= 0 && c < lightW && r < lightH {
+			seed(r*lightW+c, lvl, src)
 		}
 	})
 	pcx, pcy := int((player.x+player.w/2)/CELL)-lightX0, int((player.y+player.h/2)/CELL)-lightY0
 	if pcx >= 0 && pcy >= 0 && pcx < lightW && pcy < lightH {
-		seed(pcy*lightW+pcx, playerLightLevel())
+		src := uint8(srcMote)
+		if countItem("lantern") > 0 {
+			src = srcLantern
+		}
+		seed(pcy*lightW+pcx, playerLightLevel(), src)
 	}
 	for lvl := lightMax; lvl > 0; lvl-- {
 		for k := 0; k < len(buckets[lvl]); k++ {
@@ -131,12 +150,13 @@ func computeLight(ox, oy, vw, vh int) {
 				}
 				wx, wy := lightX0+nc, lightY0+nr
 				if wx < 0 || wx >= W || wy >= H || (wy >= 0 && blocksLight(grid[wy*W+wx])) {
-					cost *= 3
+					cost *= 2 // a little way into solid blocks, so surfaces get a lit edge
 				}
 				nl := lvl - cost
 				ni := nr*lightW + nc
 				if nl > int(light[ni]) {
 					light[ni] = uint8(nl)
+					lightSrc[ni] = lightSrc[idx]
 					if nl > 0 {
 						buckets[nl] = append(buckets[nl], int32(ni))
 					}
@@ -157,7 +177,8 @@ func computeLight(ox, oy, vw, vh int) {
 var lightCurve = func() [lightMax + 1]float64 {
 	var t [lightMax + 1]float64
 	for i := range t {
-		t[i] = math.Pow(math.Min(1, float64(i)/36), 0.85) // bright near the source, then a soft edge
+		u := 1 - math.Min(1, float64(i)/52)
+		t[i] = 1 - u*u // bright near the source, fading smoothly to nothing at the edge
 	}
 	return t
 }()
@@ -180,7 +201,7 @@ var (
 	duskGlow    = [3]int{244, 150, 112}
 	farHill     = [3]int{120, 112, 190}
 	nearHill    = [3]int{70, 62, 132}
-	caveWall    = [3]int{74, 66, 92}
+	caveWall    = [3]int{112, 100, 132}
 )
 
 // Background pixel for an open-sky cell, in view cell coordinates
@@ -263,6 +284,7 @@ func drawWorld(screen *ebiten.Image) {
 		worldImg = ebiten.NewImage(vw, vh)
 		worldPix = make([]byte, vw*vh*4)
 	}
+	ensureLightBuffers(vw, vh)
 	ox, oy := int(math.Floor(cam.x/CELL)), int(math.Floor(cam.y/CELL))
 	computeLight(ox, oy, vw, vh)
 	pix := worldPix
@@ -276,12 +298,13 @@ func drawWorld(screen *ebiten.Image) {
 	set := func(o int, c [3]int) {
 		pix[o], pix[o+1], pix[o+2], pix[o+3] = clamp8(c[0]), clamp8(c[1]), clamp8(c[2]), 255
 	}
+	sky := make([]bool, vw*vh) // cells showing the open sky (never darkened)
+	// The world is drawn at full brightness here; the light map darkens and colours it later.
 	for y := 0; y < vh; y++ {
 		wy := oy + y
 		for x := 0; x < vw; x++ {
 			wx := ox + x
 			o := (y*vw + x) * 4
-			lf := lightCurve[lightAt(wx, wy)]
 			var t uint8 = STONE
 			var wl, pt, wpt uint8
 			sh := 0
@@ -298,41 +321,45 @@ func drawWorld(screen *ebiten.Image) {
 				var bg [3]int
 				switch {
 				case wl != 0:
-					bg = shadeRGB(wallPixel(wl, wpt, wx, wy, sh), math.Max(lf, 0.12))
+					bg = wallPixel(wl, wpt, wx, wy, sh)
 				case openSky:
 					bg = skyPixel(x, y, vw, vh, ox+baseChunk*CW, oy, avg)
+					sky[y*vw+x] = t == EMPTY
 				default:
-					bg = shadeRGB([3]int{caveWall[0] + sh, caveWall[1] + sh, caveWall[2] + sh}, lf)
+					bg = [3]int{caveWall[0] + sh, caveWall[1] + sh, caveWall[2] + sh}
 				}
 				if t == WATER {
 					wc := blockRGB[WATER]
 					wc = [3]int{wc[0] + sh/2, wc[1] + sh/2, wc[2] + sh/2}
-					if !openSky {
-						wc = shadeRGB(wc, lf)
-					} else {
-						wc = shadeRGB(wc, 0.35+0.65*lf)
+					if openSky && wl == 0 { // under the sky: tint the sky's own colour
+						wc = shadeRGB(wc, 0.4+0.6*daylight())
+						sky[y*vw+x] = true
+					}
+					// a bright line on the water's surface
+					if wy > 0 && wx >= 0 && wx < W && grid[(wy-1)*W+wx] == EMPTY {
+						wc = mix(wc, [3]int{200, 230, 255}, 0.35)
 					}
 					bg = mix(bg, wc, 0.78)
 				}
-				if t == TORCH {
-					bg = torchPixel(wx, wy, bg)
-				}
 				if t == DOOROPEN {
-					bg = doorPixel(t, wx, wy, bg, lf)
+					bg = doorPixel(t, wx, wy, bg, 1)
 				}
 				if t == GLASS {
-					g := shadeRGB(blockRGB[GLASS], 0.3+0.7*lf)
+					g := blockRGB[GLASS]
 					if (wx+wy)%7 == 0 {
 						g = [3]int{240, 250, 255}
 					}
 					bg = mix(bg, g, 0.4)
 				}
+				set(o, bg)
+				if t == TORCH {
+					emit(x, y, vw, vh, torchPixel(wx, wy, bg), 1)
+				}
 				if t == LAVA { // glowing, slowly churning
 					f := 0.85 + 0.15*math.Sin(float64(frame)*0.04+float64(wx)*0.7+float64(wy)*0.3)
 					lc := blockRGB[LAVA]
-					bg = shadeRGB([3]int{lc[0], lc[1] + sh*2, lc[2] + sh}, f)
+					emit(x, y, vw, vh, shadeRGB([3]int{lc[0], lc[1] + sh*2, lc[2] + sh}, f), 1)
 				}
-				set(o, bg)
 			default:
 				c := blockRGB[t]
 				if isOre(t) && (sh+10)%3 == 0 {
@@ -343,7 +370,7 @@ func drawWorld(screen *ebiten.Image) {
 				}
 				c = [3]int{c[0] + sh, c[1] + sh, c[2] + sh}
 				if t == DOOR {
-					set(o, doorPixel(t, wx, wy, c, lf))
+					set(o, doorPixel(t, wx, wy, c, 1))
 					continue
 				}
 				if len(mineDmg) > 0 && wx >= 0 && wx < W && wy >= 0 && wy < H {
@@ -351,45 +378,36 @@ func drawWorld(screen *ebiten.Image) {
 						c = shadeRGB(c, 0.45) // cracks spread as the block wears down
 					}
 				}
-				if t == CORE {
-					c = mix(c, [3]int{255, 240, 255}, 0.5+0.5*math.Sin(float64(frame)*0.08))
-					lf = 1
+				// a lighter top edge on blocks open to the air above, for depth
+				if wy > 0 && wx >= 0 && wx < W && !isSolid(grid[(wy-1)*W+wx]) && t != GRASS {
+					c = mix(c, [3]int{255, 255, 255}, 0.12)
 				}
-				if t == FURNACE && (wx+wy)%3 == 0 {
-					c = [3]int{255, 150, 60}
-					lf = math.Max(lf, 0.9)
+				set(o, c)
+				switch t {
+				case CORE:
+					emit(x, y, vw, vh, mix(c, [3]int{255, 240, 255}, 0.5+0.5*math.Sin(float64(frame)*0.08)), 1)
+				case CRYSTAL:
+					emit(x, y, vw, vh, mix(c, [3]int{220, 250, 255}, 0.2+0.2*math.Sin(float64(frame)*0.05+float64(wx))), 0.75)
 				}
-				if t == CRYSTAL {
-					c = mix(c, [3]int{220, 250, 255}, 0.2+0.2*math.Sin(float64(frame)*0.05+float64(wx)))
-					lf = math.Max(lf, 0.85)
-				}
-				set(o, shadeRGB(c, lf))
 			}
 		}
 	}
+	// emissive drawing: always visible (the mote, eyes, particles, holograms...)
 	put := func(x, y int, c [3]int, s int) {
+		emit(x, y, vw, vh, [3]int{c[0] + s, c[1] + s, c[2] + s}, 1)
+	}
+	// lit drawing: part of the world, shaded by the light map
+	lit := func(x, y int, c [3]int, s int) {
 		if x < 0 || y < 0 || x >= vw || y >= vh {
 			return
 		}
 		o := (y*vw + x) * 4
 		pix[o], pix[o+1], pix[o+2] = clamp8(c[0]+s), clamp8(c[1]+s), clamp8(c[2]+s)
-	}
-	// creatures are only visible where there is light (their eyes always glow)
-	lit := func(x, y int, c [3]int, s int) {
-		f := lightCurve[lightAt(x+ox, y+oy)]
-		put(x, y, shadeRGB([3]int{c[0] + s, c[1] + s, c[2] + s}, f), 0)
+		sky[y*vw+x] = false
 	}
 	drawObjects(lit, ox, oy)
 	drawEntities(lit, put, ox, oy)
-	blend := func(x, y int, c [3]int, a float64) {
-		if x < 0 || y < 0 || x >= vw || y >= vh {
-			return
-		}
-		o := (y*vw + x) * 4
-		for k := 0; k < 3; k++ {
-			pix[o+k] = clamp8(int(float64(pix[o+k])*(1-a) + float64(c[k])*a))
-		}
-	}
+	blend := func(x, y int, c [3]int, a float64) { emit(x, y, vw, vh, c, a) }
 	drawHologram(blend, ox, oy)
 	drawStationHologram(blend, ox, oy)
 	drawDoorHologram(blend, ox, oy)
@@ -402,12 +420,17 @@ func drawWorld(screen *ebiten.Image) {
 	if cur == scPlaying {
 		drawAim(put, ox, oy)
 	}
+	buildLightMap(ox, oy, vw, vh, func(x, y int) bool { return sky[y*vw+x] })
 	worldImg.WritePixels(pix)
 	k := zoom * CELL * uiScale
+	var geo ebiten.GeoM
+	geo.Scale(k, k)
+	geo.Translate((float64(ox*CELL)-cam.x)*zoom*uiScale, (float64(oy*CELL)-cam.y)*zoom*uiScale)
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(k, k)
-	op.GeoM.Translate((float64(ox*CELL)-cam.x)*zoom*uiScale, (float64(oy*CELL)-cam.y)*zoom*uiScale)
+	op.GeoM = geo
 	screen.DrawImage(worldImg, op)
+	composeLight(screen, geo)
+	drawVignette(screen)
 }
 
 // A background wall: the block's colour, darker, with a faint pattern so it reads as "behind"

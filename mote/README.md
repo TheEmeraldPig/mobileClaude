@@ -32,7 +32,9 @@ Hand crafting covers planks, torches and the workbench. Everything else is made 
 
 - `game/` holds the whole game as a library:
   - `world.go`: seeded chunk world: terrain, caves, caverns, ores and crystals. Follow the rules at the top of the file when adding terrain.
-  - `render.go`: lighting (fog of war), the day/night sky and background, and drawing the world.
+  - `render.go`: the light flood fill (fog of war), the day/night sky and background, and drawing the world at full brightness.
+  - `lighting.go`: coloured lighting: a blurred RGB light map multiplied over the world (linear filtering for smooth falloff), an emissive layer for things that glow, coloured haze around lights and a vignette.
+  - `mining.go`: block hardness, pickaxe tiers and power, crack wear, and mining background walls.
   - `entities.go`: creatures (gloomlings, bats, skitters, wisps, brutes, night shades, the Warden boss) and dropped items. Each kind's size, health, damage, speed and sensing range is in the `kinds` table; every speed is a fraction under 1 of the mote's, so the mote can always outrun them. Spawning is slow (`spawnEvery`, `maxCreatures`).
   - `ai.go`: creature path finding. A breadth-first search over 4x4-cell blocks spreads out from the mote every few frames; creatures step toward the neighbouring block that is closer, so they go around walls and through tunnels. Walkers can only climb where a jump reaches.
   - `blueprints.go`: ready-made structures and the placement hologram. Add a structure by adding a template in `initBlueprints()`, an item and a recipe.
