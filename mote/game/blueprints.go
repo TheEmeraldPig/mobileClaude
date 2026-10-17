@@ -9,11 +9,11 @@ import (
 // shows where it will go: green when it fits, red when it doesn't.
 //
 // Template characters: B brick, P plank, G glass, T torch, S soil, W water, O stone,
-// D dirt, space = cleared to air, . = left as it is.
+// D dirt, R door (closed), space = cleared to air, . = left as it is.
 
 var bpTemplates = map[string][]string{}
 
-var bpBlock = map[byte]uint8{'B': BRICK, 'P': PLANK, 'G': GLASS, 'T': TORCH, 'S': SOIL, 'W': WATER, 'O': STONE, 'D': DIRT, ' ': EMPTY}
+var bpBlock = map[byte]uint8{'B': BRICK, 'P': PLANK, 'G': GLASS, 'T': TORCH, 'S': SOIL, 'W': WATER, 'O': STONE, 'D': DIRT, 'R': DOOR, ' ': EMPTY}
 
 func grid2(w, h int, fill byte) [][]byte {
 	g := make([][]byte, h)
@@ -48,8 +48,8 @@ func initBlueprints() {
 		for y := 5; y < h-1; y++ {
 			g[y][0], g[y][1], g[y][w-2], g[y][w-1] = 'B', 'B', 'B', 'B'
 		}
-		for y := h - 16; y < h-1; y++ { // doorway
-			g[y][0], g[y][1] = ' ', ' '
+		for y := h - 16; y < h-1; y++ { // doorway with a door
+			g[y][0], g[y][1] = 'R', 'R'
 		}
 		for y := 8; y < 11; y++ {
 			g[y][w-2], g[y][w-1] = 'G', 'G'
@@ -88,7 +88,7 @@ func initBlueprints() {
 			}
 		}
 		for y := h - 16; y < h-1; y++ {
-			g[y][w-2], g[y][w-1] = ' ', ' '
+			g[y][w-2], g[y][w-1] = 'R', 'R'
 		}
 		bpTemplates["tower"] = toRows(g)
 	}
@@ -142,7 +142,7 @@ func initBlueprints() {
 		}
 		for y := h - 17; y < h-2; y++ {
 			for x := 0; x < 3; x++ {
-				g[y][x] = ' '
+				g[y][x] = 'R'
 			}
 		}
 		g[4][w/2] = 'T'
