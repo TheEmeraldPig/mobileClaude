@@ -48,6 +48,8 @@ To try it on a computer without Pages: `npx serve glasses` (or `python3 -m http.
 
 ## Building the glasses
 
+**3D-printed frame and wiring:** `hardware/` has the printable model (`hardware/stl/`) and a build sheet with a 3D view, the wiring diagram and the build order: [Lens Glasses Blueprint](https://claude.ai/artifact/6CeASikG2KLT9uxdUsBuyB) (also `hardware/blueprint.html`).
+
 ### Parts (about $90–130, one time)
 
 | Part | Why | Rough price |
