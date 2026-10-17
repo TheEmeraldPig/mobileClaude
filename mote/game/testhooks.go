@@ -98,7 +98,7 @@ func runScript() {
 		case "main":
 			openScreen(scMain)
 		case "seed":
-			openScreen(scSeed)
+			startNewWorldScreen()
 		case "right":
 			scriptRight = true
 		case "lev":
@@ -108,7 +108,11 @@ func runScript() {
 		case "select":
 			selected, _ = strconv.Atoi(arg)
 		case "give":
-			addItem(arg, 200)
+			if items[arg] != nil && items[arg].tool {
+				addItem(arg, 1)
+			} else {
+				addItem(arg, 200)
+			}
 		case "aim": // aim=sx:sy, start using the selected item at that screen point
 			a, b, _ := strings.Cut(arg, ":")
 			aimSX, _ = strconv.ParseFloat(a, 64)
@@ -146,17 +150,43 @@ func runScript() {
 			n, _ := strconv.Atoi(arg)
 			player.invuln = 0
 			hurtPlayer(n, 1)
-		case "essence":
-			n, _ := strconv.Atoi(arg)
-			meta.Essence += n
-		case "upgrades":
-			upgradesFrom = scMain
-			openScreen(scUpgrades)
+		case "craft": // craft=STATION (or "hand") opens that crafting menu
+			if arg == "hand" {
+				openHandCrafting()
+			} else {
+				openStation(arg)
+			}
+		case "worlds":
+			openScreen(scWorlds)
+		case "die":
+			player.invuln = 0
+			hurtPlayer(999, 1)
+		case "respawn":
+			respawn()
+		case "mode": // mode=N for the current world
+			world.Mode, _ = strconv.Atoi(arg)
+		case "station": // station=KIND placed where the mote stands
+			lx := int((player.x+player.w)/CELL) + 4
+			ty := int((player.y+player.h)/CELL) - len(stations[arg].sprite)
+			objs = append(objs, &Obj{kind: arg, wx: lx + baseChunk*CW, y: ty})
+		case "shape": // shape=N
+			buildShape, _ = strconv.Atoi(arg)
+		case "drag": // drag=x0:y0:x1:y1 in screen px, building the held item's shape
+			var v [4]float64
+			fmt.Sscanf(strings.ReplaceAll(arg, ":", " "), "%f %f %f %f", &v[0], &v[1], &v[2], &v[3])
+			aimSX, aimSY = v[0], v[1]
+			startShape()
+			aimSX, aimSY = v[2], v[3]
+			finishShape()
+		case "paint": // paint=N colour
+			paintIdx, _ = strconv.Atoi(arg)
+		case "rot":
+			buildRot = (buildRot + 1) % 4
 		case "tpchest": // move next to the nearest chest (graves first, dungeons with arg=deep)
-			teleportTo(func(t uint8, y int) bool { return t == CHEST && (arg != "deep" || y > H*55/100) })
+			teleportNear(func(t uint8, y int) bool { return t == CHEST && (arg != "deep" || y > H*55/100) })
 		case "tpcore":
 			shiftWindow(floorDiv(coreX(), CW) - NCH/2 - baseChunk)
-			teleportTo(func(t uint8, y int) bool { return t == CORE })
+			teleportNear(func(t uint8, y int) bool { return t == CORE })
 		case "selectid":
 			for i := 0; i < hotbarN; i++ {
 				if inv[i] != nil && inv[i].ID == arg {
@@ -195,8 +225,31 @@ func runScript() {
 				}
 				fmt.Println("around", y, row)
 			}
+		case "fitdbg":
+			px, py := int((player.x+player.w/2)/CELL), int((player.y+player.h)/CELL)
+			sp := stations["workbench"].sprite
+			w, h := len(sp[0]), len(sp)
+			for _, dx := range []int{-30, -15, 10, 20} {
+				lx, ty := px+dx, py-h
+				free, sup := true, 0
+				for yy := 0; yy < h; yy++ {
+					for xx := 0; xx < w; xx++ {
+						if t := grid[(ty+yy)*W+lx+xx]; isSolid(t) || isLiquid(t) {
+							free = false
+						}
+					}
+				}
+				for xx := 0; xx < w; xx++ {
+					if isSolid(grid[(ty+h)*W+lx+xx]) {
+						sup++
+					}
+				}
+				_, _, ok := settleStation("workbench", lx, ty, false)
+				fmt.Printf("fit dx=%d free=%v sup=%d/%d fits=%v settle=%v\n", dx, free, sup, w, stationFits("workbench", lx, ty, false), ok)
+			}
 		case "useonce":
 			useOnce()
+			fmt.Printf("useonce sel=%d toast=%q objs=%d aim=%.0f,%.0f\n", selected, toastText, len(objs), aimSX, aimSY)
 		case "grow": // ripen every crop in the loaded window
 			for i, t := range grid {
 				if t == CROP1 || t == CROP2 {
@@ -221,11 +274,18 @@ func runScript() {
 				}
 			}
 		case "state":
-			fmt.Printf("frame %d screen=%d run=%+v essence=%d hp=%d pos=%.0f,%.0f\n", frame, cur, run, meta.Essence, player.hp, player.x/CELL, player.y/CELL)
-		case "newrun":
-			startRun(arg)
+			fmt.Printf("frame %d screen=%d world=%q mode=%d hp=%d/%d pos=%.0f,%.0f objs=%d inv=%s\n", frame, cur, world.Name, world.Mode, player.hp, player.maxHP, player.x/CELL, player.y/CELL, len(objs), invSummary())
+		case "newrun", "newworld": // newworld=SEED[:MODE]
+			seed, m, _ := strings.Cut(arg, ":")
+			mode := modeNormal
+			if m != "" {
+				mode, _ = strconv.Atoi(m)
+			}
+			createNewWorld("Test world", seed, mode)
 		case "shot":
 			shotPath = arg
+		case "save":
+			saveGame()
 		case "quit":
 			os.Exit(0)
 		}
@@ -290,7 +350,7 @@ func invSummary() string {
 }
 
 // Put the mote in open space next to the first matching block in the loaded window
-func teleportTo(match func(t uint8, y int) bool) {
+func teleportNear(match func(t uint8, y int) bool) {
 	for y := 0; y < H; y++ {
 		for x := 20; x < W-20; x++ {
 			if !match(grid[y*W+x], y) {

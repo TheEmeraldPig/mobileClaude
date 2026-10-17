@@ -38,6 +38,8 @@ type Item struct {
 	heal           int // food: half-hearts restored
 	armor          int // damage blocked while carried
 	blueprint      string
+	station        string // a workstation you place in the world
+	wall           uint8  // a background wall of this block type
 }
 
 // A rough lump in two shades
@@ -70,10 +72,12 @@ func blockIcon(a, d byte) []string {
 // A rolled-up blueprint
 var bpIcon = []string{"........", ".OOOOOO.", "OwWWWWwO", "OWwWWwWO", "OWWwwWWO", "OwWWWWwO", ".OOOOOO.", "........"}
 
-var itemOrder = []string{"pickaxe", "ironpick", "hoe", "bucket", "coppersword", "ironsword", "copperarmor", "ironarmor",
-	"lantern", "torch", "furnace", "bp_hut", "bp_tower", "bp_bridge", "bp_farm", "bp_bunker",
+var itemOrder = []string{"pickaxe", "ironpick", "corepick", "hoe", "hammer", "paintbrush", "bucket", "coppersword", "ironsword",
+	"copperarmor", "ironarmor", "lantern", "torch", "workbench", "furnace", "anvil",
+	"bp_hut", "bp_tower", "bp_bridge", "bp_farm", "bp_bunker",
 	"dirt", "sand", "stone", "brick", "plank", "wood", "glass", "leaves", "obsidian", "water",
-	"coal", "copper", "iron", "gold", "crystal", "copperbar", "ironbar", "goldbar",
+	"wall_dirt", "wall_stone", "wall_plank", "wall_brick", "wall_glass", "wall_obsidian",
+	"coal", "copper", "iron", "gold", "crystal", "copperbar", "ironbar", "goldbar", "coreshard",
 	"seeds", "wheat", "berries", "bread", "heart", "gem", "bomb"}
 
 var items = map[string]*Item{
@@ -97,8 +101,20 @@ var items = map[string]*Item{
 		"...OO...", "..O..O..", ".OOOOOO.", ".OxXxxO.", ".OXxxxO.", ".OxxxzO.", ".OOOOOO.", "........"}},
 	"torch": {name: "Torch", once: true, place: TORCH, desc: "Place a light that never goes out", icon: []string{
 		"...f....", "..fTf...", "..TTT...", "...h....", "...h....", "...h....", "...h....", "........"}},
-	"furnace": {name: "Furnace", once: true, place: FURNACE, desc: "Place it, then smelt ores into bars nearby", icon: []string{
+	"furnace": {name: "Furnace", once: true, station: "furnace", desc: "A station: smelt ores into bars, bake bread, make glass", icon: []string{
 		"OOOOOOOO", "OGGgGGGO", "OGOOOOgO", "OgOfTOGO", "OGOTfOGO", "OGOOOOgO", "OGGGgGGO", "OOOOOOOO"}},
+	"workbench": {name: "Workbench", once: true, station: "workbench", desc: "A station: tools, building blocks, walls and blueprints", icon: []string{
+		"........", "........", "OOOOOOOO", "OppppppO", "OPPPPPPO", "OhOOOOhO", "OhO..OhO", "OOO..OOO"}},
+	"anvil": {name: "Anvil", once: true, station: "anvil", desc: "A station: metal tools, weapons and armor", icon: []string{
+		"........", "........", "OOOOOOO.", "OiiiiiIO", ".OIIIIO.", "..OmmO..", ".OmmmmO.", "OOOOOOOO"}},
+	"hammer": {name: "Hammer", tool: true, desc: "Knocks down background walls", reach: 3, icon: []string{
+		".OOOOO..", "OSSSSsO.", "OSSSSsO.", ".OOhOO..", "...hH...", "...hH...", "...hH...", "...hh..."}},
+	"paintbrush": {name: "Paintbrush", tool: true, desc: "Paints blocks and walls. Pick a colour on the build bar (C)", reach: 3, icon: []string{
+		"......qa", ".....qaa", "....OqO.", "...OhO..", "..OhO...", ".OhO....", "OhO.....", "OO......"}},
+	"coreshard": {name: "Core shard", desc: "A piece of the Core. Forge it into the Core pickaxe", icon: []string{
+		"...OO...", "..OqAO..", ".OqAAqO.", "OqAAAAqO", ".OqAAqO.", "..OqqO..", "...OO...", "........"}},
+	"corepick": {name: "Core pickaxe", tool: true, desc: "Digs a huge area and hits hard", reach: 9, dmg: 5, icon: []string{
+		".qqqqqA.", "q..hH..A", "q..hH..A", "...hH...", "...hH...", "...hH...", "...hH...", "...hh..."}},
 	"sand":     {name: "Sand", place: SAND, desc: "Falls when nothing holds it up", icon: blockIcon('Y', 'y')},
 	"dirt":     {name: "Dirt", place: DIRT, desc: "Ground. Till it with a hoe for crops", icon: blockIcon('d', 'P')},
 	"stone":    {name: "Stone", place: STONE, desc: "A solid building block", icon: blockIcon('G', 'g')},
@@ -129,7 +145,7 @@ var items = map[string]*Item{
 		"....e...", "...eE...", "..OO.OO.", ".OaaOaaO", ".OaAOaAO", "..OOaaO.", "...OaAO.", "....OO.."}},
 	"bread": {name: "Bread", once: true, heal: 6, desc: "Eat to heal three hearts", icon: []string{
 		"........", "..OOOO..", ".OnnTnO.", "OnTnnTnO", "OnnnnnnO", "OHHHHHHO", ".OOOOOO.", "........"}},
-	"heart": {name: "Heart crystal", once: true, desc: "Use it to gain an extra heart for this run", icon: []string{
+	"heart": {name: "Heart crystal", once: true, desc: "Use it to gain an extra heart", icon: []string{
 		"........", ".OO.OO..", "OAaOaaO.", "OaaaaaO.", ".OaaaO..", "..OaO...", "...O....", "........"}},
 	"gem": {name: "Energy gem", once: true, desc: "Refills levitation", icon: []string{
 		"...OO...", "..OLLO..", ".OLBBBO.", "OBLBBBDO", ".OBBBDO.", "..OBDO..", "...OO...", "........"}},
@@ -142,7 +158,32 @@ var items = map[string]*Item{
 	"bp_bunker": {name: "Bunker blueprint", once: true, blueprint: "bunker", desc: "Builds a safe stone shelter", icon: bpIcon},
 }
 
+// Background walls: one item per wall type, made from its block at a workbench
+var wallTypes = []struct {
+	id    string
+	block uint8
+	name  string
+}{{"wall_dirt", DIRT, "Dirt wall"}, {"wall_stone", STONE, "Stone wall"}, {"wall_plank", PLANK, "Plank wall"},
+	{"wall_brick", BRICK, "Brick wall"}, {"wall_glass", GLASS, "Glass wall"}, {"wall_obsidian", OBSIDIAN, "Obsidian wall"}}
+
+var wallItem = map[uint8]string{}
+
 func initItems() {
+	for _, w := range wallTypes {
+		src := items[blockItem[w.block]]
+		icon := make([]string, 8)
+		for y, r := range src.icon {
+			b := []byte(r)
+			for x := range b {
+				if (x+y)%2 == 0 && b[x] != '.' && b[x] != 'O' {
+					b[x] = 'O' // darker, dotted: it sits behind things
+				}
+			}
+			icon[y] = string(b)
+		}
+		items[w.id] = &Item{name: w.name, wall: w.block, desc: "A background wall. Walk past it; creatures won't spawn in front of walls", icon: icon}
+		wallItem[w.block] = w.id
+	}
 	for id, it := range items {
 		it.id = id
 		img := ebiten.NewImage(8, 8)
@@ -165,8 +206,9 @@ const (
 )
 
 type Stack struct {
-	ID string `json:"id"`
-	N  int    `json:"n"`
+	ID   string `json:"id"`
+	N    int    `json:"n"`
+	Temp bool   `json:"temp,omitempty"` // part of the temporary kit (Hard modes)
 }
 
 var (
@@ -178,10 +220,13 @@ func addItem(id string, n int) int {
 	if n <= 0 || items[id] == nil {
 		return 0
 	}
+	if id != "torch" && isUtility(id) && hasTemp() {
+		clearTemp()
+	}
 	left := n
 	if !items[id].tool {
 		for _, s := range inv {
-			if s != nil && s.ID == id && s.N < stackMax {
+			if s != nil && s.ID == id && !s.Temp && s.N < stackMax {
 				k := min(left, stackMax-s.N)
 				s.N += k
 				left -= k
@@ -206,7 +251,7 @@ func addItem(id string, n int) int {
 		if items[id].tool {
 			k = 1
 		}
-		inv[i] = &Stack{id, k}
+		inv[i] = &Stack{ID: id, N: k}
 		left -= k
 	}
 	return n - left
@@ -266,37 +311,14 @@ func armorLevel() int {
 	return best
 }
 
-// Starting items for a run (more with the Satchel upgrade)
-func starterKit() {
-	for i := range inv {
-		inv[i] = nil
-	}
-	addItem("pickaxe", 1)
-	addItem("hoe", 1)
-	addItem("torch", 8)
-	addItem("berries", 4)
-	addItem("bp_hut", 1)
-	lvl := meta.Upgrades["satchel"]
-	if lvl >= 1 {
-		addItem("torch", 12)
-		addItem("bread", 3)
-		addItem("bomb", 3)
-	}
-	if lvl >= 2 {
-		addItem("coppersword", 1)
-		addItem("bucket", 1)
-	}
-	if lvl >= 3 {
-		addItem("ironpick", 1)
-		addItem("copperarmor", 1)
-	}
-	selected = -1
-}
-
 // Drop n items from a slot into the world in front of the mote
 func dropSlot(i, n int) {
 	s := inv[i]
 	if s == nil {
+		return
+	}
+	if s.Temp {
+		toast("Temporary items can't be dropped")
 		return
 	}
 	n = min(n, s.N)
@@ -347,7 +369,7 @@ func splitStack(i int) {
 	for j := hotbarN; j < invSize; j++ {
 		if inv[j] == nil {
 			half := s.N / 2
-			inv[j] = &Stack{s.ID, half}
+			inv[j] = &Stack{ID: s.ID, N: half, Temp: s.Temp}
 			s.N -= half
 			return
 		}
@@ -375,72 +397,94 @@ func sortBackpack() {
 	sort.Slice(tools, func(a, b int) bool { return rank[tools[a]] < rank[tools[b]] })
 	j := hotbarN
 	for _, id := range tools {
-		inv[j] = &Stack{id, 1}
+		inv[j] = &Stack{ID: id, N: 1}
 		j++
 	}
 	for _, id := range itemOrder {
 		for n := totals[id]; n > 0 && j < invSize; j++ {
 			k := min(n, stackMax)
-			inv[j] = &Stack{id, k}
+			inv[j] = &Stack{ID: id, N: k}
 			n -= k
 		}
 	}
 }
 
 // ---- Crafting ----
+// Basic recipes are made by hand (in the inventory). Everything else needs a station:
+// open the workbench, furnace or anvil to use its recipes.
 
 type Recipe struct {
-	out     string
-	n       int
-	needs   [][2]any // {id, count}
-	furnace bool     // needs a furnace nearby
+	out   string
+	n     int
+	needs [][2]any // {id, count}
+	at    string   // station id, "" = by hand
 }
 
 var recipes = []Recipe{
-	{"plank", 4, [][2]any{{"wood", 1}}, false},
-	{"torch", 4, [][2]any{{"coal", 1}, {"wood", 1}}, false},
-	{"furnace", 1, [][2]any{{"stone", 20}, {"coal", 4}}, false},
-	{"pickaxe", 1, [][2]any{{"wood", 6}, {"stone", 10}}, false},
-	{"hoe", 1, [][2]any{{"wood", 4}, {"stone", 4}}, false},
-	{"brick", 10, [][2]any{{"sand", 10}, {"water", 5}}, false},
-	{"bomb", 1, [][2]any{{"sand", 10}, {"coal", 2}}, false},
-	{"copperbar", 1, [][2]any{{"copper", 2}, {"coal", 1}}, true},
-	{"ironbar", 1, [][2]any{{"iron", 2}, {"coal", 1}}, true},
-	{"goldbar", 1, [][2]any{{"gold", 2}, {"coal", 1}}, true},
-	{"glass", 4, [][2]any{{"sand", 4}, {"coal", 1}}, true},
-	{"bread", 1, [][2]any{{"wheat", 3}}, true},
-	{"bucket", 1, [][2]any{{"copperbar", 3}}, false},
-	{"coppersword", 1, [][2]any{{"copperbar", 6}, {"wood", 2}}, false},
-	{"copperarmor", 1, [][2]any{{"copperbar", 10}}, false},
-	{"ironsword", 1, [][2]any{{"ironbar", 6}, {"wood", 2}}, false},
-	{"ironpick", 1, [][2]any{{"ironbar", 8}, {"wood", 4}}, false},
-	{"ironarmor", 1, [][2]any{{"ironbar", 12}}, false},
-	{"lantern", 1, [][2]any{{"crystal", 4}, {"goldbar", 2}}, false},
-	{"gem", 1, [][2]any{{"crystal", 2}, {"goldbar", 1}}, false},
-	{"bp_hut", 1, [][2]any{{"plank", 40}, {"brick", 20}, {"glass", 4}}, false},
-	{"bp_farm", 1, [][2]any{{"dirt", 30}, {"brick", 10}, {"water", 10}}, false},
-	{"bp_bridge", 1, [][2]any{{"plank", 30}}, false},
-	{"bp_tower", 1, [][2]any{{"brick", 60}, {"plank", 20}, {"glass", 6}}, false},
-	{"bp_bunker", 1, [][2]any{{"stone", 90}, {"glass", 4}}, false},
+	// by hand
+	{"plank", 4, [][2]any{{"wood", 1}}, ""},
+	{"torch", 4, [][2]any{{"coal", 1}, {"wood", 1}}, ""},
+	{"workbench", 1, [][2]any{{"plank", 12}}, ""},
+	// workbench
+	{"pickaxe", 1, [][2]any{{"wood", 6}, {"stone", 10}}, "workbench"},
+	{"hoe", 1, [][2]any{{"wood", 4}, {"stone", 4}}, "workbench"},
+	{"hammer", 1, [][2]any{{"wood", 4}, {"stone", 6}}, "workbench"},
+	{"paintbrush", 1, [][2]any{{"wood", 2}, {"plank", 2}, {"berries", 1}}, "workbench"},
+	{"furnace", 1, [][2]any{{"stone", 20}, {"coal", 4}}, "workbench"},
+	{"anvil", 1, [][2]any{{"ironbar", 6}, {"stone", 10}}, "workbench"},
+	{"torch", 8, [][2]any{{"coal", 1}, {"wood", 2}}, "workbench"},
+	{"brick", 10, [][2]any{{"sand", 10}, {"water", 5}}, "workbench"},
+	{"bomb", 1, [][2]any{{"sand", 10}, {"coal", 2}}, "workbench"},
+	{"wall_dirt", 4, [][2]any{{"dirt", 1}}, "workbench"},
+	{"wall_stone", 4, [][2]any{{"stone", 1}}, "workbench"},
+	{"wall_plank", 4, [][2]any{{"plank", 1}}, "workbench"},
+	{"wall_brick", 4, [][2]any{{"brick", 1}}, "workbench"},
+	{"wall_glass", 4, [][2]any{{"glass", 1}}, "workbench"},
+	{"wall_obsidian", 4, [][2]any{{"obsidian", 1}}, "workbench"},
+	{"bp_hut", 1, [][2]any{{"plank", 40}, {"brick", 20}, {"glass", 4}}, "workbench"},
+	{"bp_farm", 1, [][2]any{{"dirt", 30}, {"brick", 10}, {"water", 10}}, "workbench"},
+	{"bp_bridge", 1, [][2]any{{"plank", 30}}, "workbench"},
+	{"bp_tower", 1, [][2]any{{"brick", 60}, {"plank", 20}, {"glass", 6}}, "workbench"},
+	{"bp_bunker", 1, [][2]any{{"stone", 90}, {"glass", 4}}, "workbench"},
+	// furnace
+	{"copperbar", 1, [][2]any{{"copper", 2}, {"coal", 1}}, "furnace"},
+	{"ironbar", 1, [][2]any{{"iron", 2}, {"coal", 1}}, "furnace"},
+	{"goldbar", 1, [][2]any{{"gold", 2}, {"coal", 1}}, "furnace"},
+	{"glass", 4, [][2]any{{"sand", 4}, {"coal", 1}}, "furnace"},
+	{"bread", 1, [][2]any{{"wheat", 3}}, "furnace"},
+	// anvil
+	{"bucket", 1, [][2]any{{"copperbar", 3}}, "anvil"},
+	{"coppersword", 1, [][2]any{{"copperbar", 6}, {"wood", 2}}, "anvil"},
+	{"copperarmor", 1, [][2]any{{"copperbar", 10}}, "anvil"},
+	{"ironsword", 1, [][2]any{{"ironbar", 6}, {"wood", 2}}, "anvil"},
+	{"ironpick", 1, [][2]any{{"ironbar", 8}, {"wood", 4}}, "anvil"},
+	{"ironarmor", 1, [][2]any{{"ironbar", 12}}, "anvil"},
+	{"lantern", 1, [][2]any{{"crystal", 4}, {"goldbar", 2}}, "anvil"},
+	{"gem", 1, [][2]any{{"crystal", 2}, {"goldbar", 1}}, "anvil"},
+	{"corepick", 1, [][2]any{{"coreshard", 8}, {"ironbar", 6}}, "anvil"},
 }
 
-// Is there a furnace within 16 cells of the mote?
-func nearFurnace() bool {
-	pcx, pcy := int((player.x+player.w/2)/CELL), int((player.y+player.h/2)/CELL)
-	for y := max(0, pcy-16); y <= min(H-1, pcy+16); y++ {
-		for x := max(0, pcx-16); x <= min(W-1, pcx+16); x++ {
-			if grid[y*W+x] == FURNACE {
-				return true
-			}
-		}
+// Crafting categories, shown as tabs
+var craftCats = []string{"Tools", "Building", "Stations", "Materials", "Food & gear"}
+
+func recipeCat(r Recipe) int {
+	it := items[r.out]
+	switch {
+	case it.station != "":
+		return 2
+	case it.tool && it.armor == 0 && it.id != "lantern":
+		return 0
+	case it.id == "bomb":
+		return 0
+	case it.place != 0 || it.wall != 0 || it.blueprint != "" || it.id == "torch":
+		return 1
+	case it.heal > 0 || it.armor > 0 || it.id == "gem" || it.id == "lantern":
+		return 4
 	}
-	return false
+	return 3
 }
 
 func canCraft(r Recipe) bool {
-	if r.furnace && !nearFurnace() {
-		return false
-	}
 	for _, nd := range r.needs {
 		if countItem(nd[0].(string)) < nd[1].(int) {
 			return false
@@ -449,13 +493,22 @@ func canCraft(r Recipe) bool {
 	return true
 }
 
+// How many times the recipe can be made with what you carry
+func craftableTimes(r Recipe) int {
+	n := 9999
+	for _, nd := range r.needs {
+		n = min(n, countItem(nd[0].(string))/nd[1].(int))
+	}
+	return n
+}
+
 func craft(r Recipe) string {
 	if !canCraft(r) {
 		return ""
 	}
 	room := false
 	for _, s := range inv {
-		if s == nil || (s.ID == r.out && !items[r.out].tool && s.N+r.n <= stackMax) {
+		if s == nil || (s.ID == r.out && !s.Temp && !items[r.out].tool && s.N+r.n <= stackMax) {
 			room = true
 			break
 		}
@@ -513,7 +566,7 @@ func openChest(x, y int) {
 	if minY > H*55/100 {
 		table = dungeonLoot
 	}
-	rolls := 3 + meta.Upgrades["luck"]
+	rolls := 3
 	got := 0
 	for k := 0; k < len(table)*2 && got < rolls; k++ {
 		e := table[k%len(table)]
@@ -525,7 +578,6 @@ func openChest(x, y int) {
 		dropItem(e.id, n, float64(minX*CELL), float64((minY-2)*CELL), 0)
 		got++
 	}
-	run.Chests++
 	burst(20, float64(minX+1), float64(minY), tipRGB, 1.5, 1.5, 30)
 	sfx("chest")
 	toast("Chest opened!")
@@ -565,8 +617,10 @@ func eachInCircle(r int, fn func(x, y, i int)) {
 	}
 }
 
-// Dig radius for a pickaxe, including the Digging upgrade
-func digRadius(it *Item) int { return it.reach + meta.Upgrades["digging"] }
+func digRadius(it *Item) int { return it.reach }
+
+// Mined Core cells, turned into a shard every 10
+var coreDust int
 
 func useHeld() {
 	if !useActive || selected < 0 || inv[selected] == nil {
@@ -579,9 +633,10 @@ func useHeld() {
 	}
 	useTick++
 	switch {
-	case id == "pickaxe" || id == "ironpick":
+	case id == "pickaxe" || id == "ironpick" || id == "corepick":
+		mineObjects(digRadius(it))
 		got := map[string]int{}
-		chest, core := [2]int{-1, -1}, false
+		chest, core := [2]int{-1, -1}, 0
 		eachInCircle(digRadius(it), func(x, y, i int) {
 			t := grid[i]
 			switch t {
@@ -589,7 +644,12 @@ func useHeld() {
 				chest = [2]int{x, y}
 				return
 			case CORE:
-				core = true
+				if bossDown {
+					grid[i] = EMPTY
+					core++
+				} else {
+					core = -1000
+				}
 				return
 			}
 			name := blockItem[t]
@@ -620,8 +680,18 @@ func useHeld() {
 		if chest[0] >= 0 {
 			openChest(chest[0], chest[1])
 		}
-		if core {
-			winRun()
+		switch {
+		case core > 0:
+			coreDust += core
+			if coreDust >= 10 {
+				giveItem("coreshard", coreDust/10)
+				coreDust %= 10
+			}
+			if useTick%6 == 0 {
+				burst(3, float64(aimX), float64(aimY), blockRGB[CORE], 1.4, 1.4, 24)
+			}
+		case core < 0 && useTick%40 == 1:
+			toast("The Warden's power still holds the Core")
 		}
 		if useTick%20 == 1 {
 			hitCreatures(aimX, aimY, digRadius(it), it.dmg)
@@ -673,19 +743,13 @@ func useHeld() {
 		if useTick%18 == 1 {
 			swing(it)
 		}
-	case it.place != 0:
-		// building is as fast as mining: fill every free cell in the circle at once
-		n := 0
-		eachInCircle(4, func(x, y, i int) {
-			if !isReplaceable(grid[i]) || (grid[i] == WATER && it.place == WATER) || inv[selected] == nil {
-				return
-			}
-			grid[i] = it.place
-			shade[i] = int8(rand.Intn(21) - 10)
-			n++
-			takeSelected(1)
-		})
-		if n > 0 && useTick%4 == 1 {
+	case usesShapes(heldBuildKind()):
+		// the brush builds (or paints, or knocks down walls) every frame; other shapes
+		// are dragged out and built when you let go
+		if buildShape != shapeBrush {
+			return
+		}
+		if n := applyCells(brushCells()); n > 0 && useTick%4 == 1 {
 			sfx("place")
 		}
 	}
@@ -745,36 +809,42 @@ func useOnce() {
 		takeSelected(1)
 		explode(aimX, aimY, 12)
 	case it.blueprint != "":
-		placeBlueprint(it)
-	case it.place != 0: // torches and furnaces: one at a time
+		if tx, ty, now := oneShotTarget(); now {
+			placeBlueprint(it, tx, ty)
+		}
+	case it.station != "":
+		if tx, ty, now := oneShotTarget(); now && placeStation(it, tx, ty) {
+			holoSet = false
+		}
+	case it.place != 0: // torches: one at a time
 		if !aimCell() || aimX < 1 || aimX >= W-1 || aimY < 1 || aimY >= H {
 			return
 		}
-		if it.place == FURNACE { // a 4x3 furnace standing on the aimed cell
-			for dy := 0; dy < 3; dy++ {
-				for dx := 0; dx < 4; dx++ {
-					x, y := aimX-1+dx, aimY-2+dy
-					if x < 0 || x >= W || y < 0 || !isReplaceable(grid[y*W+x]) {
-						toast("Not enough room for the furnace")
-						return
-					}
-				}
-			}
-			for dy := 0; dy < 3; dy++ {
-				for dx := 0; dx < 4; dx++ {
-					grid[(aimY-2+dy)*W+aimX-1+dx] = FURNACE
-				}
-			}
-		} else {
-			i := aimY*W + aimX
-			if !isReplaceable(grid[i]) {
-				return
-			}
-			grid[i] = it.place
-			shade[i] = 0
+		i := aimY*W + aimX
+		if !isReplaceable(grid[i]) {
+			return
 		}
+		grid[i] = it.place
+		shade[i] = 0
+		markDirty(aimX)
 		takeSelected(1)
 		sfx("place")
+	}
+}
+
+// Touch: the Build button on the build bar builds at the hologram
+func buildHoloNow() {
+	if selected < 0 || inv[selected] == nil || !holoSet {
+		return
+	}
+	it := items[inv[selected].ID]
+	switch {
+	case it.blueprint != "":
+		placeBlueprint(it, holoX, holoY)
+	case it.station != "":
+		if placeStation(it, holoX, holoY) {
+			holoSet = false
+		}
 	}
 }
 
@@ -819,17 +889,17 @@ func drawAim(put func(x, y int, c [3]int, s int), ox, oy int) {
 	}
 	id := inv[selected].ID
 	it := items[id]
-	if it.heal > 0 || it.armor > 0 || it.blueprint != "" || id == "gem" || id == "heart" || id == "lantern" {
+	if it.heal > 0 || it.armor > 0 || it.blueprint != "" || it.station != "" || id == "gem" || id == "heart" || id == "lantern" || usesShapes(heldBuildKind()) {
 		return
 	}
 	ok := aimCell()
 	r := it.reach
 	switch {
-	case id == "pickaxe" || id == "ironpick":
+	case id == "pickaxe" || id == "ironpick" || id == "corepick":
 		r = digRadius(it)
 	case id == "bomb":
 		r = 12
-	case id == "torch" || id == "furnace":
+	case id == "torch":
 		r = 1
 	case id == "seeds":
 		r = 3

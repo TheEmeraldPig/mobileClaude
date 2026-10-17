@@ -62,7 +62,7 @@ type Entity struct {
 var ents []*Entity
 
 const (
-	maxCreatures = 3   // creatures alive at once (not counting the Warden)
+	maxCreatures = 3   // creatures alive at once (not counting the Warden), one more on Hard
 	spawnEvery   = 420 // frames between spawn attempts
 )
 
@@ -103,7 +103,7 @@ func foeForDepth(depth int) entKind {
 func spawnCreatures() {
 	pcx, pcy := (player.x+player.w/2)/CELL, (player.y+player.h/2)/CELL
 	// the Warden wakes when you come near the Core
-	if !run.BossDown && frame%30 == 0 {
+	if !bossDown && frame%30 == 0 {
 		kx, ky := float64(coreX()-baseChunk*CW), float64(coreY)
 		near := math.Hypot(kx-pcx, ky-pcy) < 90
 		awake := false
@@ -128,7 +128,7 @@ func spawnCreatures() {
 			n++
 		}
 	}
-	if n >= maxCreatures {
+	if n >= maxCreatures+b2i(world.Mode >= modeHard) {
 		return
 	}
 	// shades creep over the surface at night
@@ -136,7 +136,7 @@ func spawnCreatures() {
 		cx := int(pcx) + []int{-1, 1}[rand.Intn(2)]*(60+rand.Intn(40))
 		if cx > 8 && cx < W-8 {
 			cy := surfaceAt(baseChunk*CW+cx) - 6
-			if cy > 8 && boxFree(cx-4, cy-4, 8, 6) && lightAt(cx, cy) < 36 {
+			if cy > 8 && boxFree(cx-4, cy-4, 8, 6) && lightAt(cx, cy) < 36 && wall[cy*W+cx] == 0 {
 				ents = append(ents, newFoe(entShade, cx-4, cy-4))
 				return
 			}
@@ -150,7 +150,7 @@ func spawnCreatures() {
 			continue
 		}
 		depth := cy - surfaceAt(baseChunk*CW+cx)
-		if depth < 18 || lightAt(cx, cy) > 8 { // only deep and in the dark
+		if depth < 18 || lightAt(cx, cy) > 8 || wall[cy*W+cx] != 0 { // only deep, in the dark, and not in front of walls
 			continue
 		}
 		k := foeForDepth(depth)
@@ -445,7 +445,6 @@ func killEntity(e *Entity) {
 	cx, cy := (e.x+e.w/2)/CELL, (e.y+e.h/2)/CELL
 	burst(18, cx, cy, [3]int{150, 90, 220}, 1.6, 1.6, 30)
 	sfx("die")
-	run.Kills++
 	switch e.kind {
 	case entGloom:
 		dropItem("coal", 1+rand.Intn(3), e.x, e.y, 0)
@@ -471,13 +470,13 @@ func killEntity(e *Entity) {
 			dropItem("heart", 1, e.x, e.y, 0)
 		}
 	case entWarden:
-		run.BossDown = true
+		bossDown = true
 		burst(60, cx, cy, [3]int{255, 120, 220}, 3, 3, 50)
 		shake = 12
 		dropItem("heart", 2, e.x, e.y, 0)
 		dropItem("goldbar", 6, e.x+20, e.y, 0)
 		dropItem("crystal", 6, e.x-20, e.y, 0)
-		toast("The Warden falls! Mine the Core to win the run")
+		toast("The Warden falls! The Core can be mined now")
 	}
 }
 

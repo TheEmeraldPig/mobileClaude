@@ -246,18 +246,39 @@ var (
 	peekSX, peekSY float64 // smoothed
 )
 
+// A quick tap on a station opens it (while a pickaxe held on it mines it)
+var tapObj struct {
+	id     int
+	o      *Obj
+	frame  int
+	sx, sy float64
+}
+
+func isPick(id string) bool { return id == "pickaxe" || id == "ironpick" || id == "corepick" }
+
 func startWorldPointer(id int, x, y float64) {
 	// tapping a chest within reach opens it, whatever you are holding
 	aimSX, aimSY = x, y
-	if aimCell() && aimX >= 0 && aimX < W && aimY >= 0 && aimY < H && grid[aimY*W+aimX] == CHEST {
+	inReach := aimCell()
+	if inReach && aimX >= 0 && aimX < W && aimY >= 0 && aimY < H && grid[aimY*W+aimX] == CHEST {
 		openChest(aimX, aimY)
 		return
+	}
+	tapObj.o = nil
+	if o := objAt(aimX, aimY); o != nil && objInReach(o) {
+		if selected < 0 || inv[selected] == nil || !isPick(inv[selected].ID) {
+			openStation(o.kind)
+			return
+		}
+		tapObj.id, tapObj.o, tapObj.frame, tapObj.sx, tapObj.sy = id, o, frame, x, y
 	}
 	if selected >= 0 && inv[selected] != nil && useID == -99 {
 		useID, useActive = id, true
 		aimSX, aimSY = x, y
 		if items[inv[selected].ID].once {
 			useOnce()
+		} else if usesShapes(heldBuildKind()) && buildShape != shapeBrush {
+			startShape()
 		}
 		return
 	}
@@ -273,6 +294,7 @@ func moveWorldPointer(id int, x, y float64) {
 	}
 	if id == useID {
 		aimSX, aimSY = x, y
+		updateShape()
 	}
 }
 
@@ -281,8 +303,25 @@ func endWorldPointer(id int) {
 		peekID, peekX, peekY = -99, 0, 0
 	}
 	if id == useID {
+		finishShape()
 		useID, useActive = -99, false
 	}
+	if tapObj.o != nil && tapObj.id == id {
+		o := tapObj.o
+		tapObj.o = nil
+		if frame-tapObj.frame < 14 && math.Hypot(aimSX-tapObj.sx, aimSY-tapObj.sy) < 12 && objStillThere(o) {
+			openStation(o.kind)
+		}
+	}
+}
+
+func objStillThere(o *Obj) bool {
+	for _, p := range objs {
+		if p == o {
+			return true
+		}
+	}
+	return false
 }
 
 func setPeek(x, y float64) {
@@ -297,4 +336,6 @@ func clearPointers() {
 	ptr = uiPointer{}
 	releaseStick()
 	peekID, useID, useActive, peekX, peekY = -99, -99, false, 0, 0
+	shapeOn, shapeCells = false, nil
+	tapObj.o = nil
 }

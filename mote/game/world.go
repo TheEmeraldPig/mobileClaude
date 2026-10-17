@@ -57,7 +57,7 @@ const (
 	CORE     = 26 // the goal at the bottom of the world
 	OBSIDIAN = 27
 	BEDROCK  = 28
-	FURNACE  = 29
+	FURNACE  = 29 // old saves only: furnaces are station objects now
 )
 
 var blockRGB = map[uint8][3]int{
@@ -97,7 +97,7 @@ func isOre(t uint8) bool { return t >= COAL && t <= GOLD }
 
 func isSolid(t uint8) bool {
 	switch t {
-	case SAND, STONE, BRICK, CRYSTAL, DIRT, GRASS, PLANK, GLASS, SOIL, GRAVE, CORE, OBSIDIAN, BEDROCK, FURNACE:
+	case SAND, STONE, BRICK, CRYSTAL, DIRT, GRASS, PLANK, GLASS, SOIL, GRAVE, CORE, OBSIDIAN, BEDROCK:
 		return true
 	}
 	return isOre(t)
@@ -122,8 +122,6 @@ func blockLight(t uint8) int {
 		return 40
 	case CORE:
 		return 64
-	case FURNACE:
-		return 30
 	}
 	return 0
 }
@@ -133,7 +131,7 @@ func blockLight(t uint8) int {
 var blockItem = map[uint8]string{SAND: "sand", STONE: "stone", BRICK: "brick", COAL: "coal", COPPER: "copper",
 	IRON: "iron", GOLD: "gold", CRYSTAL: "crystal", TORCH: "torch", DIRT: "dirt", GRASS: "dirt", WOOD: "wood",
 	LEAVES: "leaves", PLANK: "plank", GLASS: "glass", SOIL: "dirt", CROP1: "seeds", CROP2: "seeds", CROP3: "wheat",
-	FLOWER: "seeds", BUSH: "berries", GRAVE: "stone", OBSIDIAN: "obsidian", FURNACE: "furnace"}
+	FLOWER: "seeds", BUSH: "berries", GRAVE: "stone", OBSIDIAN: "obsidian"}
 
 const (
 	CELL = 2   // world px per cell
@@ -142,16 +140,23 @@ const (
 )
 
 var (
-	NCH       int // chunks in the loaded window
-	W         int // loaded window width in cells
-	grid      []uint8
-	shade     []int8
-	dirty     []bool
-	saved     = map[int][]uint16{}
-	baseChunk int
-	seedText  string
-	seedN     uint32
-	spawnWX   int // world cell x of the spawn point
+	NCH    int // chunks in the loaded window
+	W      int // loaded window width in cells
+	grid   []uint8
+	shade  []int8
+	wall   []uint8 // background walls (a block id, 0 = none)
+	paint  []uint8 // paint on blocks (index into paintRGB, 0 = none)
+	wpaint []uint8 // paint on walls
+	dirty  []bool
+	saved  = map[int][]uint16{}
+	// the extra layers, saved per chunk only when they have something in them
+	savedWalls  = map[int][]uint16{}
+	savedPaint  = map[int][]uint16{}
+	savedWPaint = map[int][]uint16{}
+	baseChunk   int
+	seedText    string
+	seedN       uint32
+	spawnWX     int // world cell x of the spawn point
 )
 
 func initWorld(viewCells int) {
@@ -159,6 +164,9 @@ func initWorld(viewCells int) {
 	W = NCH * CW
 	grid = make([]uint8, W*H)
 	shade = make([]int8, W*H)
+	wall = make([]uint8, W*H)
+	paint = make([]uint8, W*H)
+	wpaint = make([]uint8, W*H)
 	dirty = make([]bool, NCH)
 }
 
@@ -589,12 +597,14 @@ func genChunk(cx int) []uint8 {
 
 // ---- Loading and unloading ----
 
-func packChunk(slot int) []uint16 {
+func packChunk(slot int) []uint16 { return packLayer(grid, slot) }
+
+func packLayer(layer []uint8, slot int) []uint16 {
 	runs := make([]uint16, 0, 256)
 	last, n := -1, 0
 	for y := 0; y < H; y++ {
 		for lx := 0; lx < CW; lx++ {
-			v := int(grid[y*W+slot*CW+lx])
+			v := int(layer[y*W+slot*CW+lx])
 			if v == last && n < 65535 {
 				n++
 			} else {
@@ -636,12 +646,54 @@ func loadSlot(slot int) {
 			shade[row+lx] = int8(int(hash32(cx*CW+lx, y, 99)%21) - 10)
 		}
 	}
+	loadLayer(wall, savedWalls, slot)
+	loadLayer(paint, savedPaint, slot)
+	loadLayer(wpaint, savedWPaint, slot)
 	dirty[slot] = false
+	convertOldFurnaces(slot)
+}
+
+// Restore one of the extra layers for a chunk (all zero when nothing was saved)
+func loadLayer(layer []uint8, from map[int][]uint16, slot int) {
+	r, ok := from[baseChunk+slot]
+	var buf []uint8
+	if ok {
+		buf = unpackChunk(r)
+	}
+	for y := 0; y < H; y++ {
+		row := y*W + slot*CW
+		if buf == nil {
+			clear(layer[row : row+CW])
+		} else {
+			copy(layer[row:row+CW], buf[y*CW:y*CW+CW])
+		}
+	}
+}
+
+// Save one of the extra layers for a chunk, or forget it when it's empty
+func saveLayer(layer []uint8, to map[int][]uint16, slot int) {
+	for y := 0; y < H; y++ {
+		row := y*W + slot*CW
+		for _, v := range layer[row : row+CW] {
+			if v != 0 {
+				to[baseChunk+slot] = packLayer(layer, slot)
+				return
+			}
+		}
+	}
+	delete(to, baseChunk+slot)
+}
+
+func saveLayers(slot int) {
+	saveLayer(wall, savedWalls, slot)
+	saveLayer(paint, savedPaint, slot)
+	saveLayer(wpaint, savedWPaint, slot)
 }
 
 func unloadSlot(slot int) {
 	if dirty[slot] {
 		saved[baseChunk+slot] = packChunk(slot)
+		saveLayers(slot)
 	}
 }
 
@@ -672,11 +724,16 @@ func shiftWindow(dc int) {
 		}
 		for y := 0; y < H; y++ {
 			r := y * W
+			for _, layer := range [][]uint8{grid, wall, paint, wpaint} {
+				if dc > 0 {
+					copy(layer[r:r+W-cells], layer[r+cells:r+W])
+				} else {
+					copy(layer[r-cells:r+W], layer[r:r+W+cells])
+				}
+			}
 			if dc > 0 {
-				copy(grid[r:r+W-cells], grid[r+cells:r+W])
 				copy(shade[r:r+W-cells], shade[r+cells:r+W])
 			} else {
-				copy(grid[r-cells:r+W], grid[r:r+W+cells])
 				copy(shade[r-cells:r+W], shade[r:r+W+cells])
 			}
 		}
@@ -727,6 +784,8 @@ func createWorld(text string) {
 	prefs.Seed = seedText
 	savePrefs()
 	saved = map[int][]uint16{}
+	savedWalls, savedPaint, savedWPaint = map[int][]uint16{}, map[int][]uint16{}, map[int][]uint16{}
+	objs = objs[:0]
 	parts = parts[:0]
 	sx := 0
 	for d := 0; d < 20000; d++ {

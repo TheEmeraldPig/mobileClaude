@@ -57,16 +57,20 @@ func (g *Game) Update() error {
 			} else {
 				openScreen(scPause)
 			}
-		case scSeed:
+		case scSeed, scWorlds:
 			openScreen(scMain)
-		case scUpgrades:
-			openScreen(upgradesFrom)
+		case scCraft:
+			if craftStation == "" {
+				openScreen(scInv)
+			} else {
+				play()
+			}
 		}
-	} else if bindJustPressed("inv") && (cur == scPlaying || cur == scInv) && listening == "" {
-		if cur == scInv {
-			play()
-		} else {
+	} else if bindJustPressed("inv") && (cur == scPlaying || cur == scInv || cur == scCraft) && listening == "" {
+		if cur == scPlaying {
 			openScreen(scInv)
+		} else {
+			play()
 		}
 	}
 	if cur == scPlaying {
@@ -110,18 +114,31 @@ func (g *Game) Update() error {
 		// the mouse also aims while held
 		if useActive && !isTouch && !scriptAim {
 			aimSX, aimSY = hoverX, hoverY
+			updateShape()
 		}
+		// right-click opens a station
+		if !isTouch && inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
+			x, y := int(math.Floor((cam.x+hoverX/zoom)/CELL)), int(math.Floor((cam.y+hoverY/zoom)/CELL))
+			if o := objAt(x, y); o != nil {
+				if objInReach(o) {
+					openStation(o.kind)
+				} else {
+					toast("Get closer to use the " + stations[o.kind].name)
+				}
+			}
+		}
+		buildKeys()
 	} else {
 		input = gameInput{}
 	}
 
 	if !paused() {
 		worldTime = math.Mod(worldTime+1.0/dayFrames, 1)
-		trackRun()
 		updatePlayer()
 		followPlayer()
 		useHeld()
 		updateEntities()
+		checkObjects()
 		updateParticles()
 	}
 	setHum(player.lifting && !paused(), player.energy)
@@ -150,13 +167,13 @@ func (g *Game) Update() error {
 			mainMenuArt()
 		}
 		settingsMenu()
-	case scRunOver:
-		runOverMenu()
-	case scUpgrades:
-		if upgradesFrom == scMain {
-			mainMenuArt()
-		}
-		upgradesMenu()
+	case scDead:
+		deathMenu()
+	case scCraft:
+		craftMenu()
+	case scWorlds:
+		mainMenuArt()
+		worldsMenu()
 	}
 	shake *= 0.86
 	drawToast()
@@ -219,19 +236,20 @@ func NewGame() *Game {
 	applyFOV()
 	// enough loaded width for the widest field of view plus looking around
 	initWorld(2844)
-	loadMeta()
-	if st := loadSave(); st != nil && restoreState(st) {
+	loadWorldList()
+	if last := lastWorld(); last != nil && openWorld(*last) {
+		cur = scMain
 		if os.Getenv("MOTE_RESUME") == "1" || hasArg("--resume") {
 			play()
 			toast("Updated to the newest version")
 		}
 	} else {
-		// a world to show behind the main menu; a run starts from "New run"
+		// a world to show behind the main menu; it isn't saved
 		createWorld(prefs.Seed)
-		player.maxHP = baseMaxHP()
-		player.hp = player.maxHP
-		starterKit()
+		world = WorldInfo{}
+		player.maxHP, player.hp = 10, 10
 	}
+	clearPointers()
 	placeCamera()
 	return &Game{}
 }

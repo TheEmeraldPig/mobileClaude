@@ -12,15 +12,16 @@ import (
 // (on Android, the app's files folder passed in by the Android activity).
 
 type Prefs struct {
-	FOV      int               `json:"fov"`
-	SfxVol   int               `json:"sfxVol"`   // 0-5
-	MusicVol int               `json:"musicVol"` // 0-5
-	Binds    map[string]string `json:"binds"`
-	StickX   float64           `json:"stickX"`
-	StickY   float64           `json:"stickY"`
-	BtnSide  string            `json:"btnSide"`
-	Seed     string            `json:"seed"`
-	Full     bool              `json:"fullscreen"`
+	LastWorld string            `json:"lastWorld"`
+	FOV       int               `json:"fov"`
+	SfxVol    int               `json:"sfxVol"`   // 0-5
+	MusicVol  int               `json:"musicVol"` // 0-5
+	Binds     map[string]string `json:"binds"`
+	StickX    float64           `json:"stickX"`
+	StickY    float64           `json:"stickY"`
+	BtnSide   string            `json:"btnSide"`
+	Seed      string            `json:"seed"`
+	Full      bool              `json:"fullscreen"`
 }
 
 var prefs = Prefs{FOV: 3, SfxVol: 4, MusicVol: 3, StickX: 0.12, StickY: 0.62, BtnSide: "right", Full: true,
@@ -85,7 +86,15 @@ type SaveState struct {
 	SpawnWX   int              `json:"spawnWX"`
 	Drops     []SavedDrop      `json:"drops"`
 	MaxHP     int              `json:"maxHP"`
-	Run       RunStats         `json:"run"`
+	World     WorldInfo        `json:"world"`
+	BossDown  bool             `json:"bossDown"`
+	Objs      []SavedObj       `json:"objs"`
+	Walls     map[int][]uint16 `json:"walls,omitempty"`
+	Paint     map[int][]uint16 `json:"paint,omitempty"`
+	WPaint    map[int][]uint16 `json:"wpaint,omitempty"`
+	Run       struct {         // older saves kept the boss here
+		BossDown bool `json:"bossDown"`
+	} `json:"run"`
 }
 
 type SavedDrop struct {
@@ -105,6 +114,7 @@ func serializeState() SaveState {
 	for i := 0; i < NCH; i++ {
 		if dirty[i] {
 			chunks[baseChunk+i] = packChunk(i)
+			saveLayers(i)
 		}
 	}
 	var drops []SavedDrop
@@ -116,7 +126,8 @@ func serializeState() SaveState {
 	return SaveState{V: 1, Seed: seedText, BaseChunk: baseChunk, Chunks: chunks, Started: started,
 		PlayerWX: player.x + float64(baseChunk*CW*CELL), PlayerY: player.y, Energy: player.energy, Face: player.face,
 		Inv: append([]*Stack(nil), inv...), Selected: selected, Time: worldTime, HP: player.hp, SpawnWX: spawnWX, Drops: drops,
-		MaxHP: player.maxHP, Run: run}
+		MaxHP: player.maxHP, World: world, BossDown: bossDown, Objs: saveObjs(),
+		Walls: savedWalls, Paint: savedPaint, WPaint: savedWPaint}
 }
 
 func restoreState(st *SaveState) bool {
@@ -130,7 +141,14 @@ func restoreState(st *SaveState) bool {
 	for k, v := range st.Chunks {
 		saved[k] = v
 	}
+	savedWalls, savedPaint, savedWPaint = map[int][]uint16{}, map[int][]uint16{}, map[int][]uint16{}
+	for _, l := range []struct{ to, from map[int][]uint16 }{{savedWalls, st.Walls}, {savedPaint, st.Paint}, {savedWPaint, st.WPaint}} {
+		for k, v := range l.from {
+			l.to[k] = v
+		}
+	}
 	baseChunk = st.BaseChunk
+	ents = ents[:0]
 	for i := 0; i < NCH; i++ {
 		loadSlot(i)
 	}
@@ -155,14 +173,15 @@ func restoreState(st *SaveState) bool {
 		selected = -1
 	}
 	worldTime, player.hp, spawnWX = st.Time, st.HP, st.SpawnWX
-	player.maxHP, run = st.MaxHP, st.Run
+	player.maxHP, bossDown = st.MaxHP, st.BossDown || st.Run.BossDown
 	if player.maxHP <= 0 {
-		player.maxHP = baseMaxHP()
+		player.maxHP = 10
 	}
+	world = st.World
+	loadObjs(st.Objs)
 	if player.hp <= 0 {
 		player.hp = player.maxHP
 	}
-	ents = ents[:0]
 	for _, d := range st.Drops {
 		if items[d.ID] != nil {
 			dropItem(d.ID, d.N, d.WX-float64(baseChunk*CW*CELL), d.Y, 0)
@@ -172,27 +191,17 @@ func restoreState(st *SaveState) bool {
 	return true
 }
 
+// Save the world being played (the demo world behind the menu is never saved)
 func saveGame() {
-	if !started {
+	if world.ID == "" || cur == scDead && deathLost {
 		return
 	}
 	st := serializeState()
 	b, err := json.Marshal(st)
 	if err == nil {
-		writeFileAtomic(dataPath("save.json"), b)
+		writeFileAtomic(worldFile(world.ID), b)
+		touchWorld()
 	}
-}
-
-func loadSave() *SaveState {
-	b, err := os.ReadFile(dataPath("save.json"))
-	if err != nil {
-		return nil
-	}
-	var st SaveState
-	if json.Unmarshal(b, &st) != nil {
-		return nil
-	}
-	return &st
 }
 
 func writeFileAtomic(path string, b []byte) {

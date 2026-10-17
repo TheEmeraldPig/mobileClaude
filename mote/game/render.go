@@ -108,6 +108,12 @@ func computeLight(ox, oy, vw, vh int) {
 			}
 		}
 	}
+	objLights(func(lx, ly, lvl int) {
+		c, r := lx-lightX0, ly-lightY0
+		if c >= 0 && r >= 0 && c < lightW && r < lightH {
+			seed(r*lightW+c, lvl)
+		}
+	})
 	pcx, pcy := int((player.x+player.w/2)/CELL)-lightX0, int((player.y+player.h/2)/CELL)-lightY0
 	if pcx >= 0 && pcy >= 0 && pcx < lightW && pcy < lightH {
 		seed(pcy*lightW+pcx, playerLightLevel())
@@ -277,10 +283,12 @@ func drawWorld(screen *ebiten.Image) {
 			o := (y*vw + x) * 4
 			lf := lightCurve[lightAt(wx, wy)]
 			var t uint8 = STONE
+			var wl, pt, wpt uint8
 			sh := 0
 			if wx >= 0 && wx < W && wy >= 0 && wy < H {
 				i := wy*W + wx
 				t, sh = grid[i], int(shade[i])
+				wl, pt, wpt = wall[i], paint[i], wpaint[i]
 			} else if wy < 0 {
 				t = EMPTY
 			}
@@ -288,9 +296,12 @@ func drawWorld(screen *ebiten.Image) {
 			switch {
 			case t == EMPTY || t == WATER || t == TORCH || t == GLASS || t == LAVA:
 				var bg [3]int
-				if openSky {
+				switch {
+				case wl != 0:
+					bg = shadeRGB(wallPixel(wl, wpt, wx, wy, sh), math.Max(lf, 0.12))
+				case openSky:
 					bg = skyPixel(x, y, vw, vh, ox+baseChunk*CW, oy, avg)
-				} else {
+				default:
 					bg = shadeRGB([3]int{caveWall[0] + sh, caveWall[1] + sh, caveWall[2] + sh}, lf)
 				}
 				if t == WATER {
@@ -324,6 +335,9 @@ func drawWorld(screen *ebiten.Image) {
 				if isOre(t) && (sh+10)%3 == 0 {
 					c = blockRGB[STONE]
 				}
+				if pt != 0 {
+					c = mix(c, paintRGB[pt], 0.7)
+				}
 				c = [3]int{c[0] + sh, c[1] + sh, c[2] + sh}
 				if t == CORE {
 					c = mix(c, [3]int{255, 240, 255}, 0.5+0.5*math.Sin(float64(frame)*0.08))
@@ -353,6 +367,7 @@ func drawWorld(screen *ebiten.Image) {
 		f := lightCurve[lightAt(x+ox, y+oy)]
 		put(x, y, shadeRGB([3]int{c[0] + s, c[1] + s, c[2] + s}, f), 0)
 	}
+	drawObjects(lit, ox, oy)
 	drawEntities(lit, put, ox, oy)
 	blend := func(x, y int, c [3]int, a float64) {
 		if x < 0 || y < 0 || x >= vw || y >= vh {
@@ -364,6 +379,8 @@ func drawWorld(screen *ebiten.Image) {
 		}
 	}
 	drawHologram(blend, ox, oy)
+	drawStationHologram(blend, ox, oy)
+	drawBuildHologram(blend, ox, oy)
 	drawPlayer(put, ox, oy)
 	for _, q := range parts {
 		put(int(math.Floor(q.x))-ox, int(math.Floor(q.y))-oy, q.c, 0)
@@ -378,6 +395,31 @@ func drawWorld(screen *ebiten.Image) {
 	op.GeoM.Scale(k, k)
 	op.GeoM.Translate((float64(ox*CELL)-cam.x)*zoom*uiScale, (float64(oy*CELL)-cam.y)*zoom*uiScale)
 	screen.DrawImage(worldImg, op)
+}
+
+// A background wall: the block's colour, darker, with a faint pattern so it reads as "behind"
+func wallPixel(wl, wpt uint8, wx, wy, sh int) [3]int {
+	c := blockRGB[wl]
+	if wpt != 0 {
+		c = mix(c, paintRGB[wpt], 0.7)
+	}
+	c = shadeRGB([3]int{c[0] + sh/2, c[1] + sh/2, c[2] + sh/2}, 0.5)
+	gx := wx + baseChunk*CW
+	switch wl {
+	case BRICK, STONE, OBSIDIAN: // mortar lines
+		if wy%4 == 0 || (gx+(wy/4)*3)%8 == 0 {
+			c = shadeRGB(c, 0.7)
+		}
+	case PLANK: // boards
+		if wy%5 == 0 {
+			c = shadeRGB(c, 0.72)
+		}
+	case GLASS:
+		if (gx+wy)%6 == 0 {
+			c = mix(c, [3]int{220, 240, 255}, 0.3)
+		}
+	}
+	return c
 }
 
 // A placed torch: a little stick with a flickering flame, drawn over the background

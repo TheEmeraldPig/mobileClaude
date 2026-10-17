@@ -152,11 +152,6 @@ func initBlueprints() {
 
 // ---- Placement ----
 
-var (
-	holoX, holoY int  // bottom-centre cell of the hologram
-	holoSet      bool // a touch has positioned the hologram
-)
-
 func heldBlueprint() string {
 	if selected < 0 || inv[selected] == nil {
 		return ""
@@ -164,20 +159,35 @@ func heldBlueprint() string {
 	return items[inv[selected].ID].blueprint
 }
 
-// Where the hologram sits this frame
-func holoAnchor() (int, int) {
-	if isTouch {
-		if !holoSet {
-			holoX = int((player.x+player.w/2)/CELL) + player.face*30
-			holoY = int((player.y + player.h) / CELL)
-		}
-		return holoX, holoY
+// The template turned by buildRot quarter turns and mirrored by buildFlip
+func bpRows(name string) []string {
+	t := bpTemplates[name]
+	g := make([][]byte, len(t))
+	for y, r := range t {
+		g[y] = []byte(r)
 	}
-	return int(math.Floor((cam.x + hoverX/zoom) / CELL)), int(math.Floor((cam.y + hoverY/zoom) / CELL))
+	if buildFlip {
+		for _, r := range g {
+			for i, j := 0, len(r)-1; i < j; i, j = i+1, j-1 {
+				r[i], r[j] = r[j], r[i]
+			}
+		}
+	}
+	for k := 0; k < buildRot; k++ { // a quarter turn clockwise
+		h, w := len(g), len(g[0])
+		n := make([][]byte, w)
+		for x := 0; x < w; x++ {
+			n[x] = make([]byte, h)
+			for y := 0; y < h; y++ {
+				n[x][h-1-y] = g[y][x]
+			}
+		}
+		g = n
+	}
+	return toRows(g)
 }
 
-func bpFits(name string, ax, ay int) bool {
-	t := bpTemplates[name]
+func bpFits(t []string, ax, ay int) bool {
 	h, w := len(t), len(t[0])
 	x0, y0 := ax-w/2, ay-h+1
 	pcx, pcy := (player.x+player.w/2)/CELL, (player.y+player.h/2)/CELL
@@ -202,22 +212,12 @@ func bpFits(name string, ax, ay int) bool {
 	return true
 }
 
-func placeBlueprint(it *Item) {
-	name := it.blueprint
-	tx, ty := int(math.Floor((cam.x+aimSX/zoom)/CELL)), int(math.Floor((cam.y+aimSY/zoom)/CELL))
-	if isTouch {
-		// first tap moves the hologram, a tap on (or near) it builds
-		if !holoSet || math.Hypot(float64(tx-holoX), float64(ty-holoY)) > 10 {
-			holoX, holoY, holoSet = tx, ty, true
-			return
-		}
-		tx, ty = holoX, holoY
-	}
-	if !bpFits(name, tx, ty) {
+func placeBlueprint(it *Item, tx, ty int) {
+	t := bpRows(it.blueprint)
+	if !bpFits(t, tx, ty) {
 		toast("It doesn't fit there")
 		return
 	}
-	t := bpTemplates[name]
 	h, w := len(t), len(t[0])
 	x0, y0 := tx-w/2, ty-h+1
 	for y := 0; y < h; y++ {
@@ -228,7 +228,18 @@ func placeBlueprint(it *Item) {
 			}
 			i := (y0+y)*W + x0 + x
 			grid[i] = b
+			paint[i] = 0
 			shade[i] = int8(int(hash32(x0+x, y0+y, 5)%11) - 5)
+			// houses get a back wall, so they keep creatures out
+			if it.blueprint == "hut" || it.blueprint == "tower" || it.blueprint == "bunker" {
+				if wall[i] == 0 {
+					wall[i] = PLANK
+					if it.blueprint == "bunker" {
+						wall[i] = STONE
+					}
+				}
+			}
+			markDirty(x0 + x)
 		}
 	}
 	burst(30, float64(tx), float64(ty-h/2), tipRGB, 2, 2, 30)
@@ -245,14 +256,14 @@ func drawHologram(blend func(x, y int, c [3]int, a float64), ox, oy int) {
 	if name == "" || cur != scPlaying {
 		return
 	}
-	ax, ay := holoAnchor()
-	ok := bpFits(name, ax, ay)
+	ax, ay, _ := holoAim()
+	t := bpRows(name)
+	ok := bpFits(t, ax, ay)
 	tint := [3]int{120, 255, 160}
 	if !ok {
 		tint = [3]int{255, 110, 110}
 	}
 	pulse := 0.45 + 0.15*math.Sin(float64(frame)*0.15)
-	t := bpTemplates[name]
 	h, w := len(t), len(t[0])
 	x0, y0 := ax-w/2, ay-h+1
 	for y := 0; y < h; y++ {

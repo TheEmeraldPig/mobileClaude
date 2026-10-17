@@ -118,7 +118,7 @@ func hurtPlayer(dmg, dir int) {
 	if p.invuln > 0 || p.hp <= 0 {
 		return
 	}
-	dmg = max(1, dmg-armorLevel())
+	dmg = max(1, int(math.Ceil(float64(dmg)*modeDamage[world.Mode]))-armorLevel())
 	p.hp -= dmg
 	p.invuln = 60
 	shake = math.Max(shake, 5)
@@ -130,7 +130,7 @@ func hurtPlayer(dmg, dir int) {
 	burst(10, (p.x+p.w/2)/CELL, (p.y+p.h/2)/CELL, [3]int{240, 122, 106}, 1.4, 1.4, 22)
 	sfx("hurt")
 	if p.hp <= 0 {
-		endRun(false)
+		die()
 	}
 }
 
@@ -218,7 +218,7 @@ func updatePlayer() {
 	wantLift := input.lev || stick.up
 	p.lifting = wantLift && p.energy > 0
 	if p.lifting {
-		p.energy = math.Max(0, p.energy-1/(levSecs()*60))
+		p.energy = math.Max(0, p.energy-1/(levSeconds*60))
 		p.vy += (-2.2 - p.vy) * 0.15
 		p.emptyWarned = false
 		if rand.Float64() < 0.6 {

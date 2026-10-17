@@ -23,8 +23,9 @@ const (
 	scPause
 	scInv
 	scSettings
-	scRunOver
-	scUpgrades
+	scDead
+	scCraft
+	scWorlds
 )
 
 var (
@@ -43,7 +44,6 @@ var (
 	picked       = -1
 	copiedUntil  int
 	nameUntil    int
-	recipeScroll int
 	lastTapSlot  = -1
 	lastTapFrame int
 )
@@ -142,24 +142,28 @@ func drawHearts(dst *ebiten.Image, x, y float64) {
 func hud() {
 	hudRects = hudRects[:0]
 	ops = append(ops, func(dst *ebiten.Image) { drawHearts(dst, 14, 12) })
-	// depth below the surface, and a hint toward the Core once you're deep
+	// depth below the surface
 	wx := baseChunk*CW + int((player.x+player.w/2)/CELL)
 	depth := int((player.y+player.h)/CELL) - surfaceAt(wx)
 	dtxt := "Surface"
 	if depth > 2 {
 		dtxt = fmt.Sprintf("Depth %d", depth)
 	}
-	if depth > 150 {
-		dx := coreX() - wx
-		dir := "below"
-		if dx < -40 {
-			dir = "to the left"
-		} else if dx > 40 {
-			dir = "to the right"
-		}
-		dtxt += "  -  the hum comes from " + dir
+	if world.Mode != modeNormal {
+		dtxt += "  -  " + modeNames[world.Mode]
 	}
 	Text(dtxt, 14, 42, 12, colMuted, text.AlignStart)
+	// a nearby station: say how to use it
+	for _, o := range objs {
+		if objInReach(o) {
+			how := "Right-click"
+			if isTouch {
+				how = "Tap"
+			}
+			Text(how+" the "+stations[o.kind].name+" to craft", 14, 60, 12, colT, text.AlignStart)
+			break
+		}
+	}
 	// Hotbar
 	slot := hotbarSlotSize()
 	gap := 7.0
@@ -176,9 +180,11 @@ func hud() {
 			} else {
 				selected = i
 			}
+			holoSet = false
 			showItemName()
 		}
 	}
+	buildBar(y0)
 	if frame < nameUntil && selected >= 0 && inv[selected] != nil {
 		name := items[inv[selected].ID].name
 		ops = append(ops, func(dst *ebiten.Image) {
@@ -207,7 +213,11 @@ func hud() {
 		if isTouch {
 			hint = "Push the stick up to levitate. Pick a hotbar slot, then touch the world to use it. With no slot picked, touch to look around."
 		}
-		wrapText(hint, logicalW-14, 22, math.Min(420, logicalW*0.45), 13, colMuted, text.AlignEnd)
+		hy := 22.0
+		if frame < toastUntil && logicalW < 1100 {
+			hy = 56 // keep clear of the message at the top
+		}
+		wrapText(hint, logicalW-14, hy, math.Min(420, logicalW*0.4), 13, colMuted, text.AlignEnd)
 	}
 }
 
@@ -257,7 +267,13 @@ func slotWidget(r Rect, i int, sel, pick bool, showKey bool) bool {
 			op := &ebiten.DrawImageOptions{}
 			op.GeoM.Scale(isz/8*uiScale, isz/8*uiScale)
 			op.GeoM.Translate((r.X+(r.W-isz)/2)*uiScale, (r.Y+(r.H-isz)/2)*uiScale)
+			if s.Temp { // the temporary kit looks ghostly
+				op.ColorScale.Scale(0.75, 0.85, 1, 0.65)
+			}
 			dst.DrawImage(items[s.ID].img, op)
+			if s.Temp {
+				drawText(dst, "T", r.X+r.W-6, r.Y+9, textOpt{size: 9, display: true, col: colL, align: text.AlignEnd})
+			}
 			if !items[s.ID].tool {
 				drawText(dst, fmt.Sprint(s.N), r.X+r.W-4, r.Y+r.H-8, textOpt{size: 12, align: text.AlignEnd, shadow: true})
 			}
@@ -325,25 +341,39 @@ func mainMenu() {
 	if isTouch {
 		bh = 40
 	}
-	y := (logicalH - (bh+18)*5) / 2
-	if started {
-		if Button(Rect{cx, y, colW, bh}, "Continue", styleGold, true, icoPlay) {
-			play()
+	last := lastWorld()
+	n := 3
+	if last != nil {
+		n++
+	}
+	if !isTouch {
+		n++
+	}
+	y := (logicalH - (bh+18)*float64(n)) / 2
+	if last != nil {
+		label := "Continue: " + last.Name
+		if textWidth(label, 15, false) > colW-50 {
+			label = "Continue"
+		}
+		if Button(Rect{cx, y, colW, bh}, label, styleGold, true, icoPlay) {
+			if world.ID == last.ID && started {
+				play()
+			} else {
+				openWorld(*last)
+			}
 		}
 		y += bh + 18
 	}
 	st := styleGold
-	if started {
+	if last != nil {
 		st = styleViolet
 	}
-	if Button(Rect{cx, y, colW, bh}, "New run", st, true, icoWorld) {
-		seedEntry = ""
-		openScreen(scSeed)
+	if Button(Rect{cx, y, colW, bh}, "Worlds", st, true, icoWorld) {
+		openScreen(scWorlds)
 	}
 	y += bh + 18
-	if Button(Rect{cx, y, colW, bh}, fmt.Sprintf("Upgrades (%d)", meta.Essence), styleSlate, true, icoBag) {
-		upgradesFrom = scMain
-		openScreen(scUpgrades)
+	if Button(Rect{cx, y, colW, bh}, "New world", styleSlate, true, icoPlay) {
+		startNewWorldScreen()
 	}
 	y += bh + 18
 	if Button(Rect{cx, y, colW, bh}, "Settings", styleSlate, true, icoGear) {
@@ -356,6 +386,94 @@ func mainMenu() {
 			saveGame()
 			os.Exit(0)
 		}
+	}
+}
+
+// The most recently played world
+func lastWorld() *WorldInfo {
+	if len(worldList) == 0 {
+		return nil
+	}
+	w := worldList[0]
+	return &w
+}
+
+// ---- World list ----
+
+var (
+	worldScroll   int
+	confirmDelete string
+)
+
+func worldsMenu() {
+	r := sheet(700, 430)
+	back, cl := head(r, "WORLDS", true)
+	if back || cl {
+		confirmDelete = ""
+		openScreen(scMain)
+		return
+	}
+	if Button(Rect{r.X + r.W - 190, r.Y + 12, 136, 32}, "New world", styleGold, true, nil) {
+		startNewWorldScreen()
+		return
+	}
+	if len(worldList) == 0 {
+		Text("No worlds yet. Make one with New world.", r.X+18, r.Y+90, 15, colMuted, text.AlignStart)
+		return
+	}
+	rh := 56.0
+	if isTouch {
+		rh = 50
+	}
+	top, bottom := r.Y+60, r.Y+r.H-16
+	visible := max(1, int((bottom-top)/(rh+8)))
+	maxScroll := max(0, len(worldList)-visible)
+	if _, wy := ebiten.Wheel(); wy != 0 {
+		worldScroll -= sign(wy)
+	}
+	if maxScroll > 0 {
+		if Button(Rect{r.X + r.W - 250, r.Y + 14, 28, 28}, "<", styleSlate, worldScroll > 0, nil) {
+			worldScroll--
+		}
+		if Button(Rect{r.X + r.W - 218, r.Y + 14, 28, 28}, ">", styleSlate, worldScroll < maxScroll, nil) {
+			worldScroll++
+		}
+	}
+	worldScroll = max(0, min(maxScroll, worldScroll))
+	y := top
+	for k := worldScroll; k < len(worldList) && k < worldScroll+visible; k++ {
+		w := worldList[k]
+		row := Rect{r.X + 18, y, r.W - 36, rh}
+		Inset(row, colSlateLo)
+		Text(w.Name, row.X+14, row.Y+rh*0.32, 16, colInk, text.AlignStart)
+		info := fmt.Sprintf("%s  -  seed %s", modeNames[w.Mode], w.Seed)
+		if w.Deaths > 0 {
+			info += fmt.Sprintf("  -  %d deaths", w.Deaths)
+		}
+		mc := colMuted
+		if w.Mode == modeHardcore {
+			mc = colDanger
+		}
+		Text(info, row.X+14, row.Y+rh*0.7, 12, mc, text.AlignStart)
+		if confirmDelete == w.ID {
+			if Button(Rect{row.X + row.W - 236, row.Y + (rh-32)/2, 120, 32}, "Delete it", styleGold, true, nil) {
+				deleteWorld(w.ID)
+				confirmDelete = ""
+				return
+			}
+			if Button(Rect{row.X + row.W - 106, row.Y + (rh-32)/2, 94, 32}, "Keep", styleSlate, true, nil) {
+				confirmDelete = ""
+			}
+		} else {
+			if Button(Rect{row.X + row.W - 196, row.Y + (rh-32)/2, 90, 32}, "Play", styleViolet, true, icoPlay) {
+				openWorld(w)
+				return
+			}
+			if Button(Rect{row.X + row.W - 96, row.Y + (rh-32)/2, 84, 32}, "Delete", styleSlate, true, nil) {
+				confirmDelete = w.ID
+			}
+		}
+		y += rh + 8
 	}
 }
 
@@ -391,52 +509,98 @@ func drawMoteArt(dst *ebiten.Image, cx, top, h float64) {
 	}
 }
 
-// ---- New world (seed) ----
+// ---- New world ----
+
+var (
+	nameEntry   string
+	modeEntry   = modeNormal
+	editingSeed bool
+)
+
+func startNewWorldScreen() {
+	seedEntry, nameEntry, modeEntry, editingSeed = "", randomWorldName(), modeNormal, false
+	openScreen(scSeed)
+}
 
 func seedMenu() {
-	r := sheet(520, 250)
+	r := sheet(640, 330)
 	if isTouch {
-		r = sheet(560, 280)
+		r = sheet(640, 340)
 	}
 	if _, cl := head(r, "NEW WORLD", false); cl {
 		openScreen(scMain)
 		return
 	}
-	Label("SEED", r.X+18, r.Y+66)
-	field := Rect{r.X + 18, r.Y + 80, r.W - 36 - 110, 38}
+	x := r.X + 18
+	fw := r.W - 36 - 110
+	compact := r.H < 320
+	y := r.Y + 58
+	// name
+	Label("NAME", x, y+6)
+	nameField := Rect{x + 70, y - 8, fw - 70, 32}
+	Inset(nameField, colPanelLo)
+	caret := ""
+	if !editingSeed && !isTouch && (frame/30)%2 == 0 {
+		caret = "_"
+	}
+	Text(nameEntry+caret, nameField.X+10, nameField.Y+16, 15, colInk, text.AlignStart)
+	if ptr.released && nameField.Has(ptr.x, ptr.y) {
+		editingSeed = false
+	}
+	if Button(Rect{nameField.X + nameField.W + 16, nameField.Y, 94, 32}, "Shuffle", styleSlate, true, nil) {
+		nameEntry = randomWorldName()
+	}
+	y += 44
+	// seed
+	Label("SEED", x, y+6)
+	field := Rect{x + 70, y - 8, fw - 70, 32}
 	shown := seedEntry
 	if shown == "" {
 		shown = "Empty = random world"
 	}
-	caret := ""
-	if (frame/30)%2 == 0 {
+	caret = ""
+	if editingSeed && !isTouch && (frame/30)%2 == 0 {
 		caret = "_"
 	}
 	Inset(field, colPanelLo)
 	c := colInk
 	if seedEntry == "" {
 		c = colMuted
-		caret = ""
 	}
-	Text(shown+caret, field.X+12, field.Y+field.H/2, 16, c, text.AlignStart)
-	if Button(Rect{field.X + field.W + 16, field.Y, 94, 38}, "Random", styleSlate, true, nil) {
+	Text(shown+caret, field.X+10, field.Y+16, 15, c, text.AlignStart)
+	if ptr.released && field.Has(ptr.x, ptr.y) {
+		editingSeed = true
+	}
+	if Button(Rect{field.X + field.W + 16, field.Y, 94, 32}, "Random", styleSlate, true, nil) {
 		seedEntry = randomSeed()
 	}
-	// typing on a keyboard
+	// typing on a keyboard goes to the field that was clicked (Tab switches)
+	if inpututil.IsKeyJustPressed(ebiten.KeyTab) {
+		editingSeed = !editingSeed
+	}
 	for _, ch := range ebiten.AppendInputChars(nil) {
-		if len(seedEntry) < 32 && ch >= 32 {
+		if ch < 32 {
+			continue
+		}
+		if editingSeed && len(seedEntry) < 32 {
 			seedEntry += string(ch)
+		} else if !editingSeed && len(nameEntry) < 24 {
+			nameEntry += string(ch)
 		}
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) && len(seedEntry) > 0 {
-		seedEntry = seedEntry[:len(seedEntry)-1]
+	if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
+		if editingSeed && len(seedEntry) > 0 {
+			seedEntry = seedEntry[:len(seedEntry)-1]
+		} else if !editingSeed && len(nameEntry) > 0 {
+			nameEntry = nameEntry[:len(nameEntry)-1]
+		}
 	}
-	y := field.Y + field.H + 14
-	if isTouch { // number pad for phones
+	y += 36
+	if isTouch { // number pad for the seed on phones
 		kw := (r.W - 36 - 11*6) / 12
 		keys := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "<", "C"}
 		for i, k := range keys {
-			kr := Rect{r.X + 18 + float64(i)*(kw+6), y, kw, 34}
+			kr := Rect{x + float64(i)*(kw+6), y, kw, 30}
 			if Button(kr, k, styleSlate, true, nil) {
 				switch k {
 				case "<":
@@ -452,13 +616,33 @@ func seedMenu() {
 				}
 			}
 		}
-		y += 46
+		y += 42
 	} else {
-		Text("Type a seed (numbers or words). The same seed always makes the same world.", r.X+18, y+8, 13, colMuted, text.AlignStart)
-		y += 30
+		Text("Click a box to type in it (Tab switches). The same seed always makes the same world.", x, y+6, 12, colMuted, text.AlignStart)
+		y += 26
 	}
-	if Button(Rect{r.X + 18, y + 4, r.W - 36, 42}, "Start run", styleGold, true, nil) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
-		startRun(seedEntry)
+	// mode
+	Label("MODE", x, y+6)
+	mx := x + 70
+	mw := (r.W - 36 - 70 - 3*8) / 4
+	for m := range modeNames {
+		st := styleSlate
+		if m == modeEntry {
+			st = styleViolet
+			if m == modeHardcore {
+				st = styleGold
+			}
+		}
+		if Button(Rect{mx + float64(m)*(mw+8), y - 8, mw, 32}, modeNames[m], st, true, nil) {
+			modeEntry = m
+		}
+	}
+	y += 34
+	if !compact || !isTouch {
+		Text(modeDesc[modeEntry], mx, y+4, 12, colMuted, text.AlignStart)
+	}
+	if Button(Rect{x, r.Y + r.H - 56, r.W - 36, 42}, "Create world", styleGold, true, icoPlay) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
+		createNewWorld(nameEntry, seedEntry, modeEntry)
 	}
 }
 
@@ -484,12 +668,12 @@ func pauseMenu() {
 		return
 	}
 	y += bh + 16
-	if Button(Rect{x, y, lw, bh}, "Main menu", styleSlate, true, icoHome) {
+	if Button(Rect{x, y, lw, bh}, "Save and quit", styleSlate, true, icoHome) {
 		saveGame()
 		openScreen(scMain)
 		return
 	}
-	y += bh + 20
+	y += bh + 16
 	Label("SEED", x, y+12)
 	Text(seedText, x+48, y+12, 14, colInk, text.AlignStart)
 	cl := "Copy"
@@ -501,7 +685,9 @@ func pauseMenu() {
 			copiedUntil = frame + 90
 		}
 	}
-	y += 40
+	y += 34
+	Text(world.Name+"  -  "+modeNames[world.Mode], x, y+6, 13, colInk, text.AlignStart)
+	y += 26
 	day := "Day"
 	if isNight() {
 		day = "Night"
@@ -517,12 +703,15 @@ func pauseMenu() {
 		Label("TOUCH CONTROLS", kr.X+12, kr.Y+16)
 		rows = [][2]string{{"Move", "Joystick left / right"}, {"Levitate", "Push the joystick up"}, {"Inventory", "Bag button"},
 			{"Pause", "Pause button"}, {"Pick item", "Tap a hotbar slot"}, {"Use item", "Touch the world"},
+			{"Use a station", "Tap it"}, {"Build shapes", "Build bar over the hotbar"},
 			{"Look around", "Touch with no slot picked"}, {"Drop", "Drag out of the inventory"}}
 	} else {
 		Label("KEYBOARD AND MOUSE", kr.X+12, kr.Y+16)
 		rows = [][2]string{{"Move", keyLabel(b["left"]) + " / " + keyLabel(b["right"]) + " or arrows"}, {"Levitate", keyLabel(b["lev"]) + ", Up or Space"},
 			{"Inventory", keyLabel(b["inv"])}, {"Drop item", keyLabel(b["drop"]) + " (Ctrl for the stack)"}, {"Pause", "Esc"},
-			{"Pick item", "1-8 or scroll"}, {"Use item", "Click the world"}, {"Look around", "Hold click, no slot picked"}, {"Full screen", "F11"}}
+			{"Pick item", "1-8 or scroll"}, {"Use item", "Click the world"}, {"Use a station", "Right-click it"},
+			{"Build shape / size", "B, then - and ="}, {"Rotate / flip", "R / F"}, {"Paint colour", "C"},
+			{"Look around", "Hold click, no slot picked"}, {"Full screen", "F11"}}
 	}
 	ry := kr.Y + 40
 	step := math.Min(24, (kr.H-48)/float64(len(rows)))
@@ -680,62 +869,49 @@ func invMenu() {
 	}
 	wrapText(info, x0+2*bw+30, by+8, leftW-2*bw-30, 12, colMuted, text.AlignStart)
 
-	// crafting list, scrollable
+	// right side: the item you're looking at, and crafting
 	cx := x0 + leftW + 24
 	cw := r.X + r.W - 18 - cx
-	Label("CRAFTING", cx, r.Y+64)
-	listTop, listBottom := r.Y+82, r.Y+r.H-16
-	rh := 46.0
+	card := Rect{cx, r.Y + 60, cw, r.H - 60 - 16}
+	Inset(card, colSlateLo)
+	show := -1
+	switch {
+	case dragging && dragFrom >= 0:
+		show = dragFrom
+	case picked >= 0:
+		show = picked
+	case hoverSlot >= 0:
+		show = hoverSlot
+	}
+	cy := card.Y + 14
+	if show >= 0 && inv[show] != nil {
+		st := inv[show]
+		it := items[st.ID]
+		big := math.Min(56, cw*0.3)
+		IconAt(it.img, card.X+12, cy, big)
+		Text(it.name, card.X+24+big, cy+12, 16, colInk, text.AlignStart)
+		sub := ""
+		if !it.tool {
+			sub = fmt.Sprintf("x%d", st.N)
+		}
+		if st.Temp {
+			sub = "Temporary kit"
+		}
+		Text(sub, card.X+24+big, cy+34, 12, colMuted, text.AlignStart)
+		cy = wrapText(it.desc+".", card.X+12, cy+big+16, cw-24, 12, colMuted, text.AlignStart)
+	} else {
+		Text("Your items", card.X+12, cy+8, 15, colInk, text.AlignStart)
+		cy = wrapText("Tap or hover an item to see what it does.", card.X+12, cy+30, cw-24, 12, colMuted, text.AlignStart)
+	}
+	cbh := 46.0
+	if Button(Rect{card.X + 12, card.Y + card.H - cbh - 12, cw - 24, cbh}, "Crafting", styleGold, true, nil) {
+		openHandCrafting()
+	}
+	how := "Right-click"
 	if isTouch {
-		rh = 40
+		how = "Tap"
 	}
-	visible := int((listBottom - listTop) / (rh + 7))
-	maxScroll := max(0, len(recipes)-visible)
-	list := Rect{cx, listTop, cw, listBottom - listTop}
-	if _, wy := ebiten.Wheel(); wy != 0 && list.Has(hoverX, hoverY) {
-		recipeScroll -= sign(wy)
-	}
-	if maxScroll > 0 {
-		if Button(Rect{cx + cw - 64, r.Y + 52, 28, 22}, "<", styleSlate, recipeScroll > 0, nil) {
-			recipeScroll--
-		}
-		if Button(Rect{cx + cw - 30, r.Y + 52, 28, 22}, ">", styleSlate, recipeScroll < maxScroll, nil) {
-			recipeScroll++
-		}
-	}
-	recipeScroll = max(0, min(maxScroll, recipeScroll))
-	ry := listTop
-	for k := recipeScroll; k < len(recipes) && k < recipeScroll+visible; k++ {
-		rc := recipes[k]
-		row := Rect{cx, ry, cw, rh}
-		Inset(row, colSlateLo)
-		it := items[rc.out]
-		IconAt(it.img, row.X+8, row.Y+(rh-24)/2, 24)
-		name := it.name
-		if rc.n > 1 {
-			name += fmt.Sprintf(" x%d", rc.n)
-		}
-		Text(name, row.X+42, row.Y+rh*0.3, 13, colInk, text.AlignStart)
-		nx := row.X + 42
-		for _, nd := range rc.needs {
-			id, n := nd[0].(string), nd[1].(int)
-			have := countItem(id)
-			col := colMuted
-			if have < n {
-				col = colDanger
-			}
-			IconAt(items[id].img, nx, row.Y+rh*0.72-6, 12)
-			s := fmt.Sprintf("%d/%d", min(have, n), n)
-			Text(s, nx+15, row.Y+rh*0.72, 11, col, text.AlignStart)
-			nx += 22 + textWidth(s, 11, false) + 8
-		}
-		if Button(Rect{row.X + row.W - 74, row.Y + (rh-26)/2, 64, 26}, "Craft", styleViolet, canCraft(rc), nil) {
-			if msg := craft(rc); msg != "" {
-				invInfo = msg
-			}
-		}
-		ry += rh + 7
-	}
+	wrapText(how+" a workbench, furnace or anvil in the world for its recipes.", card.X+12, card.Y+card.H-cbh-44, cw-24, 11, colMuted, text.AlignStart)
 }
 
 // ---- Settings (tabs: display, sound, controls) ----
@@ -880,6 +1056,9 @@ func drawToast() {
 	}
 	w := textWidth(toastText, 11, true) + 28
 	r := Rect{(logicalW - w) / 2, 14, w, 30}
+	if cur != scPlaying { // menus have their titles at the top: show it at the bottom instead
+		r.Y = logicalH - 40
+	}
 	Panel(r)
 	ops = append(ops, func(dst *ebiten.Image) {
 		drawText(dst, toastText, r.X+r.W/2, r.Y+r.H/2, textOpt{size: 11, display: true, col: colT, align: text.AlignCenter, shadow: true})
