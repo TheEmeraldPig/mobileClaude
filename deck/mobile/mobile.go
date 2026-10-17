@@ -32,6 +32,13 @@ func (l *lazy) Layout(w, h int) (int, int) {
 	return l.g.Layout(w, h)
 }
 
+func (l *lazy) LayoutF(w, h float64) (float64, float64) {
+	if l.g == nil {
+		return w, h
+	}
+	return l.g.LayoutF(w, h)
+}
+
 var root = &lazy{}
 
 func init() { mobile.SetGame(root) }

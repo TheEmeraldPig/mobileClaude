@@ -15,8 +15,13 @@ import (
 //
 //	wait N        wait N frames
 //	tap X Y       tap at logical position X,Y
-//	press ID      press a button by id: start, tab:N, buy:N, sel:N, enh:N,
-//	              play:N, endturn, pick:N, revive, ad, home, upgrade
+//	press ID      press a button by id: start, tab:N, buy:N, sel:N, toggle, enh:N,
+//	              node:N, play:N, endturn, pick:N, offer:N, remove, forge, picked:N,
+//	              rest, choose:N, continue, deck, revive, ad, home, upgrade
+//	card ID       add a card to the collection
+//	auto          play out the current fight with a simple bot
+//	next          travel to the first reachable map node
+//	goto KIND     jump to a spot of that kind: fight elite shop rest event treasure boss
 //	gold N        add N gold
 //	gems N        add N gems
 //	shot FILE     save a screenshot as PNG
@@ -60,6 +65,36 @@ func (sc *script) step(g *Game) error {
 			g.press(f[1])
 		case "gold":
 			g.p.Gold += int(num(1))
+		case "card":
+			g.p.Cards = append(g.p.Cards, Card{ID: f[1]})
+		case "auto":
+			autoFight(g)
+		case "next":
+			if r := g.run(); r != nil && len(r.Reachable()) > 0 {
+				g.press("node:" + strconv.Itoa(r.Reachable()[0]))
+			}
+		case "goto":
+			if r := g.run(); r != nil {
+				for i, n := range r.Nodes {
+					if nodeNames[n.Kind] == map[string]string{"fight": "Fight", "elite": "Elite", "shop": "Merchant", "rest": "Campfire", "event": "Mystery", "treasure": "Treasure", "boss": "Boss"}[f[1]] {
+						g.travel(i)
+						break
+					}
+				}
+			}
+		case "hp":
+			if r := g.run(); r != nil {
+				r.HP = int(num(1))
+			}
+		case "coins":
+			if r := g.run(); r != nil {
+				r.Coins += int(num(1))
+			}
+		case "evt":
+			if r := g.run(); r != nil {
+				r.Event = int(num(1))
+				g.eventMsg = ""
+			}
 		case "gems":
 			g.p.Gems += int(num(1))
 		case "shot":
@@ -88,4 +123,26 @@ func (sc *script) afterDraw(dst *ebiten.Image) {
 		f.Close()
 	}
 	sc.shot = ""
+}
+
+// autoFight plays every affordable card and ends turns until the fight is over.
+func autoFight(g *Game) {
+	r := g.run()
+	for turn := 0; turn < 60 && r.B != nil && r.B.EHP > 0 && !r.Lost; turn++ {
+		b := r.B
+		for i := 0; i < len(b.Hand); {
+			if b.Playable(i) {
+				b.Play(i)
+				if b.EHP <= 0 {
+					break
+				}
+				continue
+			}
+			i++
+		}
+		if b.EHP > 0 {
+			b.EndTurn()
+		}
+	}
+	g.handPos = nil
 }

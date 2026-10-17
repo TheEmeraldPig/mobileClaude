@@ -22,4 +22,5 @@
 
 - A portrait card roguelite for Android with a shop, Go + Ebitengine like `mote/`. See `deck/README.md`. The screen is 540 wide; height follows the phone. Every push to `deck/` builds `Deckbound.apk` and `Deckbound.exe` through `.github/workflows/deck.yml`.
 - **After every change to `deck/`, rebuild the web version and republish it** so the user can play it from the Claude app: run `deck/web/build.sh`, then publish `deck/web/out/index.html` with the Artifact tool to `url` https://claude.ai/artifact/Kn58gXi11btKxoKsDA1bNQ, with `root` `deck/web/out` and `files` `wasm_exec.js` and `deck.gz.wasm`. Give the user the link in the reply.
-- `go test ./game` must pass. Check layouts under Xvfb with a portrait screen (`-screen 0 720x1280x24`) and `DECK_SCRIPT` (see `game/testhooks.go`).
+- `go test ./game` must pass. Check layouts under Xvfb with a portrait screen (`-screen 0 720x1280x24`), `DECK_SCALE=2` and `DECK_SCRIPT` (see `game/testhooks.go`; `goto shop` etc. jump to any map spot).
+- Drawing goes through the helpers in `game/art.go`, which scale layout units by `S` to real pixels. Don't call `vector.*`, `SubImage` or `DrawImage` with raw layout coordinates; use `fillRect`, `circle`, `clip`, `imgOp`. Keep `AntiAlias` off: it makes Ebitengine flush an oversized buffer around every text draw and drops the game to a few FPS.
