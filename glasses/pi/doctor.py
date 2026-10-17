@@ -36,7 +36,7 @@ Rules:
 - If the cause is outside the code (Claude Code logged out, no internet, a missing microphone, a missing program), don't change code to hide it. Explain what the owner needs to do instead.
 - Check your fix with `python3 lens.py --selftest` (add `--config <file>` if the logs show a custom config).
 - Finish with a two-line summary: what broke, and what you changed or what the owner must do.
-
+{env_note}
 Recent hub log:
 {log}
 
@@ -105,7 +105,12 @@ def main():
     if shutil.which("journalctl"):
         journal = run(["journalctl", "--user", "-u", "lens.service", "-n", "80", "--no-pager"]).stdout or "(empty)"
     selftest = run([sys.executable, str(HERE / "lens.py"), "--config", args.config, "--selftest"], timeout=120)
-    prompt = PROMPT.format(log=tail(data / "lens.log"), journal=journal, selftest=selftest.stdout + selftest.stderr)
+    env_note = ""
+    if cfg["claude"]["bin"] == "claude-proot":
+        env_note = ("- This hub runs on an Android phone in Termux; you run inside its Ubuntu (proot). When you run the\n"
+                    "  self-test there, failures about Termux:API commands are expected: the doctor re-runs it in Termux afterwards.\n")
+    prompt = PROMPT.format(log=tail(data / "lens.log"), journal=journal, selftest=selftest.stdout + selftest.stderr,
+                           env_note=env_note)
 
     if args.dry_run:
         print(prompt)
@@ -122,7 +127,7 @@ def main():
     before = ensure_branch()
     allowed = ["Read", "Grep", "Glob", "Edit",
                "Bash(python3 lens.py --selftest:*)", "Bash(python3 lens.py --config:*)", "Bash(git diff:*)", "Bash(git status:*)"]
-    r = run(["claude", "-p", prompt, "--model", args.model, "--permission-mode", "acceptEdits",
+    r = run([cfg["claude"]["bin"], "-p", prompt, "--model", args.model, "--permission-mode", "acceptEdits",
              "--tools", "Read,Grep,Glob,Edit,Bash", "--allowedTools", *allowed, "--no-session-persistence"],
             cwd=HERE, timeout=900)
     summary = (r.stdout.strip() or r.stderr.strip() or "(no answer)")[-2000:]

@@ -1,0 +1,24 @@
+# Lens hub settings for an Android phone in Termux. setup.sh copies this to ../config.toml; edit that copy.
+# See ../config.example.toml for every setting.
+
+data_dir = "~/lens-data"
+
+[claude]
+bin = "claude-proot"              # Claude Code inside Ubuntu (see claude-proot)
+model = "sonnet"
+effort = "low"
+fresh_after_minutes = 10          # fresh conversation after 10 quiet minutes: saves mobile data
+
+[ears]
+engine = "android"                # Android's speech recognition (fast, no setup)
+
+[mouth]
+engine = "android"                # Android's text-to-speech; plays through paired earbuds
+
+[eyes]
+source = "glasses"                # the glasses tell the hub their address when they connect
+glasses_url = "http://192.168.43.2/capture"
+
+[hub]
+port = 8765
+token = "change-me"

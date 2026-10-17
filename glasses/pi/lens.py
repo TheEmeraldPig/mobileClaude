@@ -34,7 +34,8 @@ log = logging.getLogger("lens")
 
 DEFAULTS = {
     "data_dir": "~/lens-data",
-    "claude": {"bin": "claude", "model": "sonnet", "effort": "low", "web_search": True, "timeout": 90},
+    "claude": {"bin": "claude", "model": "sonnet", "effort": "low", "web_search": True, "timeout": 90,
+               "fresh_after_minutes": 10},
     "ears": {"engine": "whisper", "whisper_bin": "~/whisper.cpp/build/bin/whisper-cli",
              "whisper_model": "~/whisper.cpp/models/ggml-base.en.bin", "language": "en",
              "device": "default", "max_seconds": 15, "silence_seconds": 1.2, "level": 500},
@@ -82,6 +83,7 @@ class Brain:
         self.lock = threading.Lock()
         self.cancelled = threading.Event()
         self.last_error = ""
+        self.turns = 0
 
     def command(self):
         c = self.cfg
@@ -97,6 +99,7 @@ class Brain:
     def start(self):
         self.stop()
         self.events = queue.Queue()
+        self.turns = 0
         log.info("starting Claude Code (%s)", self.cfg["model"])
         self.proc = subprocess.Popen(self.command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, text=True, bufsize=1)
@@ -152,6 +155,7 @@ class Brain:
                                                             "data": base64.b64encode(jpeg).decode()}})
             content.append({"type": "text", "text": text})
             msg = {"type": "user", "message": {"role": "user", "content": content}}
+            self.turns += 1
             try:
                 self.proc.stdin.write(json.dumps(msg) + "\n")
                 self.proc.stdin.flush()
@@ -235,7 +239,24 @@ class Ears:
         text = re.sub(r"\[[A-Z_ ]+\]|\([^)]*\)", " ", out.stdout)   # [BLANK_AUDIO], (wind noise)
         return " ".join(text.split())
 
+    def listen_android(self):
+        """Android's own speech recognition through Termux:API; it stops by itself when you pause."""
+        self.stop_event.clear()
+        proc = subprocess.Popen(["termux-speech-to-text"], stdout=subprocess.PIPE, text=True)
+        try:
+            while proc.poll() is None:
+                if self.stop_event.wait(0.1):
+                    proc.kill()
+                    return ""
+            lines = [l.strip() for l in proc.stdout.read().splitlines() if l.strip()]
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+        return lines[-1] if lines else ""   # the last line is the finished sentence
+
     def listen(self):
+        if self.cfg["engine"] == "android":
+            return self.listen_android()
         wav = self.record()
         return self.transcribe(wav) if wav else ""
 
@@ -275,6 +296,9 @@ class Mouth:
                             self._open()
                         self.voice.stdin.write(line + "\n")
                         self.voice.stdin.flush()
+                    elif self.engine == "android":
+                        self.voice = subprocess.Popen(["termux-tts-speak", line])
+                        self.voice.wait(timeout=60)
                     elif self.engine == "espeak":
                         subprocess.run(["espeak-ng", line], timeout=60)
                     else:
@@ -363,6 +387,7 @@ class Hub:
         self.busy = threading.Lock()
         self.state = "ready"
         self.started = time.time()
+        self.last_used = time.time()
         self.last = {}
 
     # ---------- notes and captures ----------
@@ -417,6 +442,7 @@ class Hub:
             self.state = "ready"
         if speak:
             self.mouth.flush()
+        self.last_used = time.time()
         for note in NOTE_RE.findall(text):
             self.save_note(note)
         spoken = " ".join(NOTE_RE.sub("", text).split())
@@ -504,6 +530,12 @@ def make_handler(hub):
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
             except json.JSONDecodeError:
                 return self.reply(400, {"error": "body must be JSON"})
+            if self.path == "/hello":
+                # The glasses say where they are, so this works on any Wi-Fi without fixed addresses.
+                ip = str(body.get("ip") or self.client_address[0])
+                hub.cfg["eyes"]["glasses_url"] = f"http://{ip}/capture"
+                log.info("glasses are at %s", ip)
+                return self.reply(200, {"ok": True})
             if self.path == "/button":
                 event = body.get("event", "press")
                 target = hub.photo if event == "long" else hub.talk
@@ -561,6 +593,9 @@ def selftest(cfg, deep=False):
         check(expand(cfg["ears"]["whisper_bin"]).exists(), "whisper.cpp built", "run setup.sh")
         check(expand(cfg["ears"]["whisper_model"]).exists(), "speech model downloaded", "run setup.sh")
         check(bool(shutil.which("arecord")), "arecord (microphone)", "sudo apt install alsa-utils")
+    if "android" in (cfg["ears"]["engine"], cfg["mouth"]["engine"]):
+        check(bool(shutil.which("termux-tts-speak")), "Termux:API commands",
+              "pkg install termux-api, and install the Termux:API app from F-Droid")
     if cfg["mouth"]["engine"] == "piper":
         ok = expand(cfg["mouth"]["piper_bin"]).exists() and expand(cfg["mouth"]["piper_voice"]).exists()
         check(ok or bool(shutil.which("espeak-ng")), "a voice (Piper or espeak-ng)", "run setup.sh")
@@ -629,10 +664,17 @@ def run_hub(cfg, args):
         if args.console:
             console(hub)
         else:
+            fresh_after = cfg["claude"]["fresh_after_minutes"] * 60
             while True:
                 time.sleep(5)
-                if not hub.brain.alive() and not hub.brain.lock.locked():
+                idle = not hub.brain.lock.locked() and not hub.busy.locked()
+                if not hub.brain.alive() and idle:
                     log.warning("Claude Code process is gone, restarting it")
+                    hub.brain.start()
+                elif fresh_after and idle and hub.brain.turns and time.time() - hub.last_used > fresh_after:
+                    # A new conversation stops old pictures being re-sent with every question,
+                    # which saves mobile data and usage limits.
+                    log.info("quiet for a while: starting a fresh conversation")
                     hub.brain.start()
     except KeyboardInterrupt:
         pass

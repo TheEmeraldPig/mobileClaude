@@ -2,10 +2,10 @@
 
 A home-made take on camera + AI glasses: you look at something, ask out loud, and hear an answer. Personal project, not for sale.
 
-The glasses stay as normal-looking as possible by carrying almost nothing: a thumb-sized camera board, a button and a recording light. The thinking happens on a Raspberry Pi in your pocket, which runs Claude Code logged into your own Claude account, so there's no API bill.
+The glasses stay as normal-looking as possible by carrying almost nothing: a thumb-sized camera board, a button and a recording light. The thinking happens on a pocket hub that runs Claude Code logged into your own Claude account, so there's no API bill. The hub can be a Raspberry Pi or an old Android phone with a data-only SIM.
 
 ```
- glasses (XIAO ESP32S3 Sense)         pocket (Raspberry Pi)                          internet
+ glasses (XIAO ESP32S3 Sense)         pocket (Pi or old phone)                        internet
  camera, button, light  ── Wi-Fi ──►  lens.py: listen → whisper.cpp → Claude Code ──► Claude
                                        speak ◄─ Piper ◄─ answer                  ◄──
                                        doctor.py: fixes the hub if it keeps crashing
@@ -14,7 +14,7 @@ The glasses stay as normal-looking as possible by carrying almost nothing: a thu
 
 | Folder | What it is |
 |---|---|
-| `pi/` | The pocket hub: `lens.py`, the repair doctor, services and `setup.sh` |
+| `pi/` | The pocket hub: `lens.py`, the repair doctor, `setup.sh` for a Pi, and `android/` for a phone |
 | `firmware/lens_glasses/` | Arduino sketch for the glasses board |
 | `index.html` | The phone-only version (uses an API key). Handy for trying features without any hardware |
 
@@ -79,6 +79,28 @@ How it stays running: systemd starts the hub on boot and restarts it if it crash
 
 The hub also answers on the network, for the glasses and for testing: `GET /status`, `POST /ask {"text": "..."}` and `POST /button {"event": "press"|"long"}` on port 8765, with the `X-Lens-Token` header from `config.toml`.
 
+### Pocket hub on an Android phone (instead of a Pi)
+
+An old Android phone (tested design: Galaxy A26) makes a cheaper and smaller hub: battery, mic, speaker and mobile data are built in, so no Pi or power bank. A data-only SIM in it gives the glasses internet anywhere, and its hotspot is the Wi-Fi the glasses join.
+
+**SIM:** any data-only plan the phone's network supports, 1–2 GB a month is enough. **It must include hotspot** (check the plan page). Before buying, put the phone's IMEI (dial `*#06#`) into the carrier's compatibility checker.
+
+**Setup:**
+1. Install **F-Droid** (f-droid.org), then from it **Termux**, **Termux:API** and **Termux:Boot**. Open each once. (The Termux on the Play Store is outdated; use F-Droid's.)
+2. In Termux: `pkg install git && git clone https://github.com/TheEmeraldPig/mobileClaude ~/mobileClaude && bash ~/mobileClaude/glasses/pi/android/setup.sh`
+3. Log Claude Code into your account: `claude-proot`, open the link, sign in, paste the code back, then `/exit`. (Claude Code has no Android build, so it runs inside a small Ubuntu that setup installs; `claude-proot` is the shortcut into it.)
+4. In `~/mobileClaude/glasses/pi/config.toml`, set `token`.
+5. Android settings:
+   - **Settings → Battery → Background usage limits → Never sleeping apps:** add Termux and Termux:API. Also set both to **Unrestricted** under each app's Battery settings. Otherwise Android pauses the hub.
+   - Let **Termux:API** use the microphone (it asks the first time).
+   - **Settings → Connections → Mobile Hotspot:** turn it on, set the **band to 2.4 GHz** (the glasses can't see 5 GHz), and note the name and password for the glasses.
+   - Pair your earbuds with this phone.
+6. `cd ~/mobileClaude/glasses/pi && python3 lens.py --selftest --deep`, then `bash android/run.sh`, or restart the phone and Termux:Boot starts it.
+
+On the phone, speech recognition and the voice are Android's own (through Termux:API), so there's nothing to build. `android/run.sh` does what systemd does on a Pi: restarts the hub when it stops and runs the doctor after 5 crashes in 5 minutes. After 10 quiet minutes the hub starts a fresh conversation, so old pictures aren't re-sent with every question; that keeps mobile data and Max usage down (`fresh_after_minutes` in `config.toml`).
+
+In the glasses' `secrets.h`, use the hub phone's hotspot name and password and `HUB_HOST "gateway"`: the phone making the hotspot is the hub, so the glasses always know where it is, and they tell the hub their own address when they connect.
+
 ### The glasses (XIAO ESP32S3 Sense)
 
 1. Arduino IDE → install the **esp32** boards package by Espressif → board **XIAO_ESP32S3**, **Tools → PSRAM → OPI PSRAM**.
@@ -87,7 +109,7 @@ The hub also answers on the network, for the glasses and for testing: `GET /stat
 4. Wiring: button between **D1** and **GND**; LED (through the 220 Ω resistor) from **D0** to **GND**; battery to the BAT pads on the back.
 5. Mount it: camera at the hinge pointing forward, board and battery along one temple arm, button on top of the arm, light next to the camera where people can see it.
 
-The glasses find the Pi as `lens-hub.local` and the Pi finds the glasses as `lens-glasses.local`, so it doesn't matter what addresses the hotspot hands out.
+With a Pi, the glasses find it as `lens-hub.local`; with a hub phone, they use the hotspot's address (`HUB_HOST "gateway"`). Either way they tell the hub their own address when they connect, so it doesn't matter what addresses the Wi-Fi hands out.
 
 Later upgrades: a small speaker by the ear (MAX98357A amp + 8 Ω speaker), and streaming the board's own microphone so earbuds become optional.
 

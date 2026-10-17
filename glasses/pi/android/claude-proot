@@ -1,0 +1,5 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Claude Code has no Android build, so it runs inside a small Ubuntu (proot-distro).
+# This wrapper makes it act like a normal `claude` command: same folder, same input and output.
+dir="$(pwd | sed "s#^$HOME#/root#")"
+exec proot-distro login ubuntu --termux-home --work-dir "$dir" -- /root/.local/bin/claude "$@"

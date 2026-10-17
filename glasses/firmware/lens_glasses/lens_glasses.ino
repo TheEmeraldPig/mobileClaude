@@ -3,6 +3,7 @@
 // The glasses only see and listen for the button; the pocket hub does the thinking.
 //   GET  http://lens-glasses.local/capture  -> a JPEG of what you're looking at (recording light on while it's taken)
 //   GET  http://lens-glasses.local/status   -> {"ok":true,...}
+//   On connecting (and every 30 s) it tells the hub its address: hub /hello {"ip":"..."}
 //   Button: short press -> hub /button {"event":"press"} (talk / stop)
 //           long press  -> hub /button {"event":"long"}  (take a photo)
 //
@@ -66,21 +67,33 @@ void handleStatus() {
   server.send(200, "application/json", s);
 }
 
+// HUB_HOST "gateway": the hub is the phone whose hotspot we're on. Otherwise it's a name like "lens-hub" (a Pi).
 bool findHub() {
-  hubIp = MDNS.queryHost(HUB_HOST, 2000);
+  if (String(HUB_HOST) == "gateway") hubIp = WiFi.gatewayIP();
+  else hubIp = MDNS.queryHost(HUB_HOST, 2000);
   return hubIp != IPAddress(0, 0, 0, 0);
 }
 
-void sendButton(const char *event) {
-  if (hubIp == IPAddress(0, 0, 0, 0) && !findHub()) return;
+int postToHub(const char *path, const String &body) {
+  if (hubIp == IPAddress(0, 0, 0, 0) && !findHub()) return -1;
   HTTPClient http;
-  http.begin("http://" + hubIp.toString() + ":" + String(HUB_PORT) + "/button");
+  http.begin("http://" + hubIp.toString() + ":" + String(HUB_PORT) + path);
   http.setTimeout(2000);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("X-Lens-Token", HUB_TOKEN);
-  int code = http.POST(String("{\"event\":\"") + event + "\"}");
+  int code = http.POST(body);
   http.end();
   if (code <= 0) hubIp = IPAddress(0, 0, 0, 0);   // the hub moved; look it up again next time
+  return code;
+}
+
+void sendButton(const char *event) {
+  postToHub("/button", String("{\"event\":\"") + event + "\"}");
+}
+
+// Tells the hub our address, so it can fetch pictures whatever address the hotspot gave us.
+void sendHello() {
+  postToHub("/hello", "{\"ip\":\"" + WiFi.localIP().toString() + "\"}");
 }
 
 void blink(int times) {
@@ -112,6 +125,7 @@ void setup() {
   server.on("/status", handleStatus);
   server.begin();
   findHub();
+  sendHello();
   blink(2);   // ready
 }
 
@@ -127,6 +141,12 @@ void loop() {
     if (held > 30) sendButton(held >= LONG_PRESS_MS ? "long" : "press");
   }
   wasDown = down;
+
+  static unsigned long lastHello = 0;
+  if (millis() - lastHello > 30000) {   // also covers the hub restarting
+    lastHello = millis();
+    if (WiFi.status() == WL_CONNECTED) sendHello();
+  }
 
   if (WiFi.status() != WL_CONNECTED) WiFi.reconnect(), delay(500);
   delay(5);
