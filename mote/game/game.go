@@ -63,6 +63,8 @@ func (g *Game) Update() error {
 			}
 		case scSeed, scWorlds:
 			openScreen(scMain)
+		case scBook:
+			openScreen(bookFrom)
 		case scCraft:
 			if craftStation == "" {
 				openScreen(scInv)
@@ -215,6 +217,11 @@ func (g *Game) Update() error {
 		storageMenu()
 	case scShop:
 		shopMenu()
+	case scBook:
+		if bookFrom == scMain {
+			mainMenuArt()
+		}
+		bookMenu()
 	}
 	shake *= 0.86
 	drawToast()

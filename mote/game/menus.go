@@ -680,31 +680,37 @@ func seedMenu() {
 // ---- Pause ----
 
 func pauseMenu() {
-	r := sheet(780, 360)
+	r := sheet(780, 380)
 	if _, cl := head(r, "PAUSED", false); cl {
 		play()
 		return
 	}
 	lw := math.Min(270, r.W*0.4)
-	x, y := r.X+18, r.Y+66
-	bh := 38.0
+	x, y := r.X+18, r.Y+62
+	bh := 34.0
+	gap := 11.0
 	if Button(Rect{x, y, lw, bh}, "Resume", styleGold, true, icoPlay) {
 		play()
 		return
 	}
-	y += bh + 16
-	if Button(Rect{x, y, lw, bh}, "Settings", styleViolet, true, icoGear) {
+	y += bh + gap
+	if Button(Rect{x, y, lw, bh}, "Guide book", styleViolet, true, icoBook) {
+		openBook(scPause)
+		return
+	}
+	y += bh + gap
+	if Button(Rect{x, y, lw, bh}, "Settings", styleSlate, true, icoGear) {
 		settingsFrom = scPause
 		openScreen(scSettings)
 		return
 	}
-	y += bh + 16
+	y += bh + gap
 	if Button(Rect{x, y, lw, bh}, "Save and quit", styleSlate, true, icoHome) {
 		saveGame()
 		openScreen(scMain)
 		return
 	}
-	y += bh + 16
+	y += bh + gap + 4
 	Label("SEED", x, y+12)
 	Text(seedText, x+48, y+12, 14, colInk, text.AlignStart)
 	cl := "Copy"

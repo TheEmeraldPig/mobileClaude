@@ -269,8 +269,8 @@ const villageSlot = 820
 
 type vHouse struct {
 	x, floor, w, h int // left column, floor row (the row the trader stands on), size
-	kind          int  // trader: 0 merchant, 1 smith, 2 farmer
-	id            int
+	kind           int // trader: 0 merchant, 1 smith, 2 farmer
+	id             int
 }
 
 // The houses of the village in slot sl (empty if there is none)

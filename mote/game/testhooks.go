@@ -305,7 +305,7 @@ func runScript() {
 							ry := int(H*0.52 + hash01(sl, 4, 211)*H*0.18)
 							teleportTo(rx + w/2)
 							player.y = float64((ry + h - 3 - 14) * CELL)
-							player.x = float64((rx+w/2-baseChunk*CW)*CELL)
+							player.x = float64((rx + w/2 - baseChunk*CW) * CELL)
 							return
 						}
 					case "pyramid":
@@ -318,6 +318,9 @@ func runScript() {
 					}
 				}
 			}
+		case "book": // book=CHAPTER
+			bookChapter, _ = strconv.Atoi(arg)
+			openBook(scPause)
 		case "shop":
 			k, _ := strconv.Atoi(arg)
 			openShop(k)
