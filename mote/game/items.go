@@ -69,6 +69,21 @@ func blockIcon(a, d byte) []string {
 	return rows
 }
 
+
+// Tools are drawn like the mote: dark outline, violet handle, gold tip.
+func toolIcon(rows []string, a, d byte) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = strings.NewReplacer("a", string(a), "A", string(d)).Replace(r)
+	}
+	return out
+}
+
+var pickRows = []string{"..OOOO..", ".OaaaaO.", "OaOOBOAO", "OO.OBO.O", "...OBO..", "...ODO..", "...OBO..", "...OTO.."}
+var hoeRows = []string{"OOOOO...", "OaaAOO..", "OOOOBO..", "...OBO..", "...ODO..", "...OBO..", "...OBO..", "...OTO.."}
+var hammerRows = []string{"OOOOOOO.", "OaaaaAO.", "OAAAAAO.", "OOOBOOO.", "..OBO...", "..ODO...", "..OBO...", "..OTO..."}
+var swordRows = []string{".....OOO", "....OaaO", "...OaAO.", "O.OaAO..", "OTOAO...", ".OTO....", "OBOTO...", "OOO.O..."}
+
 // A rolled-up blueprint
 var bpIcon = []string{"........", ".OOOOOO.", "OwWWWWwO", "OWwWWwWO", "OWWwwWWO", "OwWWWWwO", ".OOOOOO.", "........"}
 
@@ -81,22 +96,15 @@ var itemOrder = []string{"pickaxe", "copperpick", "ironpick", "goldpick", "corep
 	"seeds", "wheat", "berries", "bread", "heart", "gem", "bomb"}
 
 var items = map[string]*Item{
-	"pickaxe": {name: "Stone pickaxe", tool: true, desc: "Digs soft blocks, stone, coal and copper. Opens chests", reach: 4, dmg: 1, icon: []string{
-		".SSSSSs.", "S..hH..s", "...hH...", "...hH...", "...hH...", "...hH...", "...hH...", "...hh..."}},
-	"copperpick": {name: "Copper pickaxe", tool: true, desc: "Faster, and strong enough for iron, gold and crystal", reach: 4, dmg: 1, icon: []string{
-		".ccccC..", "c..hH.C.", "...hH...", "...hH...", "...hH...", "...hH...", "...hH...", "...hh..."}},
-	"goldpick": {name: "Gold pickaxe", tool: true, desc: "Very fast with a wide reach", reach: 6, dmg: 3, icon: []string{
-		".uuuuuU.", "u..hH..U", "u..hH..U", "...hH...", "...hH...", "...hH...", "...hH...", "...hh..."}},
-	"ironpick": {name: "Iron pickaxe", tool: true, desc: "Faster and wider, and strong enough for obsidian", reach: 5, dmg: 2, icon: []string{
-		".iiiiiI.", "i..hH..I", "i..hH..I", "...hH...", "...hH...", "...hH...", "...hH...", "...hh..."}},
-	"hoe": {name: "Hoe", tool: true, desc: "Turns dirt into soil for seeds, and harvests crops", reach: 2, icon: []string{
-		"..SSSs..", ".S..hH..", "....hH..", "....hH..", "....hH..", "....hH..", "....hH..", "....hh.."}},
+	"pickaxe": {name: "Stone pickaxe", tool: true, desc: "Digs soft blocks, stone, coal and copper. Opens chests", reach: 4, dmg: 1, icon: toolIcon(pickRows, 'S', 's')},
+	"copperpick": {name: "Copper pickaxe", tool: true, desc: "Faster, and strong enough for iron, gold and crystal", reach: 4, dmg: 1, icon: toolIcon(pickRows, 'c', 'C')},
+	"goldpick": {name: "Gold pickaxe", tool: true, desc: "Very fast with a wide reach", reach: 6, dmg: 3, icon: toolIcon(pickRows, 'u', 'U')},
+	"ironpick": {name: "Iron pickaxe", tool: true, desc: "Faster and wider, and strong enough for obsidian", reach: 5, dmg: 2, icon: toolIcon(pickRows, 'i', 'I')},
+	"hoe": {name: "Hoe", tool: true, desc: "Turns dirt into soil for seeds, and harvests crops", reach: 2, icon: toolIcon(hoeRows, 'S', 's')},
 	"bucket": {name: "Bucket", tool: true, desc: "Scoops up water", reach: 5, icon: []string{
 		"..O..O..", ".O....O.", "OMMMMMMO", "OMwWWWmO", ".MWWWWm.", ".MMMMmm.", "..Mmmm..", "........"}},
-	"coppersword": {name: "Copper sword", tool: true, desc: "Hits creatures", reach: 7, dmg: 2, icon: []string{
-		"......Oc", ".....Occ", "....Occ.", "...Occ..", "h.Occ...", ".hcc....", ".hh.....", "h..h...."}},
-	"ironsword": {name: "Iron sword", tool: true, desc: "Hits creatures hard", reach: 8, dmg: 4, icon: []string{
-		"......Oi", ".....Oii", "....OiI.", "...OiI..", "T.OiI...", ".TiI....", ".hT.....", "h..T...."}},
+	"coppersword": {name: "Copper sword", tool: true, desc: "Hits creatures", reach: 7, dmg: 2, icon: toolIcon(swordRows, 'c', 'C')},
+	"ironsword": {name: "Iron sword", tool: true, desc: "Hits creatures hard", reach: 8, dmg: 4, icon: toolIcon(swordRows, 'i', 'I')},
 	"copperarmor": {name: "Copper armor", tool: true, armor: 1, desc: "Blocks some damage while you carry it", icon: []string{
 		"........", ".OO..OO.", "OccOOccO", "OcccccCO", ".OcccCO.", ".OccCCO.", ".OcCCCO.", "..OOOO.."}},
 	"ironarmor": {name: "Iron armor", tool: true, armor: 2, desc: "Blocks a lot of damage while you carry it", icon: []string{
@@ -117,14 +125,12 @@ var items = map[string]*Item{
 		"........", ".OOOOOO.", "OPPPPPPO", "OppppppO", "OOOTTOOO", "OPPTTPPO", "OppppppO", "OOOOOOOO"}},
 	"bed": {name: "Bed", once: true, station: "bed", desc: "Place it, then tap it to make it your respawn point", icon: []string{
 		"........", "........", "O.......", "OhOOOOOO", "OhwwRRRO", "OhOOOOhO", "OhO..OhO", "OOO..OOO"}},
-	"hammer": {name: "Hammer", tool: true, desc: "Knocks down background walls", reach: 3, icon: []string{
-		".OOOOO..", "OSSSSsO.", "OSSSSsO.", ".OOhOO..", "...hH...", "...hH...", "...hH...", "...hh..."}},
+	"hammer": {name: "Hammer", tool: true, desc: "Knocks down background walls", reach: 3, icon: toolIcon(hammerRows, 'S', 's')},
 	"paintbrush": {name: "Paintbrush", tool: true, desc: "Paints blocks and walls. Pick a colour on the build bar (C)", reach: 3, icon: []string{
-		"......qa", ".....qaa", "....OqO.", "...OhO..", "..OhO...", ".OhO....", "OhO.....", "OO......"}},
+		"......qa", ".....qaa", "....OqO.", "...OBO..", "..ODO...", ".OBO....", "OTO.....", "OO......"}},
 	"coreshard": {name: "Core shard", desc: "A piece of the Core. Forge it into the Core pickaxe", icon: []string{
 		"...OO...", "..OqAO..", ".OqAAqO.", "OqAAAAqO", ".OqAAqO.", "..OqqO..", "...OO...", "........"}},
-	"corepick": {name: "Core pickaxe", tool: true, desc: "Digs a huge area very fast and hits hard", reach: 8, dmg: 5, icon: []string{
-		".qqqqqA.", "q..hH..A", "q..hH..A", "...hH...", "...hH...", "...hH...", "...hH...", "...hh..."}},
+	"corepick": {name: "Core pickaxe", tool: true, desc: "Digs a huge area very fast and hits hard", reach: 8, dmg: 5, icon: toolIcon(pickRows, 'q', 'A')},
 	"sand":     {name: "Sand", place: SAND, desc: "Falls when nothing holds it up", icon: blockIcon('Y', 'y')},
 	"dirt":     {name: "Dirt", place: DIRT, desc: "Ground. Till it with a hoe for crops", icon: blockIcon('d', 'P')},
 	"stone":    {name: "Stone", place: STONE, desc: "A solid building block", icon: blockIcon('G', 'g')},
