@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05080d">
+<title>Lens</title>
+<style>
+:root{--bg:#05080d;--card:#0a1520;--line:#7fe3ff33;--hud:#7fe3ff;--hud2:#b9f3ff;--ink:#e8f7ff;--dim:#8aa4b2;--warn:#ffb86b;--rec:#ff4d5e;--ok:#5be3a0}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+.wrap{max-width:720px;margin:0 auto;padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+header{display:flex;align-items:center;gap:10px;margin:4px 0 14px}
+.logo{font:700 14px/1 ui-monospace,Menlo,monospace;letter-spacing:.2em;color:var(--hud);flex:1}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border:1px solid var(--line);border-radius:999px;font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--hud);text-transform:uppercase;white-space:nowrap}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--hud);box-shadow:0 0 8px currentColor}
+.pill.listening i{background:var(--rec);animation:pulse .8s infinite}
+.pill.thinking i{animation:pulse 1s infinite}
+.pill.off i{background:#556;box-shadow:none}
+#glasses.on i{background:var(--ok)}
+@keyframes pulse{50%{opacity:.25}}
+#offline{display:none;margin:0 0 12px;padding:10px 12px;border:1px solid #ffb86b66;border-radius:10px;color:var(--warn);font-size:14px}
+#offline.show{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+#live .q{color:var(--dim);font-size:14px;margin-bottom:6px;min-height:1em}
+#live .a{color:var(--hud2);font-size:19px;white-space:pre-wrap;min-height:1.4em}
+#live .a.err{color:var(--warn)}
+#live img{display:block;width:100%;max-height:36vh;object-fit:cover;border-radius:10px;margin-top:12px;border:1px solid var(--line)}
+#live img[hidden]{display:none}
+.controls{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin:12px 0}
+.controls button{padding:14px 8px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--hud);font-weight:600}
+.controls #talk{border-color:var(--hud);background:#0f2533}
+.controls #talk.on{border-color:var(--rec);color:var(--rec)}
+form{display:flex;gap:8px}
+form input[type=text]{flex:1;min-width:0;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-size:16px}
+form button{padding:0 18px;border-radius:12px;border:1px solid var(--hud);color:var(--hud)}
+.opts{display:flex;gap:16px;margin:8px 2px 18px;color:var(--dim);font-size:14px}
+.opts label{display:flex;align-items:center;gap:6px}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.tabs button{padding:10px 12px;color:var(--dim);border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:600}
+.tabs button.sel{color:var(--hud);border-color:var(--hud)}
+.panel{display:none}
+.panel.sel{display:block}
+.item{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #7fe3ff14}
+.item img{width:72px;height:72px;object-fit:cover;border-radius:8px;flex:none;border:1px solid var(--line)}
+.item .q{color:var(--dim);font-size:14px}
+.item .a{margin-top:2px}
+.item time{display:block;color:#5f7884;font-size:12px;margin-top:4px}
+.note{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #7fe3ff14}
+.note span{flex:1}
+.note button{color:#ff8b95;font-size:13px;padding:2px 4px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px}
+.grid a{display:block;aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+.grid img{width:100%;height:100%;object-fit:cover;display:block}
+.empty{color:var(--dim);font-size:14px;padding:12px 0}
+#big{position:fixed;inset:0;background:#000e;display:none;place-items:center;padding:16px;z-index:5}
+#big.show{display:grid}
+#big img{max-width:100%;max-height:100%;border-radius:8px}
+@media (orientation:landscape) and (min-width:700px){
+  .wrap{max-width:1100px;display:grid;grid-template-columns:1fr 1fr;gap:0 24px;align-items:start}
+  header,#offline{grid-column:1/-1}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="logo">LENS</span>
+    <span class="pill off" id="glasses"><i></i><span>Glasses</span></span>
+    <span class="pill" id="state"><i></i><span>Ready</span></span>
+  </header>
+  <div id="offline">Can't reach the hub. Is this phone on the hub's Wi-Fi?</div>
+
+  <section>
+    <div class="card" id="live">
+      <div class="q" id="liveQ">Press the button on your glasses, or tap Talk.</div>
+      <div class="a" id="liveA"></div>
+      <img id="liveImg" alt="What the glasses saw" hidden>
+    </div>
+    <div class="controls">
+      <button id="talk">Talk</button>
+      <button id="photo">Photo</button>
+      <button id="stop">Stop</button>
+    </div>
+    <form id="ask">
+      <input type="text" id="askIn" placeholder="Type a question…" autocomplete="off" enterkeyhint="send">
+      <button>Ask</button>
+    </form>
+    <div class="opts">
+      <label><input type="checkbox" id="look" checked> Use the camera</label>
+      <label><input type="checkbox" id="speak" checked> Say it out loud</label>
+    </div>
+  </section>
+
+  <section>
+    <div class="tabs">
+      <button class="sel" data-tab="history">History</button>
+      <button data-tab="notes">Notes</button>
+      <button data-tab="photos">Photos</button>
+    </div>
+    <div class="panel sel" id="history"></div>
+    <div class="panel" id="notes"></div>
+    <div class="panel" id="photos"></div>
+  </section>
+</div>
+<div id="big"><img alt=""></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let S = { history: [], notes: [], captures: [] };
+let live = null;   // the exchange shown in the big card
+
+const STATES = { ready: "Ready", listening: "Listening", thinking: "Thinking" };
+function setState(s) {
+  $("state").className = "pill " + s;
+  $("state").lastElementChild.textContent = STATES[s] || s;
+  $("talk").classList.toggle("on", s === "listening");
+  $("talk").textContent = { ready: "Talk", listening: "Listening… tap to stop", thinking: "Thinking… tap to stop" }[s] || "Talk";
+}
+function setGlasses(on) { $("glasses").className = "pill " + (on ? "on" : "off"); }
+const when = t => new Date(t * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+function showLive(item, error) {
+  live = item;
+  $("liveQ").textContent = item ? item.question : "";
+  $("liveA").textContent = error || (item && item.answer) || (item ? "…" : "");
+  $("liveA").classList.toggle("err", !!error);
+  const img = $("liveImg");
+  if (item && item.view) { img.src = "/views/" + item.view; img.hidden = false; } else { img.hidden = true; img.removeAttribute("src"); }
+}
+
+function renderHistory() {
+  const p = $("history"); p.innerHTML = "";
+  if (!S.history.length) return p.append(el("div", "empty", "Nothing asked yet."));
+  for (const h of [...S.history].reverse()) {
+    const row = el("div", "item");
+    if (h.view) { const i = el("img"); i.src = "/views/" + h.view; i.alt = ""; i.loading = "lazy"; i.onclick = () => zoom(i.src); row.append(i); }
+    const body = el("div");
+    body.append(el("div", "q", h.question), el("div", "a", h.answer || "…"), el("time", null, when(h.at) + (h.seconds ? ` · ${h.seconds}s` : "")));
+    row.append(body); p.append(row);
+  }
+}
+function renderNotes() {
+  const p = $("notes"); p.innerHTML = "";
+  if (!S.notes.length) return p.append(el("div", "empty", 'No notes yet. Say "remember that…" to add one.'));
+  S.notes.forEach((n, i) => {
+    const row = el("div", "note"), del = el("button", null, "Delete");
+    del.onclick = async () => { if (!confirm("Delete this note?")) return; S.notes = (await post("/notes/delete", { index: i })).notes; renderNotes(); };
+    row.append(el("span", null, n), del); p.append(row);
+  });
+}
+function renderPhotos() {
+  const p = $("photos"); p.innerHTML = "";
+  if (!S.captures.length) return p.append(el("div", "empty", "No photos yet. Hold the glasses button to take one."));
+  const g = el("div", "grid");
+  for (const name of S.captures) {
+    const a = el("a"); a.href = "/captures/" + name; a.target = "_blank";
+    const i = el("img"); i.src = "/captures/" + name; i.alt = ""; i.loading = "lazy";
+    a.append(i); g.append(a);
+  }
+  p.append(g);
+}
+function zoom(src) { $("big").querySelector("img").src = src; $("big").classList.add("show"); }
+$("big").onclick = () => $("big").classList.remove("show");
+$("liveImg").onclick = () => zoom($("liveImg").src);
+
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || "Error " + r.status);
+  return data;
+}
+
+async function load() {
+  const r = await fetch("/api/state");
+  if (!r.ok) throw new Error("hub " + r.status);
+  S = await r.json();
+  setState(S.state); setGlasses(S.glasses_connected);
+  if (!live && S.history.length) showLive(S.history[S.history.length - 1]);
+  renderHistory(); renderNotes(); renderPhotos();
+}
+
+function connect() {
+  const es = new EventSource("/events");
+  es.onopen = () => { $("offline").classList.remove("show"); load().catch(() => {}); };
+  es.onerror = () => $("offline").classList.add("show");
+  es.addEventListener("state", e => setState(JSON.parse(e.data).state));
+  es.addEventListener("glasses", e => setGlasses(JSON.parse(e.data).connected));
+  es.addEventListener("question", e => showLive(JSON.parse(e.data)));
+  es.addEventListener("delta", e => {
+    if (!live) return;
+    live.answer = (live.answer || "") + JSON.parse(e.data).text;
+    $("liveA").textContent = live.answer.replace(/\[\[note:[\s\S]*?(\]\]|$)/gi, "");
+  });
+  es.addEventListener("answer", e => {
+    const item = JSON.parse(e.data);
+    showLive(item);
+    S.history.push(item); if (S.history.length > 40) S.history.shift();
+    renderHistory();
+  });
+  es.addEventListener("note", e => { S.notes.push(JSON.parse(e.data).text); renderNotes(); });
+  es.addEventListener("capture", e => { S.captures.unshift(JSON.parse(e.data).name); renderPhotos(); });
+  es.addEventListener("problem", e => showLive(live, JSON.parse(e.data).text));
+}
+
+$("talk").onclick = () => post("/button", { event: $("state").classList.contains("ready") ? "press" : "stop" }).catch(err => showLive(live, err.message));
+$("photo").onclick = () => post("/button", { event: "long" }).catch(err => showLive(live, err.message));
+$("stop").onclick = () => post("/button", { event: "stop" }).catch(() => {});
+$("ask").onsubmit = e => {
+  e.preventDefault();
+  const text = $("askIn").value.trim();
+  if (!text) return;
+  $("askIn").value = ""; $("askIn").blur();
+  post("/ask", { text, look: $("look").checked, speak: $("speak").checked }).catch(err => showLive({ question: text }, err.message));
+};
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button, .panel").forEach(x => x.classList.remove("sel"));
+  b.classList.add("sel"); $(b.dataset.tab).classList.add("sel");
+});
+
+load().catch(() => $("offline").classList.add("show"));
+connect();
+</script>
+</body>
+</html>

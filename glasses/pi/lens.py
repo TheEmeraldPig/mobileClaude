@@ -23,8 +23,10 @@ import sys
 import threading
 import time
 import tomllib
+import urllib.parse
 import urllib.request
 import wave
+from collections import deque
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -375,11 +377,16 @@ class Eyes:
 
 
 class Hub:
+    HISTORY = 40     # exchanges the phone page shows (and reloads after a restart)
+    KEEP_VIEWS = 60  # pictures sent to Claude that are kept for the phone page
+
     def __init__(self, cfg):
         self.cfg = cfg
         self.data = expand(cfg["data_dir"])
-        (self.data / "captures").mkdir(parents=True, exist_ok=True)
+        for d in ("captures", "views"):
+            (self.data / d).mkdir(parents=True, exist_ok=True)
         self.notes_file = self.data / "notes.md"
+        self.history_file = self.data / "history.jsonl"
         self.brain = Brain(cfg)
         self.ears = Ears(cfg, self.data) if cfg["ears"]["engine"] != "none" else None
         self.mouth = Mouth(cfg)
@@ -389,19 +396,81 @@ class Hub:
         self.started = time.time()
         self.last_used = time.time()
         self.last = {}
+        self.lan_ip = ""            # the hub's own address on the hotspot/Wi-Fi, learned from requests
+        self.glasses_seen = 0.0
+        self.subscribers = set()    # live displays (phone page now, glasses display later)
+        self.sub_lock = threading.Lock()
+        self.history = deque(self._load_history(), maxlen=self.HISTORY)
 
-    # ---------- notes and captures ----------
+    # ---------- live events for displays ----------
+    def publish(self, event, data):
+        with self.sub_lock:
+            for q in list(self.subscribers):
+                q.put((event, data))
+
+    def subscribe(self):
+        q = queue.Queue(maxsize=500)
+        with self.sub_lock:
+            self.subscribers.add(q)
+        return q
+
+    def unsubscribe(self, q):
+        with self.sub_lock:
+            self.subscribers.discard(q)
+
+    def set_state(self, state):
+        self.state = state
+        self.publish("state", {"state": state})
+
+    # ---------- notes, captures, history ----------
     def notes(self):
         return self.notes_file.read_text().strip() if self.notes_file.exists() else ""
 
+    def note_list(self):
+        return [line[2:] for line in self.notes().splitlines() if line.startswith("- ")]
+
     def save_note(self, text):
+        line = f"({datetime.now():%Y-%m-%d %H:%M}) {' '.join(text.split())}"
         with open(self.notes_file, "a") as f:
-            f.write(f"- ({datetime.now():%Y-%m-%d %H:%M}) {' '.join(text.split())}\n")
+            f.write(f"- {line}\n")
+        self.publish("note", {"text": line})
+
+    def delete_note(self, index):
+        notes = self.note_list()
+        if 0 <= index < len(notes):
+            del notes[index]
+            self.notes_file.write_text("".join(f"- {n}\n" for n in notes))
 
     def save_capture(self, jpeg):
         path = self.data / "captures" / f"lens-{datetime.now():%Y%m%d-%H%M%S}.jpg"
         path.write_bytes(jpeg)
+        self.publish("capture", {"name": path.name})
         return path
+
+    def captures(self):
+        return sorted((p.name for p in (self.data / "captures").glob("*.jpg")), reverse=True)
+
+    def save_view(self, jpeg):
+        """Keeps the picture Claude was shown, so the phone page can show it next to the answer."""
+        name = f"{datetime.now():%Y%m%d-%H%M%S-%f}.jpg"
+        (self.data / "views" / name).write_bytes(jpeg)
+        for old in sorted((self.data / "views").glob("*.jpg"))[:-self.KEEP_VIEWS]:
+            old.unlink(missing_ok=True)
+        return name
+
+    def _load_history(self):
+        try:
+            lines = self.history_file.read_text().splitlines()[-self.HISTORY:]
+            return [json.loads(l) for l in lines if l.strip()]
+        except (OSError, json.JSONDecodeError):
+            return []
+
+    def remember(self, item):
+        self.history.append(item)
+        with open(self.history_file, "a") as f:
+            f.write(json.dumps(item) + "\n")
+        if self.history_file.stat().st_size > 2_000_000:
+            self.history_file.write_text("".join(json.dumps(i) + "\n" for i in self.history))
 
     # ---------- answering ----------
     def local_answer(self, q):
@@ -417,6 +486,10 @@ class Hub:
         if re.fullmatch(r"(new conversation|start over|forget (this|our) conversation)", s):
             self.brain.reset()
             return "Okay, fresh start."
+        if re.search(r"\b(your|the hub'?s?) (ip )?address\b|\bphone page\b", s):
+            if not self.lan_ip:
+                return "I don't know my address yet. Look for the router address in your phone's Wi-Fi details."
+            return f"Open {self.lan_ip} port {self.cfg['hub']['port']} in your phone's browser."
         return None
 
     def answer(self, q, jpeg=None, speak=True, use_view=True):
@@ -425,28 +498,44 @@ class Hub:
         if local is not None:
             if speak and local:
                 self.mouth.say(local)
+            if local:
+                item = {"at": time.time(), "question": q, "answer": local, "view": None, "seconds": 0}
+                self.publish("question", item)
+                self.publish("answer", item)
+                self.remember(item)
             return local
         if jpeg is None and use_view and self.cfg["eyes"]["send_view"]:
             jpeg = self.eyes.look()
         if jpeg and self.cfg["eyes"].get("keep_views"):
             self.save_capture(jpeg)
+        item = {"at": time.time(), "question": q, "answer": "", "view": self.save_view(jpeg) if jpeg else None}
+        self.publish("question", item)
         context = [f"Local time: {datetime.now():%A %Y-%m-%d %H:%M}"]
         if self.notes():
             context.append("Saved notes:\n" + self.notes())
         prompt = "<context>\n" + "\n\n".join(context) + "\n</context>\n\n" + q
-        self.state = "thinking"
+
+        def on_text(delta):
+            if speak:
+                self.mouth.push(delta)
+            self.publish("delta", {"text": delta})
+
+        self.set_state("thinking")
         t0 = time.time()
         try:
-            text = self.brain.ask(prompt, jpeg, on_text=self.mouth.push if speak else None)
+            text = self.brain.ask(prompt, jpeg, on_text=on_text)
         finally:
-            self.state = "ready"
+            self.set_state("ready")
         if speak:
             self.mouth.flush()
         self.last_used = time.time()
         for note in NOTE_RE.findall(text):
             self.save_note(note)
         spoken = " ".join(NOTE_RE.sub("", text).split())
-        self.last = {"question": q, "answer": spoken, "seconds": round(time.time() - t0, 2), "with_view": bool(jpeg)}
+        item.update(answer=spoken, seconds=round(time.time() - t0, 2))
+        self.publish("answer", item)
+        self.remember(item)
+        self.last = {"question": q, "answer": spoken, "seconds": item["seconds"], "with_view": bool(jpeg)}
         log.info("Q: %s | A (%.1fs): %s", q, time.time() - t0, spoken)
         return spoken
 
@@ -466,16 +555,17 @@ class Hub:
             if not self.ears:
                 self.mouth.say("I have no microphone set up.")
                 return
-            self.state = "listening"
+            self.set_state("listening")
             q = self.ears.listen()
-            self.state = "ready"
+            self.set_state("ready")
             if q:
                 self.answer(q)
         except Exception as e:
             log.exception("answering failed")
             self.mouth.say("Sorry, something went wrong. " + friendly_error(e))
+            self.publish("problem", {"text": friendly_error(e)})
         finally:
-            self.state = "ready"
+            self.set_state("ready")
             self.busy.release()
 
     def photo(self):
@@ -488,7 +578,8 @@ class Hub:
 
     def status(self):
         return {"state": self.state, "uptime": round(time.time() - self.started), "claude_running": self.brain.alive(),
-                "claude_last_error": self.brain.last_error, "camera": self.cfg["eyes"]["source"], "last": self.last}
+                "claude_last_error": self.brain.last_error, "camera": self.cfg["eyes"]["source"],
+                "glasses_connected": time.time() - self.glasses_seen < 70, "address": self.lan_ip, "last": self.last}
 
 
 def friendly_error(e):
@@ -502,6 +593,9 @@ def friendly_error(e):
     return "Try again in a moment."
 
 
+SAFE_NAME = re.compile(r"[\w.-]+\.jpg")
+
+
 def make_handler(hub):
     token = hub.cfg["hub"]["token"]
 
@@ -510,38 +604,106 @@ def make_handler(hub):
             log.debug("http: " + fmt, *args)
 
         def reply(self, code, body):
-            data = json.dumps(body).encode()
+            self.send_bytes(code, json.dumps(body).encode(), "application/json")
+
+        def send_bytes(self, code, data, ctype, extra=()):
             self.send_response(code)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            for k, v in extra:
+                self.send_header(k, v)
             self.end_headers()
             self.wfile.write(data)
 
+        def authorised(self, query):
+            """The glasses send the token in a header; the phone page carries it in a cookie."""
+            if not token:
+                return True
+            cookie = dict(c.strip().split("=", 1) for c in self.headers.get("Cookie", "").split(";") if "=" in c)
+            return token in (self.headers.get("X-Lens-Token"), cookie.get("lens"), query.get("t", [None])[0])
+
+        def note_address(self):
+            hub.lan_ip = self.connection.getsockname()[0]
+
         def do_GET(self):
-            if self.path in ("/", "/status"):
-                self.reply(200, hub.status())
-            else:
-                self.reply(404, {"error": "not found"})
+            url = urllib.parse.urlsplit(self.path)
+            query = urllib.parse.parse_qs(url.query)
+            self.note_address()
+            if not self.authorised(query):
+                if url.path == "/status":
+                    return self.reply(200, {"state": hub.state})
+                page = b"<!doctype html><meta name=viewport content='width=device-width'><body style='font:18px system-ui;padding:24px;background:#05080d;color:#e8f7ff'>Open this page as <b>http://this-address:port/?t=YOUR_TOKEN</b> (the token from config.toml). It's remembered after that."
+                return self.send_bytes(403, page, "text/html; charset=utf-8")
+            if url.path == "/status":
+                return self.reply(200, hub.status())
+            if url.path == "/":
+                if "t" in query:   # remember the token and drop it from the address bar
+                    cookie = f"lens={token}; Path=/; Max-Age=31536000; SameSite=Strict"
+                    return self.send_bytes(303, b"", "text/plain", [("Location", "/"), ("Set-Cookie", cookie)])
+                return self.send_bytes(200, (HERE / "phone.html").read_bytes(), "text/html; charset=utf-8")
+            if url.path == "/events":
+                return self.stream_events()
+            if url.path == "/api/state":
+                return self.reply(200, {**hub.status(), "history": list(hub.history), "notes": hub.note_list(),
+                                        "captures": hub.captures()[:60]})
+            m = re.fullmatch(r"/(views|captures)/(.+)", url.path)
+            if m and SAFE_NAME.fullmatch(m.group(2)):
+                path = hub.data / m.group(1) / m.group(2)
+                if path.is_file():
+                    return self.send_bytes(200, path.read_bytes(), "image/jpeg")
+            self.reply(404, {"error": "not found"})
+
+        def stream_events(self):
+            """Server-sent events: the page (and later the glasses display) sees everything as it happens."""
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            q = hub.subscribe()
+            try:
+                self.wfile.write(b"retry: 2000\n\n")
+                self.wfile.flush()
+                while True:
+                    try:
+                        event, data = q.get(timeout=15)
+                        self.wfile.write(f"event: {event}\ndata: {json.dumps(data)}\n\n".encode())
+                    except queue.Empty:
+                        self.wfile.write(b": still here\n\n")
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+            finally:
+                hub.unsubscribe(q)
 
         def do_POST(self):
-            if token and self.headers.get("X-Lens-Token") != token:
+            url = urllib.parse.urlsplit(self.path)
+            self.note_address()
+            if not self.authorised(urllib.parse.parse_qs(url.query)):
                 return self.reply(403, {"error": "bad token"})
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
             except json.JSONDecodeError:
                 return self.reply(400, {"error": "body must be JSON"})
-            if self.path == "/hello":
+            path = url.path
+            if path == "/hello":
                 # The glasses say where they are, so this works on any Wi-Fi without fixed addresses.
                 ip = str(body.get("ip") or self.client_address[0])
+                if hub.cfg["eyes"]["glasses_url"] != f"http://{ip}/capture":
+                    log.info("glasses are at %s", ip)
                 hub.cfg["eyes"]["glasses_url"] = f"http://{ip}/capture"
-                log.info("glasses are at %s", ip)
+                hub.glasses_seen = time.time()
+                hub.publish("glasses", {"connected": True})
                 return self.reply(200, {"ok": True})
-            if self.path == "/button":
+            if path == "/button":
                 event = body.get("event", "press")
-                target = hub.photo if event == "long" else hub.talk
+                target = {"long": hub.photo, "stop": hub.interrupt}.get(event, hub.talk)
                 threading.Thread(target=target, daemon=True).start()
                 return self.reply(200, {"ok": True, "event": event})
-            if self.path == "/ask":
+            if path == "/notes/delete":
+                hub.delete_note(int(body.get("index", -1)))
+                return self.reply(200, {"notes": hub.note_list()})
+            if path == "/ask":
                 q = str(body.get("text", "")).strip()
                 if not q:
                     return self.reply(400, {"error": "text is required"})
@@ -553,6 +715,7 @@ def make_handler(hub):
                     return self.reply(200, {"answer": text, **hub.last})
                 except Exception as e:
                     log.exception("ask failed")
+                    hub.publish("problem", {"text": friendly_error(e)})
                     return self.reply(500, {"error": str(e)})
                 finally:
                     hub.busy.release()
@@ -658,6 +821,7 @@ def run_hub(cfg, args):
     hub = Hub(cfg)
     hub.brain.start()   # warm up now so the first question is quick
     server = ThreadingHTTPServer(("0.0.0.0", cfg["hub"]["port"]), make_handler(hub))
+    server.daemon_threads = True   # open phone pages mustn't stop the hub from exiting
     threading.Thread(target=server.serve_forever, daemon=True).start()
     log.info("Lens hub ready on port %s (camera: %s)", cfg["hub"]["port"], cfg["eyes"]["source"])
     try:

@@ -101,6 +101,17 @@ On the phone, speech recognition and the voice are Android's own (through Termux
 
 In the glasses' `secrets.h`, use the hub phone's hotspot name and password and `HUB_HOST "gateway"`: the phone making the hotspot is the hub, so the glasses always know where it is, and they tell the hub their own address when they connect.
 
+### Seeing answers: the phone page
+
+Answers are spoken into your earbuds. For anything you'd rather read (lists, steps, translations, your notes, the photos you took), the hub serves a live page:
+
+1. Join your main phone to the hub's Wi-Fi: the hub phone's hotspot (or the same Wi-Fi as the Pi). Joining someone's hotspot is fine on any phone plan.
+2. Open `http://<hub address>:8765/?t=<your token>` in its browser. The hub address is the **router/gateway** in that Wi-Fi network's details on your phone, or ask the glasses "what's your address?". The token is remembered after the first visit; bookmark the page or add it to your home screen.
+
+The page shows each question as it's asked, the answer as it's written, and the picture Claude was looking at, plus your history, notes (you can delete them there) and photos. Its Talk, Photo and Stop buttons work like the glasses button, and you can type a question.
+
+The page reads the hub's live event stream (`GET /events`). A display inside the glasses is planned as the next step and will read the same stream.
+
 ### The glasses (XIAO ESP32S3 Sense)
 
 1. Arduino IDE → install the **esp32** boards package by Espressif → board **XIAO_ESP32S3**, **Tools → PSRAM → OPI PSRAM**.
