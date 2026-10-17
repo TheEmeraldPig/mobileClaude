@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05080d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Lens</title>
+<style>
+:root{--bg:#05080d;--hud:#7fe3ff;--hud2:#b9f3ff;--dim:#7fe3ff55;--glass:#0a1520cc;--warn:#ffb86b;--rec:#ff4d5e;--ink:#e8f7ff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden;overscroll-behavior:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+#cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+#nocam{position:fixed;inset:0;display:none;place-items:center;text-align:center;padding:24px;color:#7fe3ffaa}
+/* HUD frame: corner brackets like a lens display */
+.frame{position:fixed;inset:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));pointer-events:none}
+.frame i{position:absolute;width:26px;height:26px;border:2px solid var(--dim)}
+.frame i:nth-child(1){top:0;left:0;border-right:0;border-bottom:0}
+.frame i:nth-child(2){top:0;right:0;border-left:0;border-bottom:0}
+.frame i:nth-child(3){bottom:0;left:0;border-right:0;border-top:0}
+.frame i:nth-child(4){bottom:0;right:0;border-left:0;border-top:0}
+#top{position:fixed;top:max(14px,env(safe-area-inset-top));left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:0 max(22px,env(safe-area-inset-right)) 0 max(22px,env(safe-area-inset-left));font:600 12px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;color:var(--hud);text-shadow:0 0 6px #000}
+#status::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--hud);margin-right:8px;vertical-align:1px;box-shadow:0 0 8px var(--hud)}
+#status.busy::before{animation:pulse 1s infinite}
+#status.rec::before{background:var(--rec);box-shadow:0 0 8px var(--rec);animation:pulse .8s infinite}
+@keyframes pulse{50%{opacity:.25}}
+#menuBtn{pointer-events:auto;padding:8px 10px;border:1px solid var(--dim);border-radius:8px;background:var(--glass);letter-spacing:.1em}
+/* Caption: what you said and the answer */
+#caption{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(118px + env(safe-area-inset-bottom));width:min(720px,calc(100% - 32px));max-height:42vh;overflow:auto;padding:12px 14px;border:1px solid var(--dim);border-radius:12px;background:var(--glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:none}
+#caption.show{display:block}
+#you{color:#9fb7c4;font-size:13px;margin-bottom:6px}
+#you:empty{display:none}
+#ans{color:var(--hud2);white-space:pre-wrap;font-size:16px}
+#ans.err{color:var(--warn)}
+/* Bottom controls */
+#bar{position:fixed;left:0;right:0;bottom:max(16px,env(safe-area-inset-bottom));pointer-events:none;display:flex;justify-content:center;align-items:center;gap:14px;padding:0 16px}
+.ctl{pointer-events:auto;width:54px;height:54px;border-radius:50%;border:1px solid var(--dim);background:var(--glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:grid;place-items:center;font-size:11px;letter-spacing:.06em;color:var(--hud)}
+.ctl svg{width:24px;height:24px;stroke:var(--hud);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ctl.on{border-color:var(--rec)}
+.ctl.on svg{stroke:var(--rec)}
+#mic{width:78px;height:78px;border:2px solid var(--hud);box-shadow:0 0 18px #7fe3ff44}
+#mic svg{width:32px;height:32px}
+#mic.listen{border-color:var(--rec);box-shadow:0 0 24px #ff4d5e88;animation:pulse 1.2s infinite}
+#mic.busy{opacity:.6}
+#typeRow{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(118px + env(safe-area-inset-bottom));width:min(720px,calc(100% - 32px));display:none;gap:8px}
+#typeRow.show{display:flex}
+#caption.show~#typeRow.show{bottom:calc(118px + env(safe-area-inset-bottom) + min(42vh,var(--caph,0px)) + 10px)}
+#typeRow input{flex:1;min-width:0;padding:12px 14px;border-radius:10px;border:1px solid var(--dim);background:var(--glass);color:var(--ink);font:inherit;font-size:16px}
+#typeRow button{padding:0 16px;border-radius:10px;border:1px solid var(--hud);background:var(--glass);color:var(--hud)}
+/* Mode chips */
+#modes{position:fixed;top:calc(max(14px,env(safe-area-inset-top)) + 34px);left:0;right:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 16px}
+.chip{padding:6px 12px;border-radius:999px;border:1px solid var(--dim);background:var(--glass);font-size:12px;color:#bfeaf7}
+.chip.sel{border-color:var(--hud);color:#05080d;background:var(--hud)}
+/* Side sheet */
+#sheet{position:fixed;top:0;right:0;bottom:0;width:min(420px,100%);background:#08111bf2;border-left:1px solid var(--dim);transform:translateX(100%);transition:transform .2s;overflow:auto;padding:calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 32px 16px;z-index:5}
+#sheet.open{transform:none}
+#sheet h2{font:600 12px/1 ui-monospace,Menlo,monospace;letter-spacing:.14em;color:var(--hud);margin:22px 0 10px}
+#sheet h2:first-of-type{margin-top:6px}
+#sheet label{display:block;font-size:13px;color:#9fb7c4;margin:10px 0 4px}
+#sheet input,#sheet select{width:100%;padding:10px;border-radius:8px;border:1px solid var(--dim);background:#0b1824;color:var(--ink);font:inherit;font-size:16px}
+#sheet .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0}
+#sheet .row input{width:auto}
+#sheet small{color:#7f98a6;display:block;margin-top:4px}
+#closeSheet{float:right;padding:6px 10px;border:1px solid var(--dim);border-radius:8px;color:var(--hud)}
+.list{display:flex;flex-direction:column;gap:6px}
+.note{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid #7fe3ff22;border-radius:8px;font-size:14px}
+.note span{flex:1}
+.note time{display:block;color:#7f98a6;font-size:11px}
+.note button{color:#ff8b95;font-size:12px}
+.empty{color:#7f98a6;font-size:13px}
+#gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+#gallery button{aspect-ratio:1;border-radius:6px;overflow:hidden;border:1px solid #7fe3ff22;padding:0;position:relative}
+#gallery img,#gallery video{width:100%;height:100%;object-fit:cover;display:block}
+#gallery b{position:absolute;right:4px;bottom:3px;font-size:10px;background:#000a;padding:1px 4px;border-radius:3px}
+.sbtn{padding:9px 12px;border-radius:8px;border:1px solid var(--dim);color:var(--hud);margin:6px 6px 0 0}
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
+#flash.go{opacity:.7;transition:none}
+#toast{position:fixed;top:calc(max(14px,env(safe-area-inset-top)) + 76px);left:50%;transform:translateX(-50%);padding:8px 14px;border-radius:999px;background:var(--glass);border:1px solid var(--dim);font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1}
+/* Landscape phones: controls go to the right edge, caption to the left, like a lens HUD */
+@media (orientation:landscape) and (max-height:520px){
+  #bar{left:auto;top:0;bottom:0;right:max(14px,env(safe-area-inset-right));flex-direction:column;padding:0;gap:10px}
+  .ctl{width:46px;height:46px}
+  #mic{width:64px;height:64px}
+  #caption,#typeRow{left:max(16px,env(safe-area-inset-left));transform:none;bottom:max(14px,env(safe-area-inset-bottom));width:min(560px,calc(100% - 140px));max-height:58vh}
+  #caption.show~#typeRow.show{bottom:calc(max(14px,env(safe-area-inset-bottom)) + min(58vh,var(--caph,0px)) + 8px)}
+  #modes{justify-content:flex-start;padding-left:max(22px,env(safe-area-inset-left));padding-right:110px}
+}
+</style>
+</head>
+<body>
+<video id="cam" autoplay playsinline muted></video>
+<div id="nocam">Camera is off.<br>Allow camera access, or keep going without it: answers just won't see anything.</div>
+<div class="frame"><i></i><i></i><i></i><i></i></div>
+
+<div id="top"><span id="status">READY</span><span id="clock"></span><button id="menuBtn" aria-label="Menu">MENU</button></div>
+<div id="modes"></div>
+
+<div id="caption"><div id="you"></div><div id="ans"></div></div>
+<form id="typeRow"><input id="typeIn" placeholder="Ask about what you see…" autocomplete="off" enterkeyhint="send"><button>Ask</button></form>
+
+<div id="bar">
+  <button class="ctl" id="photoBtn" aria-label="Take photo" title="Photo (P)"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+  <button class="ctl" id="videoBtn" aria-label="Record video" title="Video (V)"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="12" height="10" rx="2"/><path d="M15 11l6-3v8l-6-3z"/></svg></button>
+  <button class="ctl" id="mic" aria-label="Hold or tap to talk" title="Talk (Space)"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
+  <button class="ctl" id="lookBtn" aria-label="What am I looking at" title="Look (L)"><svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+  <button class="ctl" id="kbBtn" aria-label="Type instead" title="Type (T)"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
+</div>
+
+<aside id="sheet" aria-label="Settings">
+  <button id="closeSheet">CLOSE</button>
+  <h2>SETUP</h2>
+  <label for="key">Claude API key</label>
+  <input id="key" type="password" placeholder="sk-ant-…" autocomplete="off">
+  <small>Stored only on this device. Get one at console.anthropic.com.</small>
+  <label for="model">Model</label>
+  <select id="model">
+    <option value="claude-opus-5-5">Claude Opus 5.5 (smartest)</option>
+    <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (faster)</option>
+    <option value="claude-haiku-5-5">Claude Haiku 5.5 (fastest, cheapest)</option>
+  </select>
+  <label for="lang">Translate into</label>
+  <select id="lang"><option>English</option><option>Spanish</option><option>French</option><option>German</option><option>Portuguese</option><option>Italian</option><option>Japanese</option><option>Korean</option><option>Chinese</option><option>Arabic</option><option>Hindi</option><option>Russian</option></select>
+  <div class="row"><span>Speak answers out loud</span><input id="speak" type="checkbox" checked></div>
+  <div class="row"><span>Let it search the web</span><input id="web" type="checkbox" checked></div>
+  <div class="row"><span>Send what the camera sees</span><input id="sendCam" type="checkbox" checked></div>
+  <label for="voice">Voice</label>
+  <select id="voice"></select>
+  <button class="sbtn" id="flipCam">Switch camera</button>
+  <button class="sbtn" id="newChat">New conversation</button>
+
+  <h2>NOTES</h2>
+  <small style="margin:-4px 0 8px">Say "remember that I parked on level 3" and it saves a note. It can use notes later.</small>
+  <div class="list" id="notes"></div>
+
+  <h2>CAPTURES</h2>
+  <div id="gallery"></div>
+  <small>Kept until you close the page. Tap one to save or share it.</small>
+</aside>
+
+<div id="flash"></div>
+<div id="toast"></div>
+
+<script type="module">
+import Anthropic from "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.130.0/+esm";
+
+const $ = id => document.getElementById(id);
+const IS_TOUCH = matchMedia("(pointer:coarse)").matches;
+
+// ---------- settings (per device) ----------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("lens." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("lens." + k, JSON.stringify(v)); } catch {} },
+};
+const S = {
+  key: store.get("key", ""), model: store.get("model", "claude-opus-5-5"), lang: store.get("lang", "English"),
+  speak: store.get("speak", true), web: store.get("web", true), sendCam: store.get("sendCam", true),
+  voice: store.get("voice", ""), facing: store.get("facing", "environment"), mode: "ask",
+};
+let notes = store.get("notes", []);
+
+const MODES = [
+  { id: "ask", label: "Ask", hint: "" },
+  { id: "read", label: "Read", hint: "Read out any text in the image exactly, then one line on what it is." },
+  { id: "translate", label: "Translate", hint: () => `Translate any text in the image or anything I said into ${S.lang}. Give only the translation, then the original language in brackets.` },
+  { id: "identify", label: "Identify", hint: "Identify the main thing in view (plant, animal, product, landmark, part, etc.) and give two useful facts about it." },
+  { id: "help", label: "How do I", hint: "Give step-by-step help for what I'm looking at, one short step per line." },
+];
+
+const SYSTEM = `You are Lens, an assistant that lives in a pair of smart glasses. The user is wearing you and talking to you out loud while walking around; your answers are read aloud through a small speaker.
+
+- When an image is attached it is exactly what the user is looking at right now through the glasses camera. Refer to it naturally ("that sign says…", "the plant on the left…"). Don't mention "the image" or "the photo".
+- Answer in one to three short spoken sentences unless the user asks for more or a mode asks for steps. No markdown, lists, headings or emoji: plain speech.
+- If you can't tell from the view, say what you'd need ("get a bit closer to the label").
+- Use web search for anything current or local (opening hours, prices, news, weather).
+- When the user asks you to remember something, call save_note with a short self-contained note. Saved notes are listed in each message; use them to answer questions like "where did I park".`;
+
+const TOOLS_BASE = [{
+  name: "save_note",
+  description: "Save a short note the user asked you to remember (where they parked, a name, a to-do). Keep it self-contained, under 200 characters.",
+  input_schema: { type: "object", properties: { text: { type: "string", description: "The note text." } }, required: ["text"], additionalProperties: false },
+  strict: true,
+  eager_input_streaming: true,
+}];
+
+// ---------- UI helpers ----------
+const statusEl = $("status");
+function setStatus(text, cls = "") { statusEl.textContent = text; statusEl.className = cls; }
+let toastT;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2200); }
+function showCaption(you, ans, err = false) {
+  $("caption").classList.add("show");
+  $("you").textContent = you || "";
+  $("ans").textContent = ans || "";
+  $("ans").classList.toggle("err", err);
+  syncCaptionHeight();
+}
+function syncCaptionHeight() { document.documentElement.style.setProperty("--caph", $("caption").offsetHeight + "px"); }
+setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }, 1000);
+
+function renderModes() {
+  $("modes").innerHTML = "";
+  for (const m of MODES) {
+    const b = document.createElement("button");
+    b.className = "chip" + (S.mode === m.id ? " sel" : "");
+    b.textContent = m.label;
+    b.onclick = () => { S.mode = m.id; renderModes(); };
+    $("modes").append(b);
+  }
+}
+renderModes();
+
+// ---------- camera ----------
+const cam = $("cam");
+let camStream = null;
+async function startCamera() {
+  camStream?.getTracks().forEach(t => t.stop());
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: S.facing, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+    cam.srcObject = camStream;
+    cam.style.transform = S.facing === "user" ? "scaleX(-1)" : "";
+    $("nocam").style.display = "none";
+  } catch (e) {
+    camStream = null;
+    $("nocam").style.display = "grid";
+  }
+}
+
+// Grabs the current frame as a JPEG, longest side `max` pixels.
+function grabFrame(max = 1024, quality = 0.8) {
+  if (!camStream || !cam.videoWidth) return null;
+  const s = Math.min(1, max / Math.max(cam.videoWidth, cam.videoHeight));
+  const c = document.createElement("canvas");
+  c.width = Math.round(cam.videoWidth * s); c.height = Math.round(cam.videoHeight * s);
+  c.getContext("2d").drawImage(cam, 0, 0, c.width, c.height);
+  return c;
+}
+const toBlob = (c, type = "image/jpeg", q = 0.9) => new Promise(r => c.toBlob(r, type, q));
+
+// ---------- captures ----------
+const captures = [];
+function flash() { const f = $("flash"); f.classList.add("go"); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove("go"))); }
+async function takePhoto() {
+  const c = grabFrame(4096);
+  if (!c) return toast("No camera");
+  flash();
+  const blob = await toBlob(c);
+  addCapture(blob, "jpg");
+  toast("Photo saved to Captures");
+}
+let recorder = null;
+async function toggleVideo() {
+  if (recorder) { recorder.stop(); return; }
+  if (!camStream) return toast("No camera");
+  let stream = camStream;
+  try {
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream = new MediaStream([...camStream.getVideoTracks(), ...mic.getAudioTracks()]);
+  } catch { /* record without sound */ }
+  const type = ["video/mp4", "video/webm;codecs=vp9,opus", "video/webm"].find(t => MediaRecorder.isTypeSupported?.(t)) || "";
+  const chunks = [];
+  recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+  recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
+  recorder.onstop = () => {
+    stream.getAudioTracks().forEach(t => t.stop());
+    const blob = new Blob(chunks, { type: recorder.mimeType });
+    addCapture(blob, blob.type.includes("mp4") ? "mp4" : "webm");
+    recorder = null;
+    $("videoBtn").classList.remove("on");
+    setStatus("READY");
+    toast("Video saved to Captures");
+  };
+  recorder.start(1000);
+  $("videoBtn").classList.add("on");
+  setStatus("REC", "rec");
+}
+function addCapture(blob, ext) {
+  const name = `lens-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.${ext}`;
+  captures.unshift({ blob, name, url: URL.createObjectURL(blob), video: blob.type.startsWith("video") });
+  renderGallery();
+}
+function renderGallery() {
+  const g = $("gallery");
+  g.innerHTML = captures.length ? "" : '<span class="empty">Nothing yet.</span>';
+  for (const c of captures) {
+    const b = document.createElement("button");
+    b.innerHTML = c.video ? `<video src="${c.url}" muted playsinline></video><b>VIDEO</b>` : `<img src="${c.url}" alt="">`;
+    b.onclick = () => saveCapture(c);
+    g.append(b);
+  }
+}
+async function saveCapture(c) {
+  const file = new File([c.blob], c.name, { type: c.blob.type });
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; } catch (e) { if (e.name === "AbortError") return; }
+  }
+  const a = document.createElement("a"); a.href = c.url; a.download = c.name; a.click();
+}
+
+// ---------- notes ----------
+function renderNotes() {
+  const n = $("notes");
+  n.innerHTML = notes.length ? "" : '<span class="empty">No notes yet.</span>';
+  notes.forEach((note, i) => {
+    const d = document.createElement("div"); d.className = "note";
+    const s = document.createElement("span"); s.textContent = note.text;
+    const t = document.createElement("time"); t.textContent = new Date(note.at).toLocaleString(); s.append(t);
+    const x = document.createElement("button"); x.textContent = "DELETE";
+    x.onclick = () => { notes.splice(i, 1); store.set("notes", notes); renderNotes(); };
+    d.append(s, x); n.append(d);
+  });
+}
+
+// ---------- speech out ----------
+let voices = [];
+function loadVoices() {
+  voices = speechSynthesis?.getVoices() || [];
+  const sel = $("voice");
+  sel.innerHTML = '<option value="">Default</option>' + voices.map(v => `<option value="${v.name}">${v.name} (${v.lang})</option>`).join("");
+  sel.value = S.voice;
+}
+if ("speechSynthesis" in window) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+
+// Speaks the answer sentence by sentence while it streams in.
+const speaker = {
+  buf: "",
+  push(text) {
+    if (!S.speak || !("speechSynthesis" in window)) return;
+    this.buf += text;
+    const m = this.buf.match(/^[\s\S]*?[.!?…](\s|$)/);
+    if (m && m[0].trim().length > 1) { this.say(m[0]); this.buf = this.buf.slice(m[0].length); this.push(""); }
+  },
+  flush() { if (this.buf.trim()) this.say(this.buf); this.buf = ""; },
+  say(text) {
+    const u = new SpeechSynthesisUtterance(text.trim());
+    const v = voices.find(v => v.name === S.voice);
+    if (v) { u.voice = v; u.lang = v.lang; }
+    speechSynthesis.speak(u);
+  },
+  stop() { this.buf = ""; if ("speechSynthesis" in window) speechSynthesis.cancel(); },
+};
+
+// ---------- speech in ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, heard = "", listening = false;
+function startListening() {
+  if (busy) { cancelAsk(); }
+  speaker.stop();
+  if (!SR) { showType(true); toast("Voice input isn't supported in this browser, type instead"); return; }
+  heard = "";
+  rec = new SR();
+  rec.lang = navigator.language || "en-US";
+  rec.interimResults = true;
+  rec.continuous = false;
+  rec.onresult = e => {
+    heard = Array.from(e.results).map(r => r[0].transcript).join(" ");
+    showCaption(heard + " …", "");
+  };
+  rec.onerror = e => { if (e.error === "not-allowed") toast("Microphone blocked"); else if (e.error !== "no-speech" && e.error !== "aborted") toast("Voice: " + e.error); };
+  rec.onend = () => {
+    listening = false; $("mic").classList.remove("listen");
+    if (!busy) setStatus("READY");
+    if (heard.trim()) ask(heard.trim());
+  };
+  rec.start();
+  listening = true; $("mic").classList.add("listen"); setStatus("LISTENING", "busy");
+}
+function stopListening() { if (rec && listening) rec.stop(); }
+
+// ---------- Claude ----------
+let history = [];   // text-only past turns; only the newest question carries a camera frame
+let busy = false, activeStream = null, askId = 0;
+
+function cancelAsk() { activeStream?.abort(); activeStream = null; speaker.stop(); }
+
+function buildUserContent(text, frameB64) {
+  const mode = MODES.find(m => m.id === S.mode);
+  const hint = typeof mode.hint === "function" ? mode.hint() : mode.hint;
+  const ctx = [`Local time: ${new Date().toLocaleString()}`];
+  if (notes.length) ctx.push("Saved notes:\n" + notes.map(n => `- (${new Date(n.at).toLocaleString()}) ${n.text}`).join("\n"));
+  if (hint) ctx.push("Mode: " + hint);
+  const content = [];
+  if (frameB64) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frameB64 } });
+  content.push({ type: "text", text: `<context>\n${ctx.join("\n\n")}\n</context>\n\n${text}` });
+  return content;
+}
+
+async function ask(text) {
+  if (!S.key) { openSheet(); toast("Add your Claude API key first"); $("key").focus(); return; }
+  cancelAsk();
+  const myId = ++askId;
+  busy = true; $("mic").classList.add("busy"); setStatus("THINKING", "busy");
+  showCaption(text, "…");
+
+  let frameB64 = null;
+  if (S.sendCam) {
+    const c = grabFrame(1024, 0.8);
+    if (c) frameB64 = c.toDataURL("image/jpeg", 0.8).split(",")[1];
+  }
+  const client = new Anthropic({ apiKey: S.key, dangerouslyAllowBrowser: true });
+  const isHaiku = S.model.startsWith("claude-haiku");
+  const tools = [...TOOLS_BASE];
+  if (S.web) tools.push({ type: isHaiku ? "web_search_20250305" : "web_search_20260209", name: "web_search", max_uses: 3 });
+
+  const turn = [{ role: "user", content: buildUserContent(text, frameB64) }];
+  let answer = "";
+  try {
+    for (let hop = 0; hop < 6; hop++) {
+      const params = {
+        model: S.model,
+        max_tokens: 4000,
+        system: SYSTEM,
+        output_config: { effort: "low" },   // spoken answers: keep them quick
+        tools,
+        messages: [...history, ...turn],
+      };
+      if (!isHaiku) { params.betas = ["server-side-fallback-2026-07-01"]; params.fallbacks = "default"; }
+      const stream = activeStream = client.beta.messages.stream(params);
+      stream.on("text", delta => {
+        answer += delta;
+        speaker.push(delta);
+        $("ans").textContent = answer; $("ans").classList.remove("err"); syncCaptionHeight();
+        setStatus("ANSWERING", "busy");
+      });
+      const msg = await stream.finalMessage();
+      if (myId !== askId) return;   // cancelled by a newer question
+
+      if (msg.stop_reason === "refusal") {
+        throw new Error("Claude declined to answer that one." + (msg.stop_details?.explanation ? " " + msg.stop_details.explanation : ""));
+      }
+      turn.push({ role: "assistant", content: msg.content });
+      if (msg.stop_reason === "pause_turn") continue;   // long web search: let it carry on
+      if (msg.stop_reason !== "tool_use") break;
+
+      const results = [];
+      for (const b of msg.content) {
+        if (b.type !== "tool_use") continue;
+        if (b.name === "save_note" && typeof b.input?.text === "string" && b.input.text.trim()) {
+          notes.unshift({ text: b.input.text.trim().slice(0, 300), at: Date.now() });
+          store.set("notes", notes); renderNotes(); toast("Note saved");
+          results.push({ type: "tool_result", tool_use_id: b.id, content: "Saved." });
+        } else {
+          results.push({ type: "tool_result", tool_use_id: b.id, content: "Invalid input: expected {text: string}.", is_error: true });
+        }
+      }
+      turn.push({ role: "user", content: results });
+    }
+    speaker.flush();
+    if (!answer.trim()) $("ans").textContent = "Done.";
+    // Remember the exchange as plain text so later questions keep context without resending old frames.
+    history.push({ role: "user", content: (frameB64 ? "[looking at something] " : "") + text });
+    history.push({ role: "assistant", content: answer.trim() || "Done." });
+    if (history.length > 24) history = history.slice(-24);
+  } catch (e) {
+    if (myId !== askId || e?.name === "AbortError" || e instanceof Anthropic.APIUserAbortError) return;
+    let msg = e?.message || String(e);
+    if (e?.status === 401) msg = "That API key didn't work. Check it in Menu.";
+    else if (e?.status === 429) msg = "Too many requests right now, try again in a moment.";
+    else if (e?.status === 529 || e?.status >= 500) msg = "Claude is busy, try again in a moment.";
+    else if (e?.status) msg = `Error ${e.status}: ${e.error?.error?.message || msg}`;
+    speaker.stop();
+    showCaption(text, msg, true);
+  } finally {
+    if (myId === askId) {
+      activeStream = null;
+      busy = false; $("mic").classList.remove("busy");
+      if (!listening && !recorder) setStatus("READY");
+    }
+  }
+}
+
+// ---------- controls ----------
+// The mic works as tap-to-talk (tap, speak, it stops when you pause) and as hold-to-talk.
+let pressT = 0;
+$("mic").addEventListener("pointerdown", e => { e.preventDefault(); pressT = Date.now(); if (listening) stopListening(); else startListening(); });
+$("mic").addEventListener("pointerup", () => { if (listening && Date.now() - pressT > 600) stopListening(); });
+$("photoBtn").onclick = takePhoto;
+$("videoBtn").onclick = toggleVideo;
+$("lookBtn").onclick = () => {
+  const q = { read: "Read this.", translate: "Translate this.", identify: "What is this?", help: "How do I use this?" }[S.mode] || "What am I looking at?";
+  ask(q);
+};
+function showType(on) {
+  $("typeRow").classList.toggle("show", on);
+  if (on) $("typeIn").focus();
+}
+$("kbBtn").onclick = () => showType(!$("typeRow").classList.contains("show"));
+$("typeRow").onsubmit = e => { e.preventDefault(); const q = $("typeIn").value.trim(); if (q) { $("typeIn").value = ""; if (IS_TOUCH) showType(false); ask(q); } };
+$("caption").onclick = () => { speaker.stop(); };
+
+function openSheet() { $("sheet").classList.add("open"); }
+$("menuBtn").onclick = openSheet;
+$("closeSheet").onclick = () => $("sheet").classList.remove("open");
+
+const bindSetting = (id, key, prop = "value", after) => {
+  const el = $(id); el[prop] = S[key];
+  el.onchange = () => { S[key] = prop === "checked" ? el.checked : el.value.trim(); store.set(key, S[key]); after?.(); };
+};
+bindSetting("key", "key"); bindSetting("model", "model"); bindSetting("lang", "lang"); bindSetting("voice", "voice");
+bindSetting("speak", "speak", "checked", () => S.speak || speaker.stop());
+bindSetting("web", "web", "checked"); bindSetting("sendCam", "sendCam", "checked");
+$("key").oninput = () => { S.key = $("key").value.trim(); store.set("key", S.key); };
+$("flipCam").onclick = () => { S.facing = S.facing === "user" ? "environment" : "user"; store.set("facing", S.facing); startCamera(); };
+$("newChat").onclick = () => { cancelAsk(); history = []; $("caption").classList.remove("show"); toast("New conversation"); };
+
+// Keyboard on a computer: Space talk, L look, P photo, V video, T type, Esc close
+addEventListener("keydown", e => {
+  if (e.target.closest("input,select,textarea")) { if (e.key === "Escape") e.target.blur(); return; }
+  if (e.key === " " && !e.repeat) { e.preventDefault(); listening ? stopListening() : startListening(); }
+  else if (e.key === "l") $("lookBtn").click();
+  else if (e.key === "p") takePhoto();
+  else if (e.key === "v") toggleVideo();
+  else if (e.key === "t") { e.preventDefault(); showType(true); }
+  else if (e.key === "Escape") { $("sheet").classList.remove("open"); cancelAsk(); }
+});
+
+renderNotes(); renderGallery();
+startCamera();
+if (!S.key) { showCaption("", "Hi, I'm Lens. Open MENU and paste a Claude API key, then tap the mic and ask about anything you can see."); }
+</script>
+</body>
+</html>

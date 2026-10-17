@@ -1,0 +1,36 @@
+name: Publish Lens (glasses app)
+
+# Publishes glasses/ to GitHub Pages so the app opens on a phone over https.
+# One-time setup: Settings -> Pages -> Source: GitHub Actions. Pages only accepts the
+# default branch at first; to publish from other branches, allow them under
+# Settings -> Environments -> github-pages.
+on:
+  push:
+    paths:
+      - 'glasses/**'
+      - '.github/workflows/glasses.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: glasses
+      - id: deployment
+        uses: actions/deploy-pages@v4

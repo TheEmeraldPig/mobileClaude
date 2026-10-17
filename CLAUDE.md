@@ -19,3 +19,10 @@
 - Building tools (shapes, walls, paint, rotate/flip, holograms) are in `build.go`; keep the build bar usable on phones.
 - Every push to `mote/` builds and releases `Mote.exe`, `Mote-steam.exe` and `Mote.apk` through `.github/workflows/mote.yml`.
 - Check layouts by running under Xvfb with the test hooks in `game/testhooks.go` (`MOTE_SCRIPT`, `MOTE_TOUCH=1`, `MOTE_NOAUDIO=1`).
+
+## glasses/ (Lens: DIY smart glasses)
+
+- `glasses/index.html` is the single-file phone app: camera view, voice in/out, and Claude answers about what the camera sees. See `glasses/README.md` for the hardware plan (XIAO ESP32S3 Sense, Web Bluetooth link to the app).
+- It calls the Claude API from the browser with the user's own key (kept in localStorage) through the Anthropic SDK from jsDelivr, pinned to an exact version.
+- Keep phone (touch, portrait and landscape) and computer layouts working. Test with Playwright in both, with Chromium's fake camera flags (`--use-fake-device-for-media-stream --use-fake-ui-for-media-stream`) and the API mocked with `page.route`.
+- `.github/workflows/glasses.yml` publishes the folder to GitHub Pages on pushes that touch `glasses/`.
