@@ -73,7 +73,7 @@ func blockIcon(a, d byte) []string {
 var bpIcon = []string{"........", ".OOOOOO.", "OwWWWWwO", "OWwWWwWO", "OWWwwWWO", "OwWWWWwO", ".OOOOOO.", "........"}
 
 var itemOrder = []string{"pickaxe", "ironpick", "corepick", "hoe", "hammer", "paintbrush", "bucket", "coppersword", "ironsword",
-	"copperarmor", "ironarmor", "lantern", "torch", "workbench", "furnace", "anvil", "bed", "storage",
+	"copperarmor", "ironarmor", "lantern", "torch", "workbench", "furnace", "anvil", "bed", "storage", "door",
 	"bp_hut", "bp_tower", "bp_bridge", "bp_farm", "bp_bunker",
 	"dirt", "sand", "stone", "brick", "plank", "wood", "glass", "leaves", "obsidian", "water",
 	"wall_dirt", "wall_stone", "wall_plank", "wall_brick", "wall_glass", "wall_obsidian",
@@ -107,6 +107,8 @@ var items = map[string]*Item{
 		"........", "........", "OOOOOOOO", "OppppppO", "OPPPPPPO", "OhOOOOhO", "OhO..OhO", "OOO..OOO"}},
 	"anvil": {name: "Anvil", once: true, station: "anvil", desc: "A station: metal tools, weapons and armor", icon: []string{
 		"........", "........", "OOOOOOO.", "OiiiiiIO", ".OIIIIO.", "..OmmO..", ".OmmmmO.", "OOOOOOOO"}},
+	"door": {name: "Door", once: true, desc: "Place it in a doorway. Tap or right-click to open and close it; creatures can't open doors", icon: []string{
+		"..OOOO..", ".OPPPPO.", ".OPppPO.", ".OPPPPO.", ".OPPPTO.", ".OPppPO.", ".OPPPPO.", ".OOOOOO."}},
 	"storage": {name: "Storage chest", once: true, station: "storage", desc: "Place it, then tap it to store items", icon: []string{
 		"........", ".OOOOOO.", "OPPPPPPO", "OppppppO", "OOOTTOOO", "OPPTTPPO", "OppppppO", "OOOOOOOO"}},
 	"bed": {name: "Bed", once: true, station: "bed", desc: "Place it, then tap it to make it your respawn point", icon: []string{
@@ -438,6 +440,7 @@ var recipes = []Recipe{
 	{"anvil", 1, [][2]any{{"ironbar", 6}, {"stone", 10}}, "workbench"},
 	{"bed", 1, [][2]any{{"plank", 12}, {"leaves", 10}}, "workbench"},
 	{"storage", 1, [][2]any{{"plank", 20}}, "workbench"},
+	{"door", 1, [][2]any{{"plank", 14}}, "workbench"},
 	{"torch", 8, [][2]any{{"coal", 1}, {"wood", 2}}, "workbench"},
 	{"brick", 10, [][2]any{{"sand", 10}, {"water", 5}}, "workbench"},
 	{"bomb", 1, [][2]any{{"sand", 10}, {"coal", 2}}, "workbench"},
@@ -642,12 +645,15 @@ func useHeld() {
 	case id == "pickaxe" || id == "ironpick" || id == "corepick":
 		mineObjects(digRadius(it))
 		got := map[string]int{}
-		chest, core := [2]int{-1, -1}, 0
+		chest, core, door := [2]int{-1, -1}, 0, [2]int{-1, -1}
 		eachInCircle(digRadius(it), func(x, y, i int) {
 			t := grid[i]
 			switch t {
 			case CHEST:
 				chest = [2]int{x, y}
+				return
+			case DOOR, DOOROPEN:
+				door = [2]int{x, y}
 				return
 			case CORE:
 				if bossDown {
@@ -685,6 +691,14 @@ func useHeld() {
 		}
 		if chest[0] >= 0 {
 			openChest(chest[0], chest[1])
+		}
+		if door[0] >= 0 {
+			if doorHits++; doorHits > 20 { // hold the pickaxe on a door to take it down
+				removeDoor(door[0], door[1])
+				doorHits = 0
+			}
+		} else {
+			doorHits = 0
 		}
 		switch {
 		case core > 0:
@@ -822,6 +836,10 @@ func useOnce() {
 		if tx, ty, now := oneShotTarget(); now && placeStation(it, tx, ty) {
 			holoSet = false
 		}
+	case it.id == "door":
+		if tx, ty, now := oneShotTarget(); now && placeDoor(tx, ty) {
+			holoSet = false
+		}
 	case it.place != 0: // torches: one at a time
 		if !aimCell() || aimX < 1 || aimX >= W-1 || aimY < 1 || aimY >= H {
 			return
@@ -849,6 +867,10 @@ func buildHoloNow() {
 		placeBlueprint(it, holoX, holoY)
 	case it.station != "":
 		if placeStation(it, holoX, holoY) {
+			holoSet = false
+		}
+	case it.id == "door":
+		if placeDoor(holoX, holoY) {
 			holoSet = false
 		}
 	}
@@ -895,7 +917,7 @@ func drawAim(put func(x, y int, c [3]int, s int), ox, oy int) {
 	}
 	id := inv[selected].ID
 	it := items[id]
-	if it.heal > 0 || it.armor > 0 || it.blueprint != "" || it.station != "" || id == "gem" || id == "heart" || id == "lantern" || usesShapes(heldBuildKind()) {
+	if it.heal > 0 || it.armor > 0 || it.blueprint != "" || it.station != "" || id == "door" || id == "gem" || id == "heart" || id == "lantern" || usesShapes(heldBuildKind()) {
 		return
 	}
 	ok := aimCell()

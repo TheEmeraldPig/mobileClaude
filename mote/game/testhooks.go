@@ -247,6 +247,12 @@ func runScript() {
 				_, _, ok := settleStation("workbench", lx, ty, false)
 				fmt.Printf("fit dx=%d free=%v sup=%d/%d fits=%v settle=%v\n", dx, free, sup, w, stationFits("workbench", lx, ty, false), ok)
 			}
+		case "tapat": // tapat=sx:sy, a touch/click on the world at that screen point
+			a, b, _ := strings.Cut(arg, ":")
+			x, _ := strconv.ParseFloat(a, 64)
+			y, _ := strconv.ParseFloat(b, 64)
+			startWorldPointer(77, x, y)
+			endWorldPointer(77)
 		case "useonce":
 			useOnce()
 			fmt.Printf("useonce sel=%d toast=%q objs=%d aim=%.0f,%.0f\n", selected, toastText, len(objs), aimSX, aimSY)

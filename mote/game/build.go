@@ -72,7 +72,7 @@ func heldBuildKind() int {
 		return buildPaint
 	case it.id == "hammer":
 		return buildHammer
-	case it.blueprint != "" || it.station != "":
+	case it.blueprint != "" || it.station != "" || it.id == "door":
 		return buildOneShot
 	case it.place != 0 && !it.once:
 		return buildBlock

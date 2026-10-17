@@ -119,7 +119,11 @@ func (g *Game) Update() error {
 		// right-click opens a station
 		if !isTouch && inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
 			x, y := int(math.Floor((cam.x+hoverX/zoom)/CELL)), int(math.Floor((cam.y+hoverY/zoom)/CELL))
-			if o := objAt(x, y); o != nil {
+			if x >= 0 && x < W && y >= 0 && y < H && isDoor(grid[y*W+x]) {
+				if cellInBuildReach(x, y) {
+					toggleDoor(x, y)
+				}
+			} else if o := objAt(x, y); o != nil {
 				if objInReach(o) {
 					openStation(o.kind)
 				} else {

@@ -22,6 +22,8 @@ Each world is its own save in `worlds/<id>.json`, listed in `worlds.json`, and h
   - `blueprints.go`: ready-made structures and the placement hologram. Add a structure by adding a template in `initBlueprints()`, an item and a recipe.
   - `worlds.go`: the world list, game modes (`modeDamage`, death drops in `die()`), respawning and the temporary kit.
   - `stations.go`: workstations (workbench, furnace, anvil). They are background objects kept in `objs` (not blocks): walk past them, tap or right-click to open their crafting menu, hold a pickaxe on one to pick it up. Add one to `stations` with a sprite, plus an item with `station:` set.
+  - `doors.go`: doors (a 3x14 group of `DOOR`/`DOOROPEN` blocks): tap to open and close, creatures can't pass a closed one.
+  - `storage.go`: the storage chest screen (a station whose `items` hold 24 stacks).
   - `craft.go`: the crafting screen: category tabs, a row of recipes and a details panel. Recipes live in `recipes` in `items.go`; `at` names the station ("" = by hand).
   - `build.go`: advanced building: shapes (brush, line, box, filled box, circle), size, rotate/flip, paint colours, background walls, the build bar and the holograms.
   - `sim.go`: sand and water.

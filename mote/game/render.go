@@ -294,7 +294,7 @@ func drawWorld(screen *ebiten.Image) {
 			}
 			openSky := wy < surf[x]
 			switch {
-			case t == EMPTY || t == WATER || t == TORCH || t == GLASS || t == LAVA:
+			case t == EMPTY || t == WATER || t == TORCH || t == GLASS || t == LAVA || t == DOOROPEN:
 				var bg [3]int
 				switch {
 				case wl != 0:
@@ -316,6 +316,9 @@ func drawWorld(screen *ebiten.Image) {
 				}
 				if t == TORCH {
 					bg = torchPixel(wx, wy, bg)
+				}
+				if t == DOOROPEN {
+					bg = doorPixel(t, wx, wy, bg, lf)
 				}
 				if t == GLASS {
 					g := shadeRGB(blockRGB[GLASS], 0.3+0.7*lf)
@@ -339,6 +342,10 @@ func drawWorld(screen *ebiten.Image) {
 					c = mix(c, paintRGB[pt], 0.7)
 				}
 				c = [3]int{c[0] + sh, c[1] + sh, c[2] + sh}
+				if t == DOOR {
+					set(o, doorPixel(t, wx, wy, c, lf))
+					continue
+				}
 				if t == CORE {
 					c = mix(c, [3]int{255, 240, 255}, 0.5+0.5*math.Sin(float64(frame)*0.08))
 					lf = 1
@@ -380,6 +387,7 @@ func drawWorld(screen *ebiten.Image) {
 	}
 	drawHologram(blend, ox, oy)
 	drawStationHologram(blend, ox, oy)
+	drawDoorHologram(blend, ox, oy)
 	drawBuildHologram(blend, ox, oy)
 	drawPlayer(put, ox, oy)
 	for _, q := range parts {

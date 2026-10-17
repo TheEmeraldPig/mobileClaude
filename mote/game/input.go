@@ -264,6 +264,11 @@ func startWorldPointer(id int, x, y float64) {
 		openChest(aimX, aimY)
 		return
 	}
+	if inReach && aimX >= 0 && aimX < W && aimY >= 0 && aimY < H && isDoor(grid[aimY*W+aimX]) &&
+		(selected < 0 || inv[selected] == nil || !isPick(inv[selected].ID)) {
+		toggleDoor(aimX, aimY)
+		return
+	}
 	tapObj.o = nil
 	if o := objAt(aimX, aimY); o != nil && objInReach(o) {
 		if selected < 0 || inv[selected] == nil || !isPick(inv[selected].ID) {

@@ -58,6 +58,8 @@ const (
 	OBSIDIAN = 27
 	BEDROCK  = 28
 	FURNACE  = 29 // old saves only: furnaces are station objects now
+	DOOR     = 30 // closed door (solid)
+	DOOROPEN = 31 // open door (walk through it)
 )
 
 var blockRGB = map[uint8][3]int{
@@ -90,6 +92,8 @@ var blockRGB = map[uint8][3]int{
 	OBSIDIAN: {44, 30, 64},
 	BEDROCK:  {26, 24, 32},
 	FURNACE:  {96, 90, 104},
+	DOOR:     {150, 104, 62},
+	DOOROPEN: {150, 104, 62},
 }
 
 // Ores are drawn as specks of their colour in stone
@@ -97,7 +101,7 @@ func isOre(t uint8) bool { return t >= COAL && t <= GOLD }
 
 func isSolid(t uint8) bool {
 	switch t {
-	case SAND, STONE, BRICK, CRYSTAL, DIRT, GRASS, PLANK, GLASS, SOIL, GRAVE, CORE, OBSIDIAN, BEDROCK:
+	case SAND, STONE, BRICK, CRYSTAL, DIRT, GRASS, PLANK, GLASS, SOIL, GRAVE, CORE, OBSIDIAN, BEDROCK, DOOR:
 		return true
 	}
 	return isOre(t)
