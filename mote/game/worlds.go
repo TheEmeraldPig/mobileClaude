@@ -162,6 +162,7 @@ func createNewWorld(name, seed string, mode int) {
 	createWorld(seed)
 	world = WorldInfo{ID: newWorldID(), Name: name, Seed: seedText, Mode: mode}
 	bossDown = false
+	guideStepAt = 0
 	player.maxHP = 10
 	player.hp = player.maxHP
 	for i := range inv {

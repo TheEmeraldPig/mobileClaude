@@ -156,7 +156,7 @@ func hud() {
 	if world.Mode != modeNormal {
 		dtxt += "  -  " + modeNames[world.Mode]
 	}
-	Text(dtxt, 14, 42, 12, colMuted, text.AlignStart)
+	ShadowText(dtxt, 14, 42, 12, colMuted)
 	// the mouse over a station shows its name
 	if !isTouch {
 		x, y := int(math.Floor((cam.x+hoverX/zoom)/CELL)), int(math.Floor((cam.y+hoverY/zoom)/CELL))
@@ -168,6 +168,7 @@ func hud() {
 			})
 		}
 	}
+	guideY = 60
 	// a nearby station: say how to use it
 	for _, o := range objs {
 		if objInReach(o) {
@@ -182,10 +183,12 @@ func hud() {
 			case "storage":
 				what = " to open it"
 			}
-			Text(how+" the "+stations[o.kind].name+what, 14, 60, 12, colT, text.AlignStart)
+			ShadowText(how+" the "+stations[o.kind].name+what, 14, 60, 12, colT)
+			guideY = 78
 			break
 		}
 	}
+	drawGuide()
 	// Hotbar
 	slot := hotbarSlotSize()
 	gap := 7.0
@@ -989,16 +992,27 @@ func settingsMenu() {
 			applyFOV()
 			savePrefs()
 		}
-		Text("1 is closest, 5 shows the most. 3 is normal.", x, y+62, 12, colMuted, text.AlignStart)
+		Text("1 is closest, 5 shows the most. 3 is normal.", x, y+58, 12, colMuted, text.AlignStart)
+		y += 80
+		Label("INTERFACE SIZE", x, y)
+		if c := seg(x, y+14, []string{"Small", "Normal", "Large", "Larger"}, prefs.UISize); c >= 0 {
+			prefs.UISize = c
+			savePrefs()
+		}
+		y += 70
+		Label("TIPS", x, y)
+		if c := seg(x, y+14, []string{"On", "Off"}, b2i(!prefs.Tips)); c >= 0 {
+			prefs.Tips = c == 0
+			savePrefs()
+		}
 		if !isTouch {
-			y += 88
-			Label("FULL SCREEN", x, y)
-			if c := seg(x, y+14, []string{"On", "Off"}, b2i(!prefs.Full)); c >= 0 {
+			Label("FULL SCREEN", x+220, y)
+			if c := seg(x+220, y+14, []string{"On", "Off"}, b2i(!prefs.Full)); c >= 0 {
 				prefs.Full = c == 0
 				ebiten.SetFullscreen(prefs.Full)
 				savePrefs()
 			}
-			Text("F11 also switches full screen.", x, y+62, 12, colMuted, text.AlignStart)
+			Text("F11 also switches full screen.", x+360, y+30, 12, colMuted, text.AlignStart)
 		}
 	case 1:
 		Label("MUSIC VOLUME", x, y)

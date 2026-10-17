@@ -213,6 +213,13 @@ func Text(s string, x, y, size float64, c color.Color, align text.Align) {
 	ops = append(ops, func(dst *ebiten.Image) { drawText(dst, s, x, y, textOpt{size: size, col: c, align: align}) })
 }
 
+// Text with a dark drop shadow, for the HUD over the bright sky
+func ShadowText(s string, x, y, size float64, c color.Color) {
+	ops = append(ops, func(dst *ebiten.Image) {
+		drawText(dst, s, x, y, textOpt{size: size, col: c, shadow: true})
+	})
+}
+
 func Dim() {
 	ops = append(ops, func(dst *ebiten.Image) {
 		vector.DrawFilledRect(dst, 0, 0, float32(dst.Bounds().Dx()), float32(dst.Bounds().Dy()), color.NRGBA{14, 10, 32, 158}, false)

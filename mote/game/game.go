@@ -236,6 +236,7 @@ func (g *Game) Layout(outW, outH int) (int, int) {
 	if float64(outH) > 760 {
 		uiScale = s * float64(outH) / 760
 	}
+	uiScale *= []float64{0.85, 1, 1.15, 1.3}[prefs.UISize]
 	logicalW, logicalH = float64(outW)*s/uiScale, float64(outH)*s/uiScale
 	return int(float64(outW) * s), int(float64(outH) * s)
 }

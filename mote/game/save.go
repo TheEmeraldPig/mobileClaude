@@ -22,9 +22,11 @@ type Prefs struct {
 	BtnSide   string            `json:"btnSide"`
 	Seed      string            `json:"seed"`
 	Full      bool              `json:"fullscreen"`
+	UISize    int               `json:"uiSize"` // 0 small .. 3 largest, 1 normal
+	Tips      bool              `json:"tips"`
 }
 
-var prefs = Prefs{FOV: 3, SfxVol: 4, MusicVol: 3, StickX: 0.12, StickY: 0.62, BtnSide: "right", Full: true,
+var prefs = Prefs{FOV: 3, SfxVol: 4, MusicVol: 3, StickX: 0.12, StickY: 0.62, BtnSide: "right", Full: true, UISize: 1, Tips: true,
 	Binds: map[string]string{"left": "A", "right": "D", "lev": "W", "inv": "E", "drop": "Q", "craft": "C"}}
 
 // DataDir can be set before the game starts (the Android wrapper does this).
@@ -59,6 +61,7 @@ func loadPrefs() {
 		prefs.FOV = 3
 	}
 	prefs.SfxVol = max(0, min(5, prefs.SfxVol))
+	prefs.UISize = max(0, min(3, prefs.UISize))
 	prefs.MusicVol = max(0, min(5, prefs.MusicVol))
 }
 
@@ -85,6 +88,7 @@ type SaveState struct {
 	HP        int              `json:"hp"`
 	SpawnWX   int              `json:"spawnWX"`
 	SpawnY    int              `json:"spawnY"`
+	Guide     int              `json:"guide"`
 	Drops     []SavedDrop      `json:"drops"`
 	MaxHP     int              `json:"maxHP"`
 	World     WorldInfo        `json:"world"`
@@ -126,7 +130,7 @@ func serializeState() SaveState {
 	}
 	return SaveState{V: 1, Seed: seedText, BaseChunk: baseChunk, Chunks: chunks, Started: started,
 		PlayerWX: player.x + float64(baseChunk*CW*CELL), PlayerY: player.y, Energy: player.energy, Face: player.face,
-		Inv: append([]*Stack(nil), inv...), Selected: selected, Time: worldTime, HP: player.hp, SpawnWX: spawnWX, SpawnY: spawnY, Drops: drops,
+		Inv: append([]*Stack(nil), inv...), Selected: selected, Time: worldTime, HP: player.hp, SpawnWX: spawnWX, SpawnY: spawnY, Guide: guideStepAt, Drops: drops,
 		MaxHP: player.maxHP, World: world, BossDown: bossDown, Objs: saveObjs(),
 		Walls: savedWalls, Paint: savedPaint, WPaint: savedWPaint}
 }
@@ -173,7 +177,7 @@ func restoreState(st *SaveState) bool {
 	if selected < -1 || selected >= hotbarN {
 		selected = -1
 	}
-	worldTime, player.hp, spawnWX, spawnY = st.Time, st.HP, st.SpawnWX, st.SpawnY
+	worldTime, player.hp, spawnWX, spawnY, guideStepAt = st.Time, st.HP, st.SpawnWX, st.SpawnY, st.Guide
 	player.maxHP, bossDown = st.MaxHP, st.BossDown || st.Run.BossDown
 	if player.maxHP <= 0 {
 		player.maxHP = 10
