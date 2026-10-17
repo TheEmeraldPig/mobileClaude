@@ -57,10 +57,10 @@ func (g *Game) drawBattle(dst *ebiten.Image) {
 	r := g.run()
 	b := r.B
 	t := g.t()
-	th := chapterTheme(r.Chapter)
 	sx := (g.rng.Float64() - 0.5) * g.shake
 	sy := (g.rng.Float64() - 0.5) * g.shake
 	dst.DrawImage(g.battleBG(r.Chapter), imgOp(sx, sy, 1))
+	ambience(dst, r.Chapter, W, g.h, t)
 
 	// enemy
 	kind := r.Nodes[r.Cur].Kind
@@ -71,24 +71,30 @@ func (g *Game) drawBattle(dst *ebiten.Image) {
 	case nBoss:
 		es = 1.04
 	}
-	ex, ey := g.foeX()+sx-g.lunge*70, g.foeY()+sy+g.lunge*40
+	ex, ey := g.foeX()+sx, g.foeY()+sy
 	fade := 1.0
 	if b.EHP <= 0 {
-		fade = math.Max(0, 1-float64(g.deathT)/30)
+		fade = math.Max(0, 1-math.Max(0, float64(g.deathT)-40)/30)
 	}
 	if fade > 0 {
-		drawEnemy(g.foeSpr.buf(), b.E.Shape, 180, 330, t, th.Hue)
-		squash := 1 + g.enemyHit*0.08
-		g.foeSpr.stamp(dst, ex, ey, 180, 330, es, squash, 2-squash, fade, g.enemyHit*0.7)
+		fa := anim{t: t, atk: g.foeAtk, hurt: g.enemyHit}
+		if b.EHP <= 0 {
+			fa.dead = float64(g.deathT) / 40
+		}
+		drawEnemy(g.foeSpr.buf(), b.E.Shape, 240, 390, fa)
+		g.foeSpr.stamp(dst, ex, ey, 240, 390, es, -1, 1, fade, g.enemyHit*0.6)
 	}
 	// hero
-	hx, hy := g.heroX()+sx+g.swing*30, g.heroY()+sy-g.swing*16
-	drawHero(g.heroSpr.buf(), 150, 260, t, math.Sin(g.swing*math.Pi))
-	g.heroSpr.stamp(dst, hx, hy, 150, 260, 1.3, 1, 1, 1, g.heroHit*0.7)
+	ha := anim{t: t, atk: g.heroAtk, cast: g.heroCast, hurt: g.heroHit}
+	if r.Lost {
+		ha.dead = float64(g.lostT) / 45
+	}
+	drawHero(g.heroSpr.buf(), 160, 270, ha)
+	g.heroSpr.stamp(dst, g.heroX()+sx, g.heroY()+sy, 160, 270, 1.15, 1, 1, 1, g.heroHit*0.6)
 
 	// bars and statuses
-	hpBar(dst, g.heroX(), g.heroY()+20, 170, r.HP, r.Max, colGreen)
-	hpBar(dst, g.foeX(), g.foeY()+22, 200, max(0, b.EHP), b.EMax, colRed)
+	hpBarT(dst, g.heroX(), g.heroY()+20, 170, r.HP, r.Max, g.trailHP, colGreen)
+	hpBarT(dst, g.foeX(), g.foeY()+22, 200, max(0, b.EHP), b.EMax, g.trailEH, colRed)
 	blockBadge(dst, g.heroX()-112, g.heroY()+31, b.Block)
 	blockBadge(dst, g.foeX()-128, g.foeY()+33, b.EBlock)
 	statusRow(dst, g.heroX(), g.heroY()+64, []status{{"Vuln", b.Vuln, colOrange}, {"Weak", b.Weak, colGrey}, {"Str", b.Str, colRed}})
@@ -98,7 +104,7 @@ func (g *Game) drawBattle(dst *ebiten.Image) {
 	// what the enemy plans
 	if b.EHP > 0 && !r.Lost {
 		iy := math.Max(140, g.foeY()-enemyHeight[b.E.Shape]*es-34) + math.Sin(t*3)*3
-		g.drawIntent(dst, b, g.foeX(), iy)
+		g.drawIntent(dst, b, g.foeX(), iy-14*math.Sin(g.intentPop*math.Pi))
 	}
 	g.drawParticles(dst)
 
@@ -107,7 +113,7 @@ func (g *Game) drawBattle(dst *ebiten.Image) {
 	gradRect(dst, 0, 74, W, 3, colGold, colGoldLo)
 	gradRect(dst, 0, 77, W, 40, alpha(colInk, 0.8), clear)
 	cr := rect{20, 22, 112, 36}
-	pill(dst, cr, itoa(r.Coins))
+	pill(dst, cr, itoa(int(g.dCoins+0.5)))
 	coinIcon(dst, cr.x+8, cr.cy(), 14)
 	label := "FLOOR " + itoa(r.floor())
 	switch kind {
@@ -149,28 +155,58 @@ func (g *Game) drawBattle(dst *ebiten.Image) {
 		button(dst, g.endTurnBtn(), btnStone, "ENEMY TURN", 17, true)
 	}
 	// cards slide from the draw pile to their places
+	// cards are dealt one by one from the draw pile
 	for len(g.handPos) < len(b.Hand) {
 		g.handPos = append(g.handPos, pt{20, g.h - 230})
+		g.handDelay = append(g.handDelay, 5*len(g.handDelay))
 	}
 	g.handPos = g.handPos[:len(b.Hand)]
+	g.handDelay = g.handDelay[:len(b.Hand)]
+	pressedCard := -1
+	for i := len(b.Hand) - 1; i >= 0; i-- {
+		if pressOn && g.handCard(i, len(b.Hand)).has(pressX, pressY) {
+			pressedCard = i
+			break
+		}
+	}
 	for i, c := range b.Hand {
 		tr := g.handCard(i, len(b.Hand))
+		if g.handDelay[i] > 0 {
+			g.handDelay[i]--
+			continue
+		}
 		p := &g.handPos[i]
-		p.x += (tr.x - p.x) * 0.25
-		p.y += (tr.y - p.y) * 0.25
+		p.x += (tr.x - p.x) * 0.22
+		p.y += (tr.y - p.y) * 0.22
 		lift := 0.0
 		if b.Playable(i) && g.endT == 0 {
 			lift = 4 + 2*math.Sin(t*3+float64(i))
+			pulse := 0.25 + 0.15*math.Sin(t*4+float64(i))
+			glow(dst, p.x+tr.w/2, p.y+tr.h*0.5-lift, tr.w*0.75, colOrange, pulse*0.5)
 		}
-		drawCard(dst, c, p.x, p.y-lift, tr.w, !b.Playable(i), t)
+		if i == pressedCard {
+			continue
+		}
+		spin := (tr.x - p.x) * 0.002
+		if math.Abs(spin) > 0.01 {
+			g.drawCardFx(dst, c, p.x+tr.w/2, p.y+tr.h/2-lift, tr.w, 1, 1, t)
+		} else {
+			drawCard(dst, c, p.x, p.y-lift, tr.w, !b.Playable(i), t)
+		}
+	}
+	if pressedCard >= 0 && g.handDelay[pressedCard] == 0 { // the touched card rises and grows
+		tr := g.handCard(pressedCard, len(b.Hand))
+		w := tr.w * 1.25
+		glow(dst, tr.cx(), tr.y-10, w, colGoldHi, 0.3)
+		drawCard(dst, b.Hand[pressedCard], tr.cx()-w/2, tr.y-40, w, !b.Playable(pressedCard), t)
 	}
 	for _, f := range g.flyCards {
-		e := 1 - (1-f.t)*(1-f.t)
-		w := f.w * (1 - 0.6*e)
+		e := easeInOut(f.t)
+		w := f.w * (1 - 0.65*e)
 		x := f.x + (f.tx-w/2-f.x)*e
-		y := f.y + (f.ty-w*0.7-f.y)*e
-		drawCard(dst, f.c, x, y, w, false, t)
-		glow(dst, x+w/2, y+w*0.7, w, colWhite, 0.4*e)
+		y := f.y + (f.ty-w*0.7-f.y)*e - math.Sin(e*math.Pi)*60
+		g.drawCardFx(dst, f.c, x+w/2, y+w*0.7, w, math.Cos(e*math.Pi*0.5), 1-e*0.5, t)
+		glow(dst, x+w/2, y+w*0.7, w, colOrange, 0.5*e)
 	}
 	for _, f := range g.fl {
 		a := math.Min(1, (60-f.t)/18)

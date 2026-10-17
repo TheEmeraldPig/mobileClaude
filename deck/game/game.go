@@ -74,6 +74,7 @@ type pointer struct {
 }
 
 type Game struct {
+	uiAnim
 	p     *Profile
 	w, h  float64
 	sc    screen
@@ -93,15 +94,16 @@ type Game struct {
 	prevSc   screen
 	viewDeck bool
 
-	ptr                                    pointer
-	mapScroll, colScroll, listScroll       float64
-	parts                                  []particle
-	fl                                     []floater
-	flyCards                               []flying
-	handPos                                []pt
-	heroHit, enemyHit, swing, lunge, shake float64
-	endT, deathT                           int
-	lastHP, lastEHP                        int
+	ptr                              pointer
+	mapScroll, colScroll, listScroll float64
+	parts                            []particle
+	fl                               []floater
+	flyCards                         []flying
+	handPos                          []pt
+	heroHit, enemyHit, shake         float64
+	heroAtk, heroCast, foeAtk        float64 // animation progress 0..1
+	endT, deathT, lostT              int
+	lastHP, lastEHP                  int
 
 	bgs             map[[2]int]*ebiten.Image
 	mapImg          *ebiten.Image
@@ -127,8 +129,8 @@ func NewGame() *Game {
 	}
 	g.rng = rand.New(rand.NewSource(g.seed))
 	g.bgs = map[[2]int]*ebiten.Image{}
-	g.heroSpr = newSprite(340, 280)
-	g.foeSpr = newSprite(360, 360)
+	g.heroSpr = newSprite(420, 300)
+	g.foeSpr = newSprite(480, 420)
 	return g
 }
 
@@ -234,7 +236,8 @@ func (g *Game) enterScreen() {
 	case nFight, nElite, nBoss:
 		g.sc = scBattle
 		g.fl, g.parts, g.flyCards, g.handPos = nil, nil, nil, nil
-		g.endT, g.deathT = 0, 0
+		g.endT, g.deathT, g.lostT = 0, 0, 0
+		g.heroAtk, g.heroCast, g.foeAtk = 0, 0, 0
 		g.lastHP, g.lastEHP = r.HP, r.B.EHP
 	case nShop:
 		g.sc = scShop
@@ -291,6 +294,7 @@ func (g *Game) Update() error {
 		}
 	}
 	g.updatePointer()
+	g.tickAnim()
 	if g.sc == scBattle && inpututil.IsKeyJustPressed(ebiten.KeyE) {
 		g.press("endturn")
 	}
@@ -406,8 +410,12 @@ func (g *Game) press(id string) {
 			g.popup, g.popCard = enhDefs[n].Name+"!", &c
 		}
 	case "node":
-		if r != nil && containsInt(r.Reachable(), n) {
-			g.travel(n)
+		if r != nil && containsInt(r.Reachable(), n) && g.travelT == 0 {
+			g.travelTo, g.travelT = n, 0.001 // walk there first
+			if g.script != nil {
+				g.travelT = 0
+				g.travel(n)
+			}
 		}
 	case "home":
 		if r != nil && (r.Won || r.Lost) {
@@ -425,6 +433,9 @@ func (g *Game) press(id string) {
 			g.endT = 1
 		}
 	case "pick":
+		if g.scT < 0.9 {
+			return // let the cards flip in first
+		}
 		r.PickCard(n)
 		g.leaveNode()
 	case "continue":
@@ -546,7 +557,7 @@ func (g *Game) foeY() float64  { return g.h - 500 }
 
 func (g *Game) playCard(i int) {
 	r := g.run()
-	if g.sc != scBattle || g.endT > 0 || g.deathT > 0 || i >= len(r.B.Hand) {
+	if g.sc != scBattle || g.endT > 0 || g.deathT > 0 || r.Lost || g.fadeT > 0.3 || i >= len(r.B.Hand) || (g.heroAtk > 0 && g.heroAtk < 0.45) {
 		return
 	}
 	b := r.B
@@ -563,8 +574,9 @@ func (g *Game) playCard(i int) {
 	tx, ty := g.foeX(), g.foeY()-90
 	if c.def().Kind == kSkill {
 		tx, ty = g.heroX(), g.heroY()-70
+		g.heroCast = 0.001
 	} else {
-		g.swing = 1
+		g.heroAtk = 0.001
 	}
 	g.flyCards = append(g.flyCards, flying{c: c, x: hr.x, y: hr.y, w: hr.w, tx: tx, ty: ty})
 	b.Play(i)
@@ -576,43 +588,66 @@ func (g *Game) updateBattle() {
 		return
 	}
 	b := r.B
-	if g.endT > 0 {
+	step := func(v *float64, d float64) {
+		if *v > 0 {
+			if *v += d; *v >= 1 {
+				*v = 0
+			}
+		}
+	}
+	step(&g.heroAtk, 1.0/34)
+	step(&g.heroCast, 1.0/30)
+	if g.endT > 0 { // the enemy's turn: wind up, strike, recover
 		g.endT++
-		g.lunge = math.Sin(math.Min(1, float64(g.endT)/24) * math.Pi)
-		if g.endT == 12 {
+		g.foeAtk = float64(g.endT) / 40
+		if g.endT == 18 {
+			for i, c := range b.Hand { // the hand flies to the discard pile
+				hr := g.handCard(i, len(b.Hand))
+				if i < len(g.handPos) {
+					hr.x, hr.y = g.handPos[i].x, g.handPos[i].y
+				}
+				g.flyCards = append(g.flyCards, flying{c: c, x: hr.x, y: hr.y, w: hr.w, tx: W - 30, ty: g.h - 190})
+			}
 			b.EndTurn()
-			g.handPos = nil
+			g.handPos, g.handDelay = nil, nil
 		}
-		if g.endT >= 26 {
-			g.endT, g.lunge = 0, 0
+		if g.endT >= 40 {
+			g.endT, g.foeAtk = 0, 0
 		}
 	}
-	for _, f := range b.fx {
-		g.effect(f)
+	// a swing's damage lands when the blade does
+	if g.heroAtk == 0 || g.heroAtk >= 0.45 {
+		for _, f := range b.fx {
+			g.effect(f)
+		}
+		b.fx = nil
+		if b.EHP < g.lastEHP {
+			g.enemyHit = 1
+		}
+		g.lastEHP = b.EHP
 	}
-	b.fx = nil
 	if r.HP < g.lastHP {
 		g.heroHit = 1
 	}
-	if b.EHP < g.lastEHP {
-		g.enemyHit = 1
-	}
-	g.lastHP, g.lastEHP = r.HP, b.EHP
+	g.lastHP = r.HP
 	if g.sc != scBattle {
 		return
 	}
 	switch {
 	case r.Lost:
-		g.sc, g.toastT = scEnd, 0
-		g.Save()
-	case b.EHP <= 0:
+		g.lostT++
+		if g.lostT > 70 {
+			g.sc, g.toastT = scEnd, 0
+			g.Save()
+		}
+	case b.EHP <= 0 && (g.heroAtk == 0 || g.heroAtk >= 0.45):
 		if g.deathT == 0 {
 			g.deathT = 1
 			g.burst(g.foeX(), g.foeY()-70, colYellow, 40)
 			g.burst(g.foeX(), g.foeY()-70, colWhite, 20)
 		}
 		g.deathT++
-		if g.deathT > 50 {
+		if g.deathT > 75 {
 			g.deathT, g.toastT = 0, 0
 			if r.Won {
 				g.sc = scEnd
@@ -718,7 +753,7 @@ func (g *Game) stepEffects() {
 	g.flyCards = c
 	g.heroHit = math.Max(0, g.heroHit-0.07)
 	g.enemyHit = math.Max(0, g.enemyHit-0.08)
-	g.swing = math.Max(0, g.swing-0.06)
+	g.heroHit = math.Max(0, g.heroHit)
 	g.shake *= 0.85
 	// drifting motes for atmosphere
 	if (g.sc == scBattle || g.sc == scMap || g.sc == scHome) && g.frame%9 == 0 && len(g.parts) < 120 {
@@ -787,6 +822,7 @@ func (g *Game) Draw(dst *ebiten.Image) {
 	if g.popup != "" {
 		g.drawPopup(dst)
 	}
+	g.drawFade(dst)
 	if g.script != nil {
 		g.script.afterDraw(dst)
 	}
@@ -803,7 +839,9 @@ func (g *Game) drawPopup(dst *ebiten.Image) {
 	glow(dst, cx, cy, 220, colOrange, 0.3)
 	say(dst, g.popup, cx, cy-230, 40, colGoldHi, 0.5)
 	if g.popCard != nil {
-		drawCard(dst, *g.popCard, cx-105, cy-160, 210, false, g.t())
+		f := easeOut(g.popT * 1.6)
+		flip := math.Cos(math.Pi * (1 - clamp01(g.popT*2.2-0.3)))
+		g.drawCardFx(dst, *g.popCard, cx, cy-13+(1-f)*200, 210*(0.6+0.4*f), flip, f, g.t())
 		r := g.popCard.def().Rarity
 		say(dst, rarityNames[r], cx, cy+158, 26, light(rarityCol[r], 0.3), 0.5)
 	}
@@ -827,10 +865,10 @@ func (g *Game) topBar(dst *ebiten.Image) {
 		say(dst, "+1 in "+itoa(int(s/60))+":"+pad2(int(s%60)), er.cx()+6, er.y+er.h+14, 13, colBone, 0.5)
 	}
 	gr := rect{186, 16, 160, 36}
-	pill(dst, gr, itoa(g.p.Gold))
+	pill(dst, gr, itoa(int(g.dGold+0.5)))
 	coinIcon(dst, gr.x+8, gr.cy(), 15)
 	mr := rect{366, 16, 156, 36}
-	pill(dst, mr, itoa(g.p.Gems))
+	pill(dst, mr, itoa(int(g.dGems+0.5)))
 	gemIcon(dst, mr.x+8, mr.cy(), 13)
 }
 

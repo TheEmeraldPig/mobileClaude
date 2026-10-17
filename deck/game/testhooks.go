@@ -21,6 +21,7 @@ import (
 //	card ID       add a card to the collection
 //	auto          play out the current fight with a simple bot
 //	next          travel to the first reachable map node
+//	scroll N      scroll the list on screen down by N
 //	goto KIND     jump to a spot of that kind: fight elite shop rest event treasure boss
 //	gold N        add N gold
 //	gems N        add N gems
@@ -95,6 +96,16 @@ func (sc *script) step(g *Game) error {
 				r.Event = int(num(1))
 				g.eventMsg = ""
 			}
+		case "foe":
+			if r := g.run(); r != nil && r.B != nil {
+				for _, e := range append(append(append([]enemyDef{}, normals...), elites...), boss) {
+					if e.Shape == int(num(1)) {
+						r.B.E = e
+					}
+				}
+			}
+		case "scroll":
+			g.scrollBy(-num(1))
 		case "gems":
 			g.p.Gems += int(num(1))
 		case "shot":

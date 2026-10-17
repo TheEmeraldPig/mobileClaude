@@ -277,27 +277,7 @@ func cloud(dst *ebiten.Image, x, y, s float64) {
 
 // merchant draws the hooded shopkeeper with a lantern.
 func merchant(dst *ebiten.Image, x, y, t float64) {
-	sway := math.Sin(t*1.6) * 2
-	coat := rgb(0x3a, 0x2a, 0x30)
-	shape(dst, []float64{x + 18, y - 120 + sway, x + 70, y - 110, x + 74, y - 50, x + 30, y - 46}, rgb(0x5a, 0x40, 0x2a), rgb(0x24, 0x18, 0x10), 1.4)
-	for i := 0; i < 3; i++ {
-		line(dst, x+30, y-110+float64(i)*20+sway, x+70, y-104+float64(i)*20, 1.2, alpha(colInk, 0.6))
-	}
-	shape(dst, []float64{x - 46, y, x - 34, y - 100 + sway, x - 20, y - 116 + sway, x + 20, y - 116 + sway, x + 34, y - 100 + sway, x + 46, y}, light(coat, 0.1), shade(coat, 0.3), 1.6)
-	line(dst, x, y-110+sway, x, y-4, 1.4, alpha(colGold, 0.5))
-	hood := []float64{x - 30, y - 104 + sway, x - 26, y - 140 + sway, x - 6, y - 162 + sway, x + 18, y - 148 + sway, x + 30, y - 104 + sway}
-	shape(dst, hood, light(coat, 0.15), shade(coat, 0.35), 1.6)
-	blob(dst, []float64{x - 18, y - 112 + sway, x - 14, y - 136 + sway, x + 12, y - 138 + sway, x + 18, y - 112 + sway}, rgb(0x04, 0x02, 0x06), rgb(0x08, 0x04, 0x0a), 0)
-	for _, d := range []float64{-1, 1} {
-		glowEye(dst, x+d*7, y-126+sway, 2.6, colYellow)
-	}
-	// lantern
-	lx, ly := x-54, y-70+math.Sin(t*2)*3
-	line(dst, x-28, y-86+sway, lx, ly-24, 3, colInk)
-	glow(dst, lx, ly, 80, colOrange, 0.5)
-	shape(dst, []float64{lx - 10, ly - 18, lx + 10, ly - 18, lx + 12, ly + 14, lx - 12, ly + 14}, alpha(rgb(0xff, 0xd0, 0x80), 0.9), rgb(0xff, 0x80, 0x20), 1.6)
-	shape(dst, []float64{lx - 13, ly - 24, lx + 13, ly - 24, lx + 10, ly - 18, lx - 10, ly - 18}, rgb(0x6a, 0x6a, 0x76), rgb(0x1a, 0x1a, 0x22), 1.2)
-	shape(dst, []float64{lx - 13, ly + 14, lx + 13, ly + 14, lx + 13, ly + 19, lx - 13, ly + 19}, rgb(0x6a, 0x6a, 0x76), rgb(0x1a, 0x1a, 0x22), 1.2)
+	merchantBody.draw(dst, x, y, anim{t: t})
 }
 
 // campfire draws a fire with logs, stones and a warm glow.
@@ -348,5 +328,30 @@ func (p *particle) draw(dst *ebiten.Image) {
 		shape(dst, []float64{p.x, p.y - r, p.x + r*0.2, p.y - r*0.2, p.x + r, p.y, p.x + r*0.2, p.y + r*0.2, p.x, p.y + r, p.x - r*0.2, p.y + r*0.2, p.x - r, p.y, p.x - r*0.2, p.y - r*0.2}, alpha(colWhite, f), alpha(p.col, f), 0)
 	case 2:
 		strokeCircle(dst, p.x, p.y, p.size*(1.6-f), 3*f, alpha(p.col, f))
+	}
+}
+
+// ambience animates over a chapter's baked arena: drifting fog, the moon's
+// pulse and the odd flash of distant lightning.
+func ambience(dst *ebiten.Image, ch int, w, h, t float64) {
+	th := chapterTheme(ch)
+	idx := (ch - 1) % len(themes)
+	moon := moonOf(idx)
+	glow(dst, w*0.72, 110, 120+10*math.Sin(t*0.8), moon, 0.12+0.05*math.Sin(t*0.8))
+	if idx == 0 || idx == 3 || idx == 5 {
+		if ph := math.Mod(t+3, 13); ph < 0.35 {
+			f := 1 - ph/0.35
+			if ph > 0.12 && ph < 0.18 {
+				f *= 0.3
+			}
+			gradRect(dst, 0, 0, w, groundY+40, alpha(rgb(0xc8, 0xd0, 0xff), 0.35*f), alpha(rgb(0xc8, 0xd0, 0xff), 0.1*f))
+		}
+	}
+	fog := mix(th.Sky2, colWhite, 0.15)
+	for i := 0; i < 5; i++ {
+		sp := 8 + float64(i)*5
+		x := math.Mod(t*sp+float64(i)*170, w+500) - 250
+		y := groundY + 10 + float64(i)*float64(i)*18
+		radial(dst, x, y, 240+float64(i)*30, 26+float64(i)*8, 0, 0, alpha(fog, 0.09), clear)
 	}
 }

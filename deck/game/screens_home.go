@@ -144,13 +144,15 @@ func (g *Game) drawNav(dst *ebiten.Image, t float64) {
 		x := W / 3 * float64(i)
 		gradRect(dst, x-1, y+12, 2, 80, alpha(colGold, 0.4), clear)
 	}
+	sel := g.navTab(0)
+	sel = rect{sel.x - 4 + g.navX*W/3, sel.y - 18, sel.w + 8, sel.h + 14}
+	glow(dst, sel.cx(), sel.cy(), 90, colOrange, 0.25)
+	frame(dst, sel, rgb(0x4a, 0x2a, 0x22), colOrange, true)
 	for i, name := range []string{"SHOP", "BATTLE", "DECK"} {
 		r := g.navTab(i)
 		on := i == g.tab
 		if on {
-			r = rect{r.x - 4, r.y - 18, r.w + 8, r.h + 14}
-			glow(dst, r.cx(), r.cy(), 90, colOrange, 0.25)
-			frame(dst, r, rgb(0x4a, 0x2a, 0x22), colOrange, true)
+			r = rect{r.x - 4, r.y - 18 + (1-easeOut(g.enter(0, 0.25)))*10, r.w + 8, r.h + 14}
 		}
 		ix, iy := r.cx(), r.y+26
 		a := 0.55
@@ -190,14 +192,15 @@ func (g *Game) drawHomeBattle(dst *ebiten.Image, t float64) {
 	}
 	// chapter card with a look at the arena and its lord
 	pr := g.chapCard()
+	pr.y -= (1 - easeOut(g.enter(0, 0.5))) * 60
 	frame(dst, pr, rgb(0x2a, 0x22, 0x2e), colRed, true)
 	art := rect{pr.x + 14, pr.y + 56, pr.w - 28, 196}
 	fillPath(dst, chamfer(art.grow(2), 8), colInk)
 	sub := clip(dst, art)
 	k := art.w / W
 	sub.DrawImage(g.battleBG(ch), imgOp(art.x, art.y-(groundY-160)*k, k))
-	drawEnemy(g.foeSpr.buf(), shDemon, 180, 330, t, chapterTheme(ch).Hue)
-	g.foeSpr.stamp(sub, art.cx(), art.y+art.h-6, 180, 330, 0.56, 1, 1, 1, 0)
+	drawEnemy(g.foeSpr.buf(), shDemon, 240, 390, anim{t: t})
+	g.foeSpr.stamp(sub, art.cx(), art.y+art.h-6, 240, 390, 0.62, -1, 1, 1, 0)
 	gradRect(sub, art.x, art.y+art.h-60, art.w, 60, clear, alpha(colInk, 0.85))
 	gradRect(sub, art.x, art.y, art.w, 50, alpha(colInk, 0.7), clear)
 	strokePath(dst, chamfer(art.grow(1), 8), 1.5, colGold)
@@ -219,11 +222,15 @@ func (g *Game) drawHomeBattle(dst *ebiten.Image, t float64) {
 		}
 	}
 	// the knight on a cliff
+	for i := 0; i < 3; i++ { // fog rolling past the cliff
+		fx := math.Mod(t*(10+float64(i)*6)+float64(i)*200, W+500) - 250
+		radial(dst, fx, g.heroFeet()+40+float64(i)*40, 260, 30, 0, 0, alpha(rgb(0x60, 0x48, 0x70), 0.18), clear)
+	}
 	hx, hf := W/2.0-50, g.heroFeet()
 	cliff(dst, hx+30, hf, 170, t)
 	glow(dst, hx, hf-100, 120, rgb(0xff, 0x60, 0x50), 0.12)
-	drawHero(g.heroSpr.buf(), 150, 260, t, 0)
-	g.heroSpr.stamp(dst, hx, hf, 150, 260, 1.2, 1, 1, 1, 0)
+	drawHero(g.heroSpr.buf(), 160, 270, anim{t: t})
+	g.heroSpr.stamp(dst, hx, hf, 160, 270, 1.1, 1, 1, 1, 0)
 	// hero plate
 	hb := g.heroBtn()
 	plate := rect{hb.x - 6, hb.y - 92, hb.w + 12, 78}
@@ -257,6 +264,11 @@ func (g *Game) drawHomeShop(dst *ebiten.Image, t float64) {
 	divider(dst, W/2, 100, 300)
 	for i, it := range shopItems {
 		r := g.shopTile(i)
+		f := easeOut(g.enter(float64(i)*0.05, 0.35))
+		if f <= 0 {
+			continue
+		}
+		r.y += (1 - f) * 50
 		fill, acc := rgb(0x2a, 0x24, 0x30), colOrange
 		if it.Price[0] == '$' {
 			fill, acc = rgb(0x30, 0x16, 0x2a), colGem

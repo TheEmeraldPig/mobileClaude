@@ -19,6 +19,8 @@ Spire-style fights, Balatro-style deck customisation, Archero-style menus.
   ad, gem packs. Real-money items are free placeholders until Google Play Billing is added.
 - A run in progress is saved, so closing the app doesn't lose it.
 
+Characters and card art are painted parts lit pixel by pixel and moved by skeletons
+(`litpart.go`, `characters.go`, `cardlit.go`); interface animation is in `anim.go`.
 The look is dark fantasy, all drawn in code at the screen's real pixel resolution
 (`S` in `art.go` maps the 540-wide layout to pixels): textured stone and iron, gold
 trim (`ui.go`: `frame`, `button`, `ribbon`), moonlit arenas (`scenes.go`), a dark knight

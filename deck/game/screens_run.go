@@ -220,9 +220,17 @@ func (g *Game) drawMap(dst *ebiten.Image) {
 				c = colYellow
 			}
 			d := math.Hypot(x1-x0, y1-y0)
+			live := i == r.Cur && n.Done
 			for s := 30.0; s < d-30; s += 13 {
 				f := s / d
-				circle(dst, x0+(x1-x0)*f, y0+(y1-y0)*f, 3.2, c)
+				rad := 3.2
+				cc := c
+				if live { // paths you can take shimmer toward the next stop
+					w := math.Sin(f*12 - t*6)
+					rad += w * 0.8
+					cc = mix(colGold, colGoldHi, 0.5+0.5*w)
+				}
+				circle(dst, x0+(x1-x0)*f, y0+(y1-y0)*f, rad, cc)
 			}
 		}
 	}
@@ -236,6 +244,11 @@ func (g *Game) drawMap(dst *ebiten.Image) {
 		if n.Kind == nBoss {
 			rad = 54
 		}
+		pop := backOut(g.enter(float64(n.Row)*0.05, 0.35))
+		if pop <= 0.01 {
+			continue
+		}
+		rad *= pop
 		can := containsInt(reach, i)
 		if can {
 			p := 0.5 + 0.5*math.Sin(t*5)
@@ -256,13 +269,25 @@ func (g *Game) drawMap(dst *ebiten.Image) {
 		if n.Done {
 			shape(dst, []float64{x + rad*0.2, y + rad*0.5, x + rad*0.9, y - rad*0.3, x + rad*1.05, y - rad*0.1, x + rad*0.25, y + rad*0.85, x - rad*0.2, y + rad*0.35, x - rad*0.05, y + rad*0.2}, colGreen, shade(colGreen, 0.7), 2)
 		}
-		if i == r.Cur {
-			drawHero(g.heroSpr.buf(), 150, 260, t, 0)
-			g.heroSpr.stamp(dst, x, y-rad*0.4, 150, 260, 0.42, 1, 1, 1, 0)
+		if i == r.Cur && g.travelT == 0 {
+			drawHero(g.heroSpr.buf(), 160, 270, anim{t: t})
+			g.heroSpr.stamp(dst, x, y-rad*0.4, 160, 270, 0.42, 1, 1, 1, 0)
 		}
 	}
+	if g.travelT > 0 { // the knight walks to the chosen stop
+		fx, fy := W/2.0, g.h-80
+		if r.Cur >= 0 {
+			fx, fy = g.nodePos(r.Cur)
+		}
+		tx, ty := g.nodePos(g.travelTo)
+		e := easeInOut(g.travelT)
+		hop := math.Abs(math.Sin(e*math.Pi*4)) * 8
+		drawHero(g.heroSpr.buf(), 160, 270, anim{t: t * 2})
+		g.heroSpr.stamp(dst, lerp(fx, tx, e), lerp(fy, ty, e)-12-hop, 160, 270, 0.42, 1, 1, 1, 0)
+		glow(dst, tx, ty, 60*e, colGoldHi, 0.4*e)
+	}
 	if r.Cur < 0 {
-		say(dst, "Choose your path", W/2, g.h-60, 24, colBone, 0.5)
+		say(dst, "Choose your path", W/2, g.h-60+3*math.Sin(t*2), 24, alpha(colBone, 0.6+0.4*math.Sin(t*2.5)), 0.5)
 	}
 	g.drawParticles(dst)
 	g.drawHUD(dst, true)
@@ -310,7 +335,7 @@ func (g *Game) drawReward(dst *ebiten.Image) {
 		glow(dst, W/2, 260, 140, colYellow, 0.4)
 		chestIcon(dst, W/2, 270, 0.9, true)
 	}
-	ribbon(dst, W/2, 150, 360, title, rgb(0x6a, 0x14, 0x1c))
+	ribbon(dst, W/2, 150-(1-backOut(g.enter(0, 0.45)))*160, 360, title, rgb(0x6a, 0x14, 0x1c))
 	lp := rect{60, g.lootY(), 420, 0}
 	rows := []func(float64){func(yy float64) {
 		coinIcon(dst, lp.x+34, yy, 14)
@@ -340,7 +365,9 @@ func (g *Game) drawReward(dst *ebiten.Image) {
 		for i, c := range r.Choices {
 			cr := g.rewardCard(i)
 			glow(dst, cr.cx(), cr.cy(), 110, rarityCol[c.def().Rarity], 0.3)
-			drawCard(dst, c, cr.x, cr.y, cr.w, false, t)
+			f := g.enter(0.35+float64(i)*0.14, 0.4)
+			y := cr.cy() + (1-easeOut(f*1.4))*120
+			g.drawCardFx(dst, c, cr.cx(), y, cr.w, -math.Cos(math.Pi*f), clamp01(f*3), t)
 		}
 		button(dst, g.rewardBtn(), btnStone, "Skip", 24, false)
 	} else {
@@ -457,10 +484,10 @@ func (g *Game) drawRest(dst *ebiten.Image) {
 		y := math.Mod(float64(i)*71.3, 300) + 110
 		circle(dst, x, y, 1.2+math.Mod(float64(i), 3)*0.5, alpha(colWhite, 0.4+0.4*math.Sin(t*2+float64(i))))
 	}
-	ribbon(dst, W/2, 170, 320, "CAMPFIRE", rgb(0x7a, 0x30, 0x10))
+	ribbon(dst, W/2, 170-(1-backOut(g.enter(0, 0.45)))*160, 320, "CAMPFIRE", rgb(0x7a, 0x30, 0x10))
 	campfire(dst, W/2+70, 500, 1.5, t)
-	drawHero(g.heroSpr.buf(), 150, 260, t, 0)
-	g.heroSpr.stamp(dst, W/2-130, 520, 150, 260, 1.2, 1, 1, 1, 0)
+	drawHero(g.heroSpr.buf(), 160, 270, anim{t: t})
+	g.heroSpr.stamp(dst, W/2-130, 520, 160, 270, 1.2, 1, 1, 1, 0)
 	b0 := g.restBtn(0)
 	button(dst, b0, btnGo, "", 0, false)
 	say(dst, "Rest", b0.x+30, b0.y+28, 28, colBone, 0)
@@ -580,9 +607,10 @@ func (g *Game) drawEnd(dst *ebiten.Image) {
 	cy := g.h/2 - 200
 	if r.Won {
 		glow(dst, W/2, cy, 260, colYellow, 0.4)
-		ribbon(dst, W/2, cy, 400, "CONQUERED", rgb(0x6a, 0x4a, 0x14))
+		ribbon(dst, W/2, cy-(1-backOut(g.enter(0.1, 0.5)))*200, 400, "CONQUERED", rgb(0x6a, 0x4a, 0x14))
 	} else {
-		ribbon(dst, W/2, cy, 340, "YOU DIED", rgb(0x4a, 0x08, 0x10))
+		fillRect(dst, 0, 0, W, g.h, alpha(rgb(0x40, 0x00, 0x08), 0.4*g.enter(0, 1)))
+		ribbon(dst, W/2, cy-(1-easeOut(g.enter(0.3, 0.9)))*40, 340, "YOU DIED", alpha(rgb(0x4a, 0x08, 0x10), g.enter(0.3, 0.9)))
 	}
 	say(dst, "Reached floor "+itoa(r.floor())+" of "+itoa(mapRows+1), W/2, cy+76, 24, colBone, 0.5)
 	pr := rect{90, cy + 110, 360, 120}

@@ -130,6 +130,9 @@ func drawCard(dst *ebiten.Image, c Card, x, y, w float64, dim bool, t float64) {
 
 // cardArt draws illustration a centred at (x,y); s is about half its size.
 func cardArt(dst *ebiten.Image, a int, x, y, s, t float64, rarity int) {
+	if litArt(dst, a, x, y, s/30, t, rarity) {
+		return
+	}
 	k := s / 30
 	switch a {
 	case aSword:

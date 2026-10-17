@@ -72,6 +72,11 @@ func button(dst *ebiten.Image, r rect, c color.RGBA, label string, size float64,
 	if off {
 		c = rgb(0x40, 0x3e, 0x48)
 	}
+	pressed := pressOn && !off && r.has(pressX, pressY)
+	if pressed {
+		r.y += 3
+		c = light(c, 0.15)
+	}
 	k := math.Min(12, r.h/3.5)
 	shadow(dst, r.cx(), r.y+r.h+2, r.w*0.55, 10, 0.6)
 	fillPath(dst, chamfer(r.grow(3.5), k+3), colInk)
@@ -84,6 +89,18 @@ func button(dst *ebiten.Image, r rect, c color.RGBA, label string, size float64,
 			x := r.cx() + d*(r.w/2+3)
 			shape(dst, []float64{x, r.cy() - 7, x + d*9, r.cy(), x, r.cy() + 7}, colGoldHi, colGoldLo, 1)
 		}
+	}
+	if !off { // a slow shimmer runs across live buttons
+		ph := math.Mod(animT*0.3+r.x*0.003+r.y*0.001, 1)
+		if ph < 0.22 {
+			f := ph / 0.22
+			sx := r.x - 40 + f*(r.w+80)
+			sub := clip(dst, r)
+			shape(sub, []float64{sx, r.y, sx + 22, r.y, sx - 8, r.y + r.h, sx - 30, r.y + r.h}, alpha(colWhite, 0.16), alpha(colWhite, 0.04), 0)
+		}
+	}
+	if pressed {
+		glow(dst, r.cx(), r.cy(), r.w*0.5, light(c, 0.4), 0.35)
 	}
 	if label != "" {
 		if !off {
@@ -187,11 +204,20 @@ func chestIcon(dst *ebiten.Image, x, y, s float64, royal bool) {
 
 // hpBar draws a framed health bar with tick marks and the numbers on it.
 func hpBar(dst *ebiten.Image, x, y, w float64, hp, maxHP int, c color.RGBA) {
+	hpBarT(dst, x, y, w, hp, maxHP, float64(hp), c)
+}
+
+// hpBarT also shows recent damage as a pale chunk that drains away (trail >= hp).
+func hpBarT(dst *ebiten.Image, x, y, w float64, hp, maxHP int, trail float64, c color.RGBA) {
 	r := rect{x - w/2, y, w, 20}
 	fillPath(dst, chamfer(r.grow(3.5), 7), colInk)
 	goldEdge(dst, chamfer(r.grow(2.5), 6), chamfer(r.grow(1), 5))
 	fillPath(dst, chamfer(r, 4), rgb(0x08, 0x06, 0x0a))
 	f := math.Max(0, math.Min(1, float64(hp)/float64(max(1, maxHP))))
+	if tf := math.Min(1, trail/float64(max(1, maxHP))); tf > f {
+		tr := rect{r.x + r.w*f, r.y, r.w * (tf - f), r.h}
+		fillPath(dst, chamfer(tr, 3), rgb(0xf0, 0xd0, 0xa0))
+	}
 	if f > 0 {
 		fr := rect{r.x, r.y, math.Max(8, r.w*f), r.h}
 		texPath(dst, chamfer(fr, 4), light(c, 0.15), shade(c, 0.4))
