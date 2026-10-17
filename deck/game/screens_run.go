@@ -132,11 +132,14 @@ func (g *Game) hudClick(x, y float64) {
 
 func (g *Game) drawHUD(dst *ebiten.Image, home bool) {
 	r := g.run()
-	gradRect(dst, 0, 0, W, 112, alpha(rgb(0x10, 0x10, 0x24), 0.85), clear)
+	texRect(dst, 0, 0, W, 76, rgb(0x1e, 0x1a, 0x24), rgb(0x0c, 0x0a, 0x10))
+	gradRect(dst, 0, 74, W, 3, colGold, colGoldLo)
+	gradRect(dst, 0, 77, W, 40, alpha(colInk, 0.8), clear)
 	if home {
 		hb := g.hudHome()
-		button(dst, hb, colBlue, "", 0, false)
-		shape(dst, []float64{hb.cx(), hb.y + 10, hb.cx() + 16, hb.y + 24, hb.cx() + 11, hb.y + 24, hb.cx() + 11, hb.y + 38, hb.cx() - 11, hb.y + 38, hb.cx() - 11, hb.y + 24, hb.cx() - 16, hb.y + 24}, colWhite, colCream, 2)
+		button(dst, hb, btnStone, "", 0, false)
+		cx, cy := hb.cx(), hb.cy()
+		shape(dst, []float64{cx - 13, cy + 12, cx - 13, cy - 2, cx, cy - 14, cx + 13, cy - 2, cx + 13, cy + 12, cx + 4, cy + 12, cx + 4, cy + 3, cx - 4, cy + 3, cx - 4, cy + 12}, colGoldHi, colGoldLo, 1.2)
 	}
 	hr := rect{84, 22, 130, 36}
 	pill(dst, hr, itoa(r.HP)+"/"+itoa(r.Max))
@@ -145,10 +148,12 @@ func (g *Game) drawHUD(dst *ebiten.Image, home bool) {
 	pill(dst, cr, itoa(r.Coins))
 	coinIcon(dst, cr.x+8, cr.cy(), 14)
 	db := g.hudDeck()
-	button(dst, db, rgb(0x5a, 0x6a, 0xc8), "", 0, false)
-	roundRect(dst, rect{db.x + 12, db.y + 10, 18, 26}, 4, colInk)
-	roundGrad(dst, rect{db.x + 14, db.y + 12, 14, 22}, 3, colCream, rgb(0xe0, 0xc8, 0x98))
-	say(dst, "Deck "+itoa(len(r.Deck)), db.x+db.w/2+12, db.y+(db.h-6)/2, 18, colWhite, 0.5)
+	button(dst, db, btnStone, "", 0, false)
+	dk := chamfer(rect{db.x + 13, db.y + 12, 15, 24}, 3)
+	strokePath(dst, dk, 2.4, colInk)
+	texPath(dst, dk, rgb(0x5a, 0x4a, 0x3a), rgb(0x22, 0x1a, 0x12))
+	strokePath(dst, dk, 1, colGold)
+	say(dst, "Deck "+itoa(len(r.Deck)), db.x+db.w/2+12, db.y+(db.h-6)/2, 18, colBone, 0.5)
 	say(dst, chapterName(r.Chapter), 20, 88, 17, colCream, 0)
 	for i, c := range r.Charms {
 		charmIcon(dst, c, W-30-float64(i)*36, 88, 14, g.t())
@@ -237,24 +242,27 @@ func (g *Game) drawMap(dst *ebiten.Image) {
 			glow(dst, x, y, rad*2.2, colYellow, 0.4+0.3*p)
 			rad *= 1 + 0.08*p
 		}
-		base := []color.RGBA{rgb(0xd8, 0x5a, 0x4a), rgb(0x9a, 0x4a, 0xd8), rgb(0xff, 0xb8, 0x30), rgb(0xff, 0x8a, 0x30), rgb(0x4a, 0x9a, 0xe8), rgb(0xe8, 0xc0, 0x40), rgb(0xc8, 0x30, 0x40)}[n.Kind]
-		if n.Done || (!can && r.Cur >= 0 && n.Row <= r.Nodes[r.Cur].Row) {
-			base = mix(base, rgb(0x60, 0x60, 0x70), 0.7)
+		base := []color.RGBA{rgb(0x8a, 0x2a, 0x22), rgb(0x5a, 0x1a, 0x7a), rgb(0x8a, 0x6a, 0x20), rgb(0x9a, 0x4a, 0x14), rgb(0x1e, 0x4a, 0x7a), rgb(0x7a, 0x5a, 0x1a), rgb(0x9a, 0x10, 0x18)}[n.Kind]
+		old := n.Done || (!can && r.Cur >= 0 && n.Row <= r.Nodes[r.Cur].Row)
+		if old {
+			base = mix(base, rgb(0x20, 0x1e, 0x24), 0.75)
 		}
-		shadow(dst, x, y+rad*0.9, rad, rad*0.3, 0.35)
-		orb(dst, x, y, rad, rad, light(base, 0.15))
-		disc(dst, x, y, rad*0.78, rad*0.78, alpha(colInk, 0.35))
-		nodeIcon(dst, n.Kind, x, y, rad*0.9, t)
+		shadow(dst, x, y+rad*0.7, rad*1.2, rad*0.4, 0.7)
+		medallion(dst, x, y, rad, base, n.Kind == nBoss)
+		nodeIcon(dst, n.Kind, x, y, rad*0.82, t)
+		if old {
+			disc(dst, x, y, rad*0.86, rad*0.86, alpha(colInk, 0.5))
+		}
 		if n.Done {
 			shape(dst, []float64{x + rad*0.2, y + rad*0.5, x + rad*0.9, y - rad*0.3, x + rad*1.05, y - rad*0.1, x + rad*0.25, y + rad*0.85, x - rad*0.2, y + rad*0.35, x - rad*0.05, y + rad*0.2}, colGreen, shade(colGreen, 0.7), 2)
 		}
 		if i == r.Cur {
-			drawHero(g.heroSpr.buf(), 130, 240, t, 0)
-			g.heroSpr.stamp(dst, x, y-rad*0.4, 130, 240, 0.42, 1, 1, 1, 0)
+			drawHero(g.heroSpr.buf(), 150, 260, t, 0)
+			g.heroSpr.stamp(dst, x, y-rad*0.4, 150, 260, 0.42, 1, 1, 1, 0)
 		}
 	}
 	if r.Cur < 0 {
-		say(dst, "Choose your path", W/2, g.h-60, 24, colWhite, 0.5)
+		say(dst, "Choose your path", W/2, g.h-60, 24, colBone, 0.5)
 	}
 	g.drawParticles(dst)
 	g.drawHUD(dst, true)
@@ -302,11 +310,11 @@ func (g *Game) drawReward(dst *ebiten.Image) {
 		glow(dst, W/2, 260, 140, colYellow, 0.4)
 		chestIcon(dst, W/2, 270, 0.9, true)
 	}
-	ribbon(dst, W/2, 150, 360, title, colYellow)
+	ribbon(dst, W/2, 150, 360, title, rgb(0x6a, 0x14, 0x1c))
 	lp := rect{60, g.lootY(), 420, 0}
 	rows := []func(float64){func(yy float64) {
 		coinIcon(dst, lp.x+34, yy, 14)
-		say(dst, "+"+itoa(r.RewardCoins)+" coins", lp.x+60, yy, 22, colWhite, 0)
+		say(dst, "+"+itoa(r.RewardCoins)+" coins", lp.x+60, yy, 22, colBone, 0)
 	}}
 	if r.RewardGold > 0 {
 		rows = append(rows, func(yy float64) {
@@ -318,7 +326,7 @@ func (g *Game) drawReward(dst *ebiten.Image) {
 		ch := charmByID(r.RewardCharm)
 		rows = append(rows, func(yy float64) {
 			charmIcon(dst, r.RewardCharm, lp.x+34, yy, 16, t)
-			say(dst, ch.Name, lp.x+60, yy-8, 20, colYellow, 0)
+			say(dst, ch.Name, lp.x+60, yy-8, 20, colGoldHi, 0)
 			drawText(dst, ch.Desc, lp.x+60, yy+13, 14, colCream, 0)
 		})
 	}
@@ -328,15 +336,15 @@ func (g *Game) drawReward(dst *ebiten.Image) {
 		f(lp.y + 30 + float64(i)*50)
 	}
 	if len(r.Choices) > 0 {
-		say(dst, "Add a card to your deck", W/2, g.rewardY()-30, 22, colWhite, 0.5)
+		say(dst, "Add a card to your deck", W/2, g.rewardY()-30, 22, colBone, 0.5)
 		for i, c := range r.Choices {
 			cr := g.rewardCard(i)
 			glow(dst, cr.cx(), cr.cy(), 110, rarityCol[c.def().Rarity], 0.3)
 			drawCard(dst, c, cr.x, cr.y, cr.w, false, t)
 		}
-		button(dst, g.rewardBtn(), colGrey, "Skip", 24, false)
+		button(dst, g.rewardBtn(), btnStone, "Skip", 24, false)
 	} else {
-		button(dst, g.rewardBtn(), colGreen, "Continue", 28, false)
+		button(dst, g.rewardBtn(), btnGo, "Continue", 28, false)
 	}
 	g.drawParticles(dst)
 }
@@ -370,24 +378,30 @@ func (g *Game) drawShop(dst *ebiten.Image) {
 	r := g.run()
 	t := g.t()
 	g.drawMapUnder(dst)
-	gradRect(dst, 0, 0, W, g.h, alpha(rgb(0x20, 0x10, 0x10), 0.6), alpha(rgb(0x10, 0x08, 0x10), 0.85))
-	// awning
-	for i := 0; i < 9; i++ {
-		c := []color.RGBA{rgb(0xe8, 0x4a, 0x4a), rgb(0xff, 0xf0, 0xd8)}[i%2]
-		x := float64(i) * 60
-		shape(dst, []float64{x, 110, x + 60, 110, x + 60, 150, x + 30, 166, x, 150}, light(c, 0.1), shade(c, 0.8), 2)
+	gradRect(dst, 0, 0, W, g.h, alpha(rgb(0x10, 0x08, 0x08), 0.8), alpha(rgb(0x04, 0x02, 0x06), 0.95))
+	glow(dst, W/2-60, 200, 220, colOrange, 0.2)
+	// beam with hanging banners
+	texRect(dst, 0, 100, W, 22, rgb(0x4a, 0x30, 0x1e), rgb(0x1e, 0x12, 0x0a))
+	gradRect(dst, 0, 122, W, 3, colInk, colInk)
+	for i := 0; i < 4; i++ {
+		x := 40 + float64(i)*140
+		c := []color.RGBA{rgb(0x6a, 0x14, 0x1c), rgb(0x2a, 0x1a, 0x3a)}[i%2]
+		shape(dst, []float64{x, 122, x + 50, 122, x + 50, 186, x + 25, 172, x, 186}, shade(c, 1.1), shade(c, 0.4), 1.4)
+		strokePath(dst, pathOf([]float64{x + 4, 126, x + 46, 126, x + 46, 178, x + 25, 166, x + 4, 178}), 1, alpha(colGold, 0.6))
+		setGem(dst, x+25, 144, 4, colOrange)
 	}
 	merchant(dst, W/2, 262, t)
 	roundRect(dst, rect{-4, 250, W + 8, 34}, 6, colInk)
-	roundGrad(dst, rect{0, 253, W, 28}, 4, rgb(0xb8, 0x7a, 0x44), rgb(0x6a, 0x40, 0x20))
+	texRect(dst, 0, 253, W, 28, rgb(0x5a, 0x3a, 0x22), rgb(0x22, 0x14, 0x0a))
+	gradRect(dst, 0, 253, W, 2, colGold, colGold)
 	for i, o := range r.Shop {
 		rr := g.offerRect(i)
 		var tag rect
 		if o.Charm != "" {
 			ch := charmByID(o.Charm)
-			panel(dst, rr, rgb(0x5a, 0x40, 0x8a), rgb(0x2e, 0x1e, 0x50), 14)
+			frame(dst, rr, rgb(0x2a, 0x1a, 0x30), colPurple, false)
 			charmIcon(dst, o.Charm, rr.x+32, rr.y+34, 20, t)
-			drawText(dst, wrap(ch.Name, 12), rr.x+100, rr.y+30, 15, colWhite, 0.5)
+			drawText(dst, wrap(ch.Name, 12), rr.x+100, rr.y+30, 15, colBone, 0.5)
 			tag = rect{rr.x + 60, rr.y + 54, 96, 26}
 		} else {
 			glow(dst, rr.cx(), rr.cy(), 80, rarityCol[o.Card.def().Rarity], 0.2)
@@ -399,11 +413,12 @@ func (g *Game) drawShop(dst *ebiten.Image) {
 			continue
 		}
 		roundRect(dst, tag.grow(2), 10, colInk)
-		roundGrad(dst, tag, 9, rgb(0xff, 0xf0, 0xc8), rgb(0xe0, 0xc0, 0x80))
+		fillPath(dst, chamfer(tag, 6), rgb(0x14, 0x10, 0x0c))
+		strokePath(dst, chamfer(tag, 6), 1, colGold)
 		coinIcon(dst, tag.x+14, tag.cy(), 9)
-		c := colInk
+		c := colGoldHi
 		if r.Coins < o.Price {
-			c = rgb(0xc0, 0x30, 0x30)
+			c = rgb(0xd0, 0x40, 0x40)
 		}
 		drawText(dst, itoa(o.Price), tag.cx()+8, tag.cy(), 17, c, 0.5)
 	}
@@ -415,16 +430,16 @@ func (g *Game) drawShop(dst *ebiten.Image) {
 	for i := range labels {
 		b := g.serviceBtn(i)
 		button(dst, b, shade(cols[i], 0.9), "", 0, used[i])
-		say(dst, labels[i], b.cx(), b.y+18, 20, colWhite, 0.5)
-		drawText(dst, subs[i], b.cx(), b.y+38, 13, colWhite, 0.5)
+		say(dst, labels[i], b.cx(), b.y+18, 20, colBone, 0.5)
+		drawText(dst, subs[i], b.cx(), b.y+38, 13, colBone, 0.5)
 		if used[i] {
-			say(dst, "used", b.cx(), b.y+56, 15, colWhite, 0.5)
+			say(dst, "used", b.cx(), b.y+56, 15, colBone, 0.5)
 		} else {
 			coinIcon(dst, b.cx()-18, b.y+57, 8)
-			say(dst, itoa(prices[i]), b.cx()+8, b.y+57, 16, colWhite, 0.5)
+			say(dst, itoa(prices[i]), b.cx()+8, b.y+57, 16, colBone, 0.5)
 		}
 	}
-	button(dst, g.leaveBtn(), colBlue, "Leave", 28, false)
+	button(dst, g.leaveBtn(), btnArcane, "Leave", 28, false)
 	g.drawHUD(dst, false)
 }
 
@@ -436,26 +451,26 @@ func (g *Game) drawRest(dst *ebiten.Image) {
 	r := g.run()
 	t := g.t()
 	g.drawMapUnder(dst)
-	gradRect(dst, 0, 0, W, g.h, alpha(rgb(0x08, 0x0c, 0x28), 0.8), alpha(rgb(0x10, 0x08, 0x18), 0.9))
+	gradRect(dst, 0, 0, W, g.h, alpha(rgb(0x04, 0x04, 0x0c), 0.88), alpha(rgb(0x08, 0x04, 0x06), 0.95))
 	for i := 0; i < 40; i++ {
 		x := math.Mod(float64(i)*137.5, W)
 		y := math.Mod(float64(i)*71.3, 300) + 110
 		circle(dst, x, y, 1.2+math.Mod(float64(i), 3)*0.5, alpha(colWhite, 0.4+0.4*math.Sin(t*2+float64(i))))
 	}
-	ribbon(dst, W/2, 170, 320, "CAMPFIRE", colOrange)
+	ribbon(dst, W/2, 170, 320, "CAMPFIRE", rgb(0x7a, 0x30, 0x10))
 	campfire(dst, W/2+70, 500, 1.5, t)
-	drawHero(g.heroSpr.buf(), 130, 240, t, 0)
-	g.heroSpr.stamp(dst, W/2-130, 520, 130, 240, 1.2, 1, 1, 1, 0)
+	drawHero(g.heroSpr.buf(), 150, 260, t, 0)
+	g.heroSpr.stamp(dst, W/2-130, 520, 150, 260, 1.2, 1, 1, 1, 0)
 	b0 := g.restBtn(0)
-	button(dst, b0, colGreen, "", 0, false)
-	say(dst, "Rest", b0.x+30, b0.y+28, 28, colWhite, 0)
-	drawText(dst, "Heal "+itoa(r.restHeal())+" HP", b0.x+30, b0.y+58, 16, colWhite, 0)
+	button(dst, b0, btnGo, "", 0, false)
+	say(dst, "Rest", b0.x+30, b0.y+28, 28, colBone, 0)
+	drawText(dst, "Heal "+itoa(r.restHeal())+" HP", b0.x+30, b0.y+58, 16, colBone, 0)
 	heartIcon(dst, b0.x+b0.w-50, b0.y+40, 20, colRed)
 	b1 := g.restBtn(1)
 	e := enhDefs[r.ForgeEnh]
 	button(dst, b1, shade(e.Col, 0.85), "", 0, false)
-	say(dst, "Forge", b1.x+30, b1.y+28, 28, colWhite, 0)
-	drawText(dst, "Make one card "+e.Name+": "+e.Desc, b1.x+30, b1.y+58, 15, colWhite, 0)
+	say(dst, "Forge", b1.x+30, b1.y+28, 28, colBone, 0)
+	drawText(dst, "Make one card "+e.Name+": "+e.Desc, b1.x+30, b1.y+58, 15, colBone, 0)
 	cardArt(dst, aHammer, b1.x+b1.w-50, b1.y+40, 22, t, 0)
 	drawText(dst, "Skip", g.leaveBtn().cx(), g.leaveBtn().cy(), 20, alpha(colWhite, 0.7), 0.5)
 	g.drawParticles(dst)
@@ -477,18 +492,19 @@ func (g *Game) drawEvent(dst *ebiten.Image) {
 	art := rect{44, 144, 452, 230}
 	roundRect(dst, art.grow(3), 12, colInk)
 	sub := clip(dst, art)
-	radial(sub, art.cx(), art.cy(), art.w*0.7, art.h, 0, -0.1, rgb(0x8a, 0x7a, 0xe8), rgb(0x1e, 0x16, 0x4a))
+	radial(sub, art.cx(), art.cy(), art.w*0.7, art.h, 0, -0.1, rgb(0x3a, 0x2a, 0x4a), rgb(0x06, 0x04, 0x0a))
+	runeCircle(sub, art.cx(), art.cy(), 100, t, colPurple, 0.3)
 	for i := 0; i < 12; i++ {
 		a := float64(i)*math.Pi/6 + t*0.1
 		shape(sub, []float64{art.cx(), art.cy(), art.cx() + math.Cos(a)*500, art.cy() + math.Sin(a)*500, art.cx() + math.Cos(a+0.18)*500, art.cy() + math.Sin(a+0.18)*500}, alpha(colWhite, 0.08), clear, 0)
 	}
 	eventArt(sub, r.Event, art.cx(), art.cy(), t)
-	say(dst, ev.Title, W/2, 410, 32, colYellow, 0.5)
+	say(dst, ev.Title, W/2, 410, 32, colGoldHi, 0.5)
 	drawText(dst, wrap(ev.Text, 40), W/2, 470, 19, colCream, 0.5)
 	if g.eventMsg != "" {
 		roundRect(dst, rect{44, 520, 452, 60}, 12, alpha(colInk, 0.5))
-		say(dst, wrap(g.eventMsg, 36), W/2, 550, 19, colWhite, 0.5)
-		button(dst, g.eventBtn(0), colGreen, "Continue", 26, false)
+		say(dst, wrap(g.eventMsg, 36), W/2, 550, 19, colBone, 0.5)
+		button(dst, g.eventBtn(0), btnGo, "Continue", 26, false)
 		return
 	}
 	for i, ch := range ev.Choices {
@@ -521,7 +537,7 @@ func (g *Game) drawCardList(dst *ebiten.Image, title string) {
 	r := g.run()
 	t := g.t()
 	fillRect(dst, 0, 0, W, g.h, color.RGBA{0x08, 0x0a, 0x1c, 0xe8})
-	say(dst, title, W/2, 110, 26, colYellow, 0.5)
+	say(dst, title, W/2, 110, 26, colGoldHi, 0.5)
 	area := rect{0, 150, W, g.h - 270}
 	sub := clip(dst, area)
 	for i, c := range r.Deck {
@@ -540,12 +556,12 @@ func (g *Game) drawPick(dst *ebiten.Image) {
 		title = "Choose a card to make " + enhDefs[r.ForgeEnh].Name
 	}
 	g.drawCardList(dst, title)
-	button(dst, g.closeBtn(), colGrey, "Back", 26, false)
+	button(dst, g.closeBtn(), btnStone, "Back", 26, false)
 }
 
 func (g *Game) drawDeckView(dst *ebiten.Image) {
 	g.drawCardList(dst, "Your deck: "+itoa(len(g.run().Deck))+" cards")
-	button(dst, g.closeBtn(), colBlue, "Close", 26, false)
+	button(dst, g.closeBtn(), btnArcane, "Close", 26, false)
 }
 
 // ---- end of a run ----
@@ -564,29 +580,29 @@ func (g *Game) drawEnd(dst *ebiten.Image) {
 	cy := g.h/2 - 200
 	if r.Won {
 		glow(dst, W/2, cy, 260, colYellow, 0.4)
-		ribbon(dst, W/2, cy, 400, "CHAPTER CLEAR!", colYellow)
+		ribbon(dst, W/2, cy, 400, "CONQUERED", rgb(0x6a, 0x4a, 0x14))
 	} else {
-		ribbon(dst, W/2, cy, 340, "DEFEATED", colRed)
+		ribbon(dst, W/2, cy, 340, "YOU DIED", rgb(0x4a, 0x08, 0x10))
 	}
-	say(dst, "Reached floor "+itoa(r.floor())+" of "+itoa(mapRows+1), W/2, cy+76, 24, colWhite, 0.5)
+	say(dst, "Reached floor "+itoa(r.floor())+" of "+itoa(mapRows+1), W/2, cy+76, 24, colBone, 0.5)
 	pr := rect{90, cy + 110, 360, 120}
 	panel(dst, pr, rgb(0x3a, 0x4e, 0x96), rgb(0x22, 0x2c, 0x5c), 16)
-	say(dst, "REWARDS", pr.cx(), pr.y+24, 20, colYellow, 0.5)
+	say(dst, "REWARDS", pr.cx(), pr.y+24, 20, colGoldHi, 0.5)
 	coinIcon(dst, pr.cx()-100, pr.y+76, 18)
-	say(dst, itoa(r.Gold), pr.cx()-74, pr.y+76, 30, colWhite, 0)
+	say(dst, itoa(r.Gold), pr.cx()-74, pr.y+76, 30, colBone, 0)
 	gemIcon(dst, pr.cx()+52, pr.y+76, 16)
-	say(dst, itoa(r.Gems), pr.cx()+76, pr.y+76, 30, colWhite, 0)
+	say(dst, itoa(r.Gems), pr.cx()+76, pr.y+76, 30, colBone, 0)
 	bs := g.endBtns()
 	if r.Lost && !r.Revived {
-		button(dst, bs[0], colBlue, "", 0, g.p.Gems < reviveGems)
-		say(dst, "REVIVE", bs[0].cx(), bs[0].y+22, 24, colWhite, 0.5)
+		button(dst, bs[0], btnArcane, "", 0, g.p.Gems < reviveGems)
+		say(dst, "REVIVE", bs[0].cx(), bs[0].y+22, 24, colBone, 0.5)
 		gemIcon(dst, bs[0].cx()-16, bs[0].y+50, 9)
-		say(dst, itoa(reviveGems), bs[0].cx()+10, bs[0].y+50, 18, colWhite, 0.5)
-		button(dst, bs[1], colGreen, "", 0, false)
-		say(dst, "REVIVE", bs[1].cx(), bs[1].y+22, 24, colWhite, 0.5)
-		say(dst, "watch ad", bs[1].cx(), bs[1].y+50, 16, colWhite, 0.5)
-		button(dst, bs[2], colYellow, "HOME", 28, false)
+		say(dst, itoa(reviveGems), bs[0].cx()+10, bs[0].y+50, 18, colBone, 0.5)
+		button(dst, bs[1], btnGo, "", 0, false)
+		say(dst, "REVIVE", bs[1].cx(), bs[1].y+22, 24, colBone, 0.5)
+		say(dst, "watch ad", bs[1].cx(), bs[1].y+50, 16, colBone, 0.5)
+		button(dst, bs[2], btnFire, "HOME", 28, false)
 		return
 	}
-	button(dst, bs[0], colYellow, "HOME", 30, false)
+	button(dst, bs[0], btnFire, "HOME", 30, false)
 }

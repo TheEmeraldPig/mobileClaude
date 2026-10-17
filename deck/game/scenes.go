@@ -10,258 +10,308 @@ import (
 
 const groundY = 300.0 // horizon line in battle
 
-// ridge returns a smooth wavy height for backgrounds.
+// ridge returns a wavy height for skylines.
 func ridge(x float64, seed float64) float64 {
-	return math.Sin(x*0.011+seed)*0.5 + math.Sin(x*0.023+seed*2.1)*0.3 + math.Sin(x*0.051+seed*3.7)*0.2
+	return math.Sin(x*0.011+seed)*0.5 + math.Sin(x*0.023+seed*2.1)*0.3 + math.Sin(x*0.061+seed*3.7)*0.2
 }
 
-func ridgePoly(w, base, amp, seed, bottom float64) []float64 {
+func ridgePoly(w, base, amp, seed, bottom float64, jag bool) []float64 {
 	pts := []float64{0, bottom}
-	for x := 0.0; x <= w+10; x += 10 {
-		pts = append(pts, x, base-amp*(0.5+0.5*ridge(x, seed)))
+	for x := 0.0; x <= w+12; x += 12 {
+		y := base - amp*(0.5+0.5*ridge(x, seed))
+		if jag && int(x/12)%2 == 1 {
+			y -= amp * 0.12
+		}
+		pts = append(pts, x, y)
 	}
 	return append(pts, w, bottom)
 }
 
-func tree(dst *ebiten.Image, x, y, s float64, leaf color.RGBA) {
-	shadow(dst, x, y, 20*s, 5*s, 0.25)
-	roundRect(dst, rect{x - 5*s, y - 30*s, 10 * s, 32 * s}, 3*s, colInk)
-	roundGrad(dst, rect{x - 3.5*s, y - 30*s, 7 * s, 30 * s}, 2*s, rgb(0x9a, 0x62, 0x38), rgb(0x5a, 0x34, 0x1a))
-	for _, b := range [][3]float64{{-12, -34, 15}, {12, -36, 14}, {0, -50, 18}} {
-		orb(dst, x+b[0]*s, y+b[1]*s, b[2]*s, b[2]*s*0.92, leaf)
+// deadTree is a twisted, leafless silhouette.
+func deadTree(dst *ebiten.Image, x, y, s float64, c color.RGBA, rng *rand.Rand) {
+	var branch func(x0, y0, ang, l, w float64, d int)
+	branch = func(x0, y0, ang, l, w float64, d int) {
+		x1, y1 := x0+math.Cos(ang)*l, y0+math.Sin(ang)*l
+		cx, cy := (x0+x1)/2+(rng.Float64()-0.5)*l*0.4, (y0+y1)/2+(rng.Float64()-0.5)*l*0.3
+		curve(dst, x0, y0, cx, cy, x1, y1, w, c)
+		if d == 0 || w < 1 {
+			return
+		}
+		n := 2 + rng.Intn(2)
+		for i := 0; i < n; i++ {
+			branch(x1, y1, ang+(rng.Float64()-0.5)*1.4, l*(0.55+rng.Float64()*0.2), w*0.62, d-1)
+		}
 	}
+	branch(x, y, -math.Pi/2+(rng.Float64()-0.5)*0.3, 46*s, 8*s, 4)
 }
 
-func pine(dst *ebiten.Image, x, y, s float64, leaf color.RGBA, snow bool) {
-	roundGrad(dst, rect{x - 3*s, y - 14*s, 6 * s, 14 * s}, 2*s, rgb(0x8a, 0x5a, 0x34), rgb(0x5a, 0x34, 0x1a))
-	for i := 0; i < 3; i++ {
-		w, yy := (24-float64(i)*6)*s, y-12*s-float64(i)*14*s
-		shape(dst, []float64{x - w, yy, x, yy - 24*s, x + w, yy}, light(leaf, 0.15), shade(leaf, 0.6), 2*s)
+func pine(dst *ebiten.Image, x, y, s float64, c color.RGBA, snow bool) {
+	line(dst, x, y, x, y-14*s, 4*s, c)
+	for i := 0; i < 4; i++ {
+		w, yy := (22-float64(i)*5)*s, y-10*s-float64(i)*13*s
+		shape(dst, []float64{x - w, yy, x - w*0.4, yy - 8*s, x, yy - 24*s, x + w*0.4, yy - 8*s, x + w, yy}, c, c, 0)
 		if snow {
-			shape(dst, []float64{x - w*0.45, yy - 13*s, x, yy - 24*s, x + w*0.45, yy - 13*s}, colWhite, rgb(0xd8, 0xe8, 0xf8), 0)
+			shape(dst, []float64{x - w*0.5, yy - 10*s, x, yy - 24*s, x + w*0.5, yy - 10*s, x, yy - 14*s}, alpha(colWhite, 0.7), alpha(colWhite, 0.4), 0)
 		}
 	}
 }
 
-// battleBG paints a chapter's arena: sky, far mountains, themed scenery, a tiled floor.
+func spire(dst *ebiten.Image, x, base, w, h float64, c color.RGBA, win color.RGBA) {
+	shape(dst, []float64{x - w/2, base, x - w/2, base - h, x - w/2 - 6, base - h, x, base - h - w*1.6, x + w/2 + 6, base - h, x + w/2, base - h, x + w/2, base}, c, c, 0)
+	for i := 0; i < int(h/40); i++ {
+		wy := base - h + 20 + float64(i)*40
+		glow(dst, x, wy, 12, win, 0.5)
+		shape(dst, []float64{x - 3, wy + 6, x - 3, wy - 2, x, wy - 6, x + 3, wy - 2, x + 3, wy + 6}, light(win, 0.3), win, 0)
+	}
+}
+
+func moonOf(idx int) color.RGBA {
+	switch idx {
+	case 2:
+		return rgb(0xff, 0x9a, 0x50)
+	case 3, 5:
+		return rgb(0xff, 0x50, 0x50)
+	case 1:
+		return rgb(0xc0, 0x9a, 0xff)
+	}
+	return rgb(0xd8, 0xe4, 0xff)
+}
+
+// battleBG paints a chapter's arena: night sky, moon, skylines, themed scenery,
+// fog, a stone floor and a heavy vignette.
 func battleBG(ch int, w, h float64) *ebiten.Image {
 	img := ebiten.NewImage(int(w*S), int(h*S))
 	th := chapterTheme(ch)
 	idx := (ch - 1) % len(themes)
 	seed := float64(ch) * 1.7
-	gradRect(img, 0, 0, w, groundY+20, th.Sky1, th.Sky2)
-	sunC := rgb(0xff, 0xf4, 0xc0)
-	if idx == 1 || idx == 5 {
-		sunC = rgb(0xd8, 0xd0, 0xff)
-	}
-	glow(img, w*0.78, 96, 120, sunC, 0.55)
-	disc(img, w*0.78, 96, 30, 30, alpha(sunC, 0.95))
-	// far mountains
-	shape(img, ridgePoly(w, groundY-70, 150, seed, groundY+20), mix(th.Far, th.Sky2, 0.25), mix(th.Far, th.Sky2, 0.6), 0)
-	if idx == 4 || idx == 0 {
-		for x := 40.0; x < w; x += 140 {
-			pk := groundY - 70 - 150*(0.5+0.5*ridge(x, seed))
-			shape(img, []float64{x - 22, pk + 26, x, pk, x + 22, pk + 26}, alpha(colWhite, 0.8), alpha(colWhite, 0.3), 0)
-		}
-	}
-	// near hills
-	shape(img, ridgePoly(w, groundY-10, 70, seed+4, groundY+30), th.Near, shade(th.Near, 0.75), 0)
 	rng := rand.New(rand.NewSource(int64(ch)))
+	gradRect(img, 0, 0, w, groundY+30, th.Sky1, th.Sky2)
+	for i := 0; i < 60; i++ { // stars
+		circle(img, rng.Float64()*w, rng.Float64()*groundY*0.7, 0.6+rng.Float64(), alpha(colWhite, 0.3+rng.Float64()*0.5))
+	}
+	moon := moonOf(idx)
+	mx, my := w*0.72, 110.0
+	glow(img, mx, my, 170, moon, 0.35)
+	radial(img, mx, my, 34, 34, -0.3, -0.3, light(moon, 0.5), shade(moon, 0.75))
+	for _, c := range [][3]float64{{-10, -6, 6}, {8, 10, 4}, {12, -12, 3}} {
+		disc(img, mx+c[0], my+c[1], c[2], c[2], alpha(shade(moon, 0.7), 0.6))
+	}
+	for i := 0; i < 3; i++ { // cloud streaks across the moon
+		y := 80 + float64(i)*36
+		gradRect(img, 0, y, w, 10, clear, alpha(th.Sky2, 0.7))
+		gradRect(img, 0, y+10, w, 8, alpha(th.Sky2, 0.7), clear)
+	}
+	far := ridgePoly(w, groundY-60, 160, seed, groundY+30, idx == 4 || idx == 2)
+	shape(img, far, mix(th.Far, th.Sky2, 0.3), th.Far, 0)
+	strokePath(img, pathOf(far[2:len(far)-2]), 1.2, alpha(light(moon, 0.2), 0.25))
+	gradRect(img, 0, groundY-90, w, 80, clear, alpha(th.Sky2, 0.35))
+	near := ridgePoly(w, groundY-8, 60, seed+4, groundY+30, false)
+	shape(img, near, th.Near, shade(th.Near, 0.6), 0)
+	sil := shade(th.Near, 0.55)
 	switch idx {
-	case 0: // woods
-		for x := 10.0; x < w; x += 44 + rng.Float64()*30 {
-			y := groundY - 10 - 70*(0.5+0.5*ridge(x, seed+4)) + 18
-			tree(img, x, y, 0.7+rng.Float64()*0.4, th.Leaf)
+	case 0: // haunted woods
+		for x := 10.0; x < w; x += 50 + rng.Float64()*40 {
+			deadTree(img, x, groundY+6, 0.8+rng.Float64()*0.6, sil, rng)
 		}
-	case 1: // caves: stalactites and crystals
-		for x := 0.0; x < w; x += 30 + rng.Float64()*30 {
-			l := 30 + rng.Float64()*70
-			shape(img, []float64{x - 14, 0, x + 14, 0, x + 2, l}, shade(th.Far, 0.9), shade(th.Far, 0.5), 1.5)
+	case 1: // crypt arches
+		for x := 20.0; x < w; x += 120 {
+			shape(img, []float64{x, groundY + 10, x, groundY - 110, x + 20, groundY - 110, x + 20, groundY + 10}, sil, sil, 0)
+			p := []float64{x + 20, groundY - 110}
+			for a := 0.0; a <= math.Pi; a += 0.2 {
+				p = append(p, x+70-math.Cos(a)*50, groundY-110-math.Sin(a)*40)
+			}
+			p = append(p, x+120, groundY-110, x+120, groundY-130, x+20, groundY-130)
+			shape(img, p, sil, sil, 0)
+			glow(img, x+70, groundY-30, 30, colOrange, 0.4)
+			disc(img, x+70, groundY-36, 3, 6, rgb(0xff, 0xd0, 0x80))
 		}
-		for i := 0; i < 6; i++ {
-			x, y := rng.Float64()*w, groundY-10+rng.Float64()*20
-			c := hue(0.55 + rng.Float64()*0.25)
-			glow(img, x, y-14, 30, c, 0.5)
-			shape(img, []float64{x - 8, y, x - 4, y - 30, x + 2, y - 38, x + 8, y}, light(c, 0.4), shade(c, 0.6), 1.5)
-		}
-	case 2: // pass: mesas and cacti
-		for x := 30.0; x < w; x += 160 + rng.Float64()*60 {
-			hh := 60 + rng.Float64()*50
-			shape(img, []float64{x - 50, groundY + 10, x - 36, groundY - hh, x + 36, groundY - hh, x + 50, groundY + 10}, light(th.Near, 0.1), shade(th.Near, 0.6), 2)
-		}
-		for x := 70.0; x < w; x += 120 + rng.Float64()*80 {
-			y := groundY + 6
-			c := rgb(0x5a, 0xa0, 0x4a)
-			roundRect(img, rect{x - 9, y - 50, 18, 52}, 9, colInk)
-			roundGrad(img, rect{x - 7, y - 48, 14, 48}, 7, light(c, 0.2), shade(c, 0.7))
-			roundRect(img, rect{x + 6, y - 38, 18, 10}, 5, colInk)
-			roundRect(img, rect{x + 14, y - 50, 10, 20}, 5, colInk)
-			roundGrad(img, rect{x + 7, y - 36, 16, 6}, 3, c, shade(c, 0.7))
-			roundGrad(img, rect{x + 16, y - 48, 6, 16}, 3, c, shade(c, 0.7))
-		}
-	case 3: // swamp: dead trees and fog
-		for x := 30.0; x < w; x += 90 + rng.Float64()*60 {
-			y := groundY + 8
-			c := rgb(0x4a, 0x3a, 0x34)
-			line(img, x, y, x+4, y-70, 9, colInk)
-			line(img, x, y, x+4, y-70, 6, c)
-			line(img, x+2, y-40, x-20, y-60, 6, colInk)
-			line(img, x+2, y-40, x-20, y-60, 3, c)
-			line(img, x+4, y-56, x+24, y-80, 6, colInk)
-			line(img, x+4, y-56, x+24, y-80, 3, c)
+	case 2: // ashen pass: jagged rocks and lava
+		for x := 0.0; x < w; x += 70 + rng.Float64()*50 {
+			hh := 40 + rng.Float64()*80
+			shape(img, []float64{x - 30, groundY + 10, x - 12, groundY - hh, x, groundY - hh - 20, x + 10, groundY - hh + 10, x + 34, groundY + 10}, sil, sil, 0)
 		}
 		for i := 0; i < 3; i++ {
-			gradRect(img, 0, groundY-30+float64(i)*14, w, 26, alpha(colWhite, 0), alpha(colWhite, 0.18))
+			lx := 60 + float64(i)*180
+			glow(img, lx, groundY+4, 60, colOrange, 0.5)
+			shape(img, []float64{lx - 40, groundY + 2, lx + 40, groundY + 2, lx + 20, groundY + 8, lx - 30, groundY + 8}, rgb(0xff, 0xc0, 0x40), rgb(0xff, 0x50, 0x10), 0)
 		}
-	case 4: // frost: snowy pines
-		for x := 10.0; x < w; x += 40 + rng.Float64()*30 {
-			y := groundY - 10 - 70*(0.5+0.5*ridge(x, seed+4)) + 16
-			pine(img, x, y, 0.8+rng.Float64()*0.4, th.Leaf, true)
+	case 3: // blood marsh
+		for x := 30.0; x < w; x += 90 + rng.Float64()*60 {
+			deadTree(img, x, groundY+8, 0.7+rng.Float64()*0.4, sil, rng)
 		}
-	case 5: // keep: towers with lit windows
-		for x := 40.0; x < w; x += 130 + rng.Float64()*40 {
-			hh := 90 + rng.Float64()*60
-			c := shade(th.Far, 0.8)
-			roundGrad(img, rect{x - 24, groundY - hh, 48, hh + 10}, 2, light(c, 0.1), shade(c, 0.6))
-			for i := 0; i < 4; i++ {
-				roundRect(img, rect{x - 26 + float64(i)*14, groundY - hh - 12, 10, 14}, 1, c)
-			}
-			for i := 0; i < 2; i++ {
-				wy := groundY - hh + 24 + float64(i)*34
-				glow(img, x, wy, 14, colOrange, 0.6)
-				roundRect(img, rect{x - 5, wy - 7, 10, 14}, 4, rgb(0xff, 0xc8, 0x60))
-			}
+		for i := 0; i < 4; i++ {
+			gradRect(img, 0, groundY-40+float64(i)*14, w, 26, clear, alpha(rgb(0x6a, 0x20, 0x30), 0.18))
+		}
+	case 4: // frozen wastes
+		for x := 0.0; x < w; x += 34 + rng.Float64()*30 {
+			pine(img, x, groundY+8, 0.8+rng.Float64()*0.5, sil, true)
+		}
+	case 5: // shadow keep
+		for x := 40.0; x < w; x += 110 + rng.Float64()*40 {
+			spire(img, x, groundY+10, 30+rng.Float64()*16, 90+rng.Float64()*90, sil, rgb(0xff, 0x6a, 0x30))
 		}
 	}
-	// floor
-	gradRect(img, 0, groundY, w, h-groundY, th.Ground1, th.Ground2)
+	gradRect(img, 0, groundY-30, w, 50, clear, alpha(mix(th.Sky2, colWhite, 0.1), 0.25))
+	// stone floor in perspective
+	texRect(img, 0, groundY, w, h-groundY, th.Ground1, th.Ground2)
 	rows := []float64{groundY}
-	for y, step := groundY, 20.0; y < h; step *= 1.22 {
+	for y, step := groundY, 18.0; y < h; step *= 1.24 {
 		y += step
 		rows = append(rows, y)
 	}
 	for i := 0; i+1 < len(rows); i++ {
 		y0, y1 := rows[i], rows[i+1]
-		n := 9
-		for j := -n; j <= n; j++ {
-			xa0 := w/2 + float64(j)*(w/8)*(0.6+(y0-groundY)/400)
-			xa1 := w/2 + float64(j+1)*(w/8)*(0.6+(y0-groundY)/400)
-			xb0 := w/2 + float64(j)*(w/8)*(0.6+(y1-groundY)/400)
-			xb1 := w/2 + float64(j+1)*(w/8)*(0.6+(y1-groundY)/400)
-			v := 0.92 + rng.Float64()*0.16
+		for j := -10; j <= 10; j++ {
+			sp0, sp1 := (w/7)*(0.6+(y0-groundY)/380), (w/7)*(0.6+(y1-groundY)/380)
+			off := float64(i%2) * 0.5
+			xa0, xa1 := w/2+(float64(j)+off)*sp0, w/2+(float64(j+1)+off)*sp0
+			xb0, xb1 := w/2+(float64(j)+off)*sp1, w/2+(float64(j+1)+off)*sp1
+			v := 0.75 + rng.Float64()*0.4
 			c := shade(mix(th.Ground1, th.Ground2, (y0-groundY)/(h-groundY)), v)
-			shape(img, []float64{xa0 + 1, y0 + 1, xa1 - 1, y0 + 1, xb1 - 1, y1 - 1, xb0 + 1, y1 - 1}, light(c, 0.06), shade(c, 0.92), 0)
+			texPath(img, pathOf([]float64{xa0 + 1, y0 + 1, xa1 - 1, y0 + 1, xb1 - 1, y1 - 1, xb0 + 1, y1 - 1}), light(c, 0.08), shade(c, 0.8))
+			if rng.Intn(9) == 0 { // a crack
+				cx := (xa0 + xb1) / 2
+				line(img, cx-6, y0+4, cx+4, (y0+y1)/2, 1, alpha(colInk, 0.6))
+			}
 		}
 	}
-	gradRect(img, 0, groundY, w, 30, alpha(colInk, 0.35), clear)
-	// spotlight on the arena and a vignette
-	radial(img, w*0.5, 470, 260, 130, 0, 0, alpha(colWhite, 0.12), clear)
-	gradRect(img, 0, h-260, w, 260, clear, alpha(colInk, 0.55))
+	gradRect(img, 0, groundY, w, 40, alpha(colInk, 0.5), clear)
+	radial(img, w*0.5, 520, 280, 140, 0, 0, alpha(light(moon, 0.1), 0.12), clear)
+	vignette(img, w, h, 0.75)
 	return img
 }
 
-// mapBG paints the run's map: themed ground with scenery dotted around.
+// mapBG paints the run's map: dark ground, scattered silhouettes, drifting fog.
 func mapBG(r *Run, w, h float64) *ebiten.Image {
 	img := ebiten.NewImage(int(w*S), int(h*S))
 	th := chapterTheme(r.Chapter)
 	idx := (r.Chapter - 1) % len(themes)
-	gradRect(img, 0, 0, w, h, mix(th.Ground1, th.Sky2, 0.25), shade(th.Ground2, 0.9))
+	texRect(img, 0, 0, w, h, light(th.Ground1, 0.12), shade(th.Ground2, 0.9))
 	rng := rand.New(rand.NewSource(r.Seed))
-	for i := 0; i < 26; i++ { // soft patches
+	for i := 0; i < 30; i++ {
 		x, y := rng.Float64()*w, rng.Float64()*h
-		radial(img, x, y, 60+rng.Float64()*80, 30+rng.Float64()*40, 0, 0, alpha(light(th.Leaf, 0.2), 0.35), clear)
+		radial(img, x, y, 70+rng.Float64()*90, 30+rng.Float64()*40, 0, 0, alpha(light(th.Leaf, 0.15), 0.35), clear)
 	}
-	for i := 0; i < 34; i++ {
+	for i := 0; i < 50; i++ { // cracks and old roads
 		x, y := rng.Float64()*w, rng.Float64()*h
-		if x > 60 && x < w-60 && rng.Intn(3) > 0 {
-			continue // keep the middle clear for the paths
+		a := rng.Float64() * math.Pi
+		line(img, x, y, x+math.Cos(a)*30, y+math.Sin(a)*30, 1, alpha(colInk, 0.35))
+	}
+	sil := shade(th.Near, 0.7)
+	for i := 0; i < 36; i++ {
+		x, y := rng.Float64()*w, rng.Float64()*h
+		if x > 50 && x < w-50 && rng.Intn(4) > 0 {
+			continue
 		}
-		s := 0.5 + rng.Float64()*0.35
+		s := 0.4 + rng.Float64()*0.3
+		shadow(img, x, y, 24*s, 6*s, 0.5)
 		switch idx {
 		case 4:
-			pine(img, x, y, s, th.Leaf, true)
+			pine(img, x, y, s, sil, true)
 		case 1, 5:
-			orb(img, x, y, 14*s, 10*s, shade(th.Far, 1.2))
+			spire(img, x, y, 14*s, 40*s, sil, rgb(0xff, 0x6a, 0x30))
 		default:
-			tree(img, x, y, s, th.Leaf)
+			deadTree(img, x, y, s, sil, rng)
 		}
 	}
+	for i := 0; i < 8; i++ {
+		y := rng.Float64() * h
+		gradRect(img, 0, y, w, 40, clear, alpha(th.Sky2, 0.18))
+		gradRect(img, 0, y+40, w, 40, alpha(th.Sky2, 0.18), clear)
+	}
+	vignette(img, w, h, 0.5)
 	return img
 }
 
-// homeSky paints the home screen sky.
-func homeSky(dst *ebiten.Image, w, h, t float64) {
-	gradRect(dst, 0, 0, w, h, rgb(0x4c, 0xb8, 0xff), rgb(0xc8, 0xee, 0xff))
-	cx, cy := w*0.8, 120.0
-	for i := 0; i < 12; i++ {
-		a := float64(i)*math.Pi/6 + t*0.08
-		shape(dst, []float64{cx, cy, cx + math.Cos(a)*900, cy + math.Sin(a)*900, cx + math.Cos(a+0.16)*900, cy + math.Sin(a+0.16)*900}, alpha(colWhite, 0.14), clear, 0)
+// homeScene paints the home screen: a moonlit cliff over a ruined kingdom.
+func homeScene(dst *ebiten.Image, w, h, t float64) {
+	gradRect(dst, 0, 0, w, h*0.6, rgb(0x06, 0x06, 0x10), rgb(0x2a, 0x1c, 0x34))
+	for i := 0; i < 90; i++ {
+		x := math.Mod(float64(i)*137.5, w)
+		y := math.Mod(float64(i)*61.7, h*0.5)
+		circle(dst, x, y, 0.6+math.Mod(float64(i), 3)*0.4, alpha(colWhite, 0.25+0.35*(0.5+0.5*math.Sin(t*1.5+float64(i)))))
 	}
-	glow(dst, cx, cy, 140, rgb(0xff, 0xf6, 0xc0), 0.7)
-	disc(dst, cx, cy, 36, 36, rgb(0xff, 0xf8, 0xd8))
+	mx, my := w*0.74, 150.0
+	glow(dst, mx, my, 220, rgb(0xff, 0x70, 0x60), 0.3)
+	radial(dst, mx, my, 56, 56, -0.3, -0.3, rgb(0xff, 0xd8, 0xc8), rgb(0xd0, 0x50, 0x50))
+	for _, c := range [][3]float64{{-16, -10, 9}, {14, 16, 6}, {20, -18, 5}} {
+		disc(dst, mx+c[0], my+c[1], c[2], c[2], alpha(rgb(0xa0, 0x30, 0x30), 0.5))
+	}
+	for i := 0; i < 4; i++ {
+		x := math.Mod(float64(i)*190+t*6, w+260) - 130
+		y := 200 + float64(i)*60
+		radial(dst, x, y, 150, 14, 0, 0, alpha(rgb(0x40, 0x30, 0x50), 0.6), clear)
+	}
+	// ruined castle on the horizon
+	hz := h * 0.52
+	far := ridgePoly(w, hz-30, 90, 3, hz+40, true)
+	shape(dst, far, rgb(0x1a, 0x12, 0x22), rgb(0x0e, 0x0a, 0x14), 0)
+	for i, x := range []float64{w * 0.18, w * 0.27, w * 0.36, w * 0.8} {
+		spire(dst, x, hz+10, 22+float64(i%2)*10, 90+float64(i%3)*50, rgb(0x0c, 0x08, 0x12), rgb(0xff, 0x60, 0x30))
+	}
+	gradRect(dst, 0, hz-20, w, 80, clear, alpha(rgb(0x50, 0x30, 0x50), 0.4))
+	gradRect(dst, 0, hz+40, w, h-hz, rgb(0x0c, 0x0a, 0x12), rgb(0x04, 0x04, 0x08))
+}
+
+// cliff is the rocky ledge the hero stands on at home, with a brazier.
+func cliff(dst *ebiten.Image, x, y, w, t float64) {
+	rock := rgb(0x2a, 0x26, 0x30)
+	pts := []float64{x - w, y + 4, x - w*0.8, y - 6, x - w*0.4, y - 10, x, y - 8, x + w*0.5, y - 12, x + w*0.9, y - 4, x + w, y + 8, x + w*0.85, y + 60, x + w*0.5, y + 110, x + w*0.1, y + 150, x - w*0.3, y + 120, x - w*0.7, y + 70}
+	texPath(dst, pathOf(pts), light(rock, 0.15), shade(rock, 0.3))
+	strokePath(dst, pathOf(pts), 2, colInk)
 	for i := 0; i < 6; i++ {
-		x := math.Mod(float64(i)*230+t*10*(1+float64(i%3)*0.3), w+300) - 150
-		y := 140 + float64(i)*140
-		cloud(dst, x, y, 0.8+float64(i%3)*0.3)
+		cx := x - w*0.6 + float64(i)*w*0.25
+		line(dst, cx, y+10, cx+8, y+50+float64(i%3)*20, 1.2, alpha(colInk, 0.6))
 	}
+	gradPath(dst, pathOf([]float64{x - w, y + 4, x - w*0.8, y - 6, x - w*0.4, y - 10, x, y - 8, x + w*0.5, y - 12, x + w*0.9, y - 4, x + w, y + 8}), alpha(rgb(0xff, 0x90, 0x70), 0.25), clear)
+	// brazier
+	bx, by := x+w*0.62, y-12
+	glow(dst, bx, by-30, 110, colOrange, 0.35+0.05*math.Sin(t*8))
+	shape(dst, []float64{bx - 18, by - 30, bx + 18, by - 30, bx + 10, by - 14, bx + 4, by, bx - 4, by, bx - 10, by - 14}, rgb(0x5a, 0x5a, 0x66), rgb(0x16, 0x16, 0x1e), 1.4)
+	flames(dst, bx, by-30, 16, t)
 }
 
 func cloud(dst *ebiten.Image, x, y, s float64) {
-	for _, b := range [][3]float64{{-34, 6, 24}, {0, -6, 32}, {34, 6, 24}, {14, 10, 22}} {
-		radial(dst, x+b[0]*s, y+b[1]*s, b[2]*s, b[2]*s*0.85, -0.2, -0.4, colWhite, rgb(0xd0, 0xe4, 0xf8))
-	}
+	radial(dst, x, y, 120*s, 16*s, 0, 0, alpha(rgb(0x40, 0x30, 0x50), 0.6), clear)
 }
 
-// island is the floating grass island the hero stands on at home.
-func island(dst *ebiten.Image, x, y, w float64, t float64) {
-	bob := math.Sin(t*1.2) * 4
-	y += bob
-	shape(dst, []float64{x - w, y, x - w*0.6, y + 70, x - w*0.2, y + 110, x + w*0.25, y + 96, x + w*0.6, y + 64, x + w, y}, rgb(0xb0, 0x7a, 0x4a), rgb(0x5a, 0x3a, 0x22), 3)
-	for _, r := range [][3]float64{{-0.5, 40, 9}, {0.2, 70, 7}, {0.55, 34, 6}} {
-		orb(dst, x+r[0]*w, y+r[1], r[2], r[2]*0.8, rgb(0x9a, 0x9a, 0xa8))
-	}
-	radial(dst, x, y, w+3, 30, 0, 0, colInk, colInk)
-	radial(dst, x, y-2, w, 26, -0.2, -0.5, rgb(0x9a, 0xe8, 0x5a), rgb(0x3a, 0x9a, 0x30))
-	for i := 0; i < 7; i++ {
-		fx := x - w*0.8 + float64(i)*w*0.27
-		fy := y - 4 + math.Sin(float64(i)*2)*8
-		c := []color.RGBA{colRed, colYellow, colWhite, colPurple}[i%4]
-		line(dst, fx, fy, fx, fy-8, 2, rgb(0x2a, 0x7a, 0x2a))
-		orb(dst, fx, fy-10, 3.5, 3.5, c)
-	}
-}
-
-// merchant draws the shopkeeper behind a counter.
+// merchant draws the hooded shopkeeper with a lantern.
 func merchant(dst *ebiten.Image, x, y, t float64) {
-	bob := math.Sin(t*2) * 2
-	// backpack
-	orb(dst, x+40, y-80+bob, 34, 40, rgb(0x9a, 0x6a, 0x3a))
-	orb(dst, x+44, y-128+bob, 14, 10, rgb(0xd8, 0x4a, 0x4a))
-	// robe
-	shape(dst, []float64{x - 44, y, x - 30, y - 90 + bob, x + 30, y - 90 + bob, x + 44, y}, rgb(0x7a, 0x4a, 0xc8), rgb(0x3a, 0x1e, 0x6a), 3)
-	// hood
-	orb(dst, x, y-112+bob, 34, 32, rgb(0x6a, 0x3a, 0xb8))
-	disc(dst, x, y-106+bob, 24, 20, rgb(0x1a, 0x10, 0x2a))
-	for _, d := range []float64{-1, 1} {
-		glow(dst, x+d*9, y-108+bob, 10, colYellow, 0.9)
-		disc(dst, x+d*9, y-108+bob, 4, 3+math.Max(0, math.Sin(t*0.7))*1.5, rgb(0xff, 0xf0, 0x90))
+	sway := math.Sin(t*1.6) * 2
+	coat := rgb(0x3a, 0x2a, 0x30)
+	shape(dst, []float64{x + 18, y - 120 + sway, x + 70, y - 110, x + 74, y - 50, x + 30, y - 46}, rgb(0x5a, 0x40, 0x2a), rgb(0x24, 0x18, 0x10), 1.4)
+	for i := 0; i < 3; i++ {
+		line(dst, x+30, y-110+float64(i)*20+sway, x+70, y-104+float64(i)*20, 1.2, alpha(colInk, 0.6))
 	}
-	// coin in hand
-	coinIcon(dst, x-38, y-60+bob+math.Sin(t*3)*4, 10)
+	shape(dst, []float64{x - 46, y, x - 34, y - 100 + sway, x - 20, y - 116 + sway, x + 20, y - 116 + sway, x + 34, y - 100 + sway, x + 46, y}, light(coat, 0.1), shade(coat, 0.3), 1.6)
+	line(dst, x, y-110+sway, x, y-4, 1.4, alpha(colGold, 0.5))
+	hood := []float64{x - 30, y - 104 + sway, x - 26, y - 140 + sway, x - 6, y - 162 + sway, x + 18, y - 148 + sway, x + 30, y - 104 + sway}
+	shape(dst, hood, light(coat, 0.15), shade(coat, 0.35), 1.6)
+	blob(dst, []float64{x - 18, y - 112 + sway, x - 14, y - 136 + sway, x + 12, y - 138 + sway, x + 18, y - 112 + sway}, rgb(0x04, 0x02, 0x06), rgb(0x08, 0x04, 0x0a), 0)
+	for _, d := range []float64{-1, 1} {
+		glowEye(dst, x+d*7, y-126+sway, 2.6, colYellow)
+	}
+	// lantern
+	lx, ly := x-54, y-70+math.Sin(t*2)*3
+	line(dst, x-28, y-86+sway, lx, ly-24, 3, colInk)
+	glow(dst, lx, ly, 80, colOrange, 0.5)
+	shape(dst, []float64{lx - 10, ly - 18, lx + 10, ly - 18, lx + 12, ly + 14, lx - 12, ly + 14}, alpha(rgb(0xff, 0xd0, 0x80), 0.9), rgb(0xff, 0x80, 0x20), 1.6)
+	shape(dst, []float64{lx - 13, ly - 24, lx + 13, ly - 24, lx + 10, ly - 18, lx - 10, ly - 18}, rgb(0x6a, 0x6a, 0x76), rgb(0x1a, 0x1a, 0x22), 1.2)
+	shape(dst, []float64{lx - 13, ly + 14, lx + 13, ly + 14, lx + 13, ly + 19, lx - 13, ly + 19}, rgb(0x6a, 0x6a, 0x76), rgb(0x1a, 0x1a, 0x22), 1.2)
 }
 
-// campfire draws a fire with logs and a warm glow.
+// campfire draws a fire with logs, stones and a warm glow.
 func campfire(dst *ebiten.Image, x, y, s, t float64) {
-	glow(dst, x, y-20*s, 160*s, colOrange, 0.35+0.05*math.Sin(t*7))
-	shadow(dst, x, y+6*s, 60*s, 12*s, 0.4)
-	for i := 0; i < 7; i++ {
-		a := float64(i) / 7 * 2 * math.Pi
-		orb(dst, x+math.Cos(a)*44*s, y+math.Sin(a)*12*s, 9*s, 7*s, rgb(0x9a, 0x9a, 0xa8))
+	glow(dst, x, y-20*s, 170*s, colOrange, 0.4+0.06*math.Sin(t*7))
+	shadow(dst, x, y+6*s, 64*s, 12*s, 0.6)
+	for i := 0; i < 8; i++ {
+		a := float64(i) / 8 * 2 * math.Pi
+		orb(dst, x+math.Cos(a)*46*s, y+math.Sin(a)*12*s, 9*s, 7*s, rgb(0x4a, 0x46, 0x52))
 	}
-	line(dst, x-40*s, y+6*s, x+40*s, y-8*s, 13*s, colInk)
-	line(dst, x-40*s, y+6*s, x+40*s, y-8*s, 9*s, rgb(0x8a, 0x5a, 0x30))
-	line(dst, x+40*s, y+6*s, x-40*s, y-8*s, 13*s, colInk)
-	line(dst, x+40*s, y+6*s, x-40*s, y-8*s, 9*s, rgb(0x7a, 0x4a, 0x24))
+	line(dst, x-40*s, y+6*s, x+40*s, y-8*s, 12*s, colInk)
+	line(dst, x-40*s, y+6*s, x+40*s, y-8*s, 9*s, rgb(0x4a, 0x2a, 0x18))
+	line(dst, x+40*s, y+6*s, x-40*s, y-8*s, 12*s, colInk)
+	line(dst, x+40*s, y+6*s, x-40*s, y-8*s, 9*s, rgb(0x3a, 0x22, 0x14))
 	flames(dst, x, y-6*s, 34*s, t)
 	flames(dst, x-14*s, y-2*s, 18*s, t+1.3)
 	flames(dst, x+14*s, y-2*s, 20*s, t+2.1)
@@ -275,7 +325,7 @@ type particle struct {
 	size         float64
 	col          color.RGBA
 	grav         float64
-	kind         int // 0 dot, 1 star, 2 ring
+	kind         int // 0 spark, 1 star, 2 ring
 }
 
 func (p *particle) step() bool {
@@ -291,12 +341,12 @@ func (p *particle) draw(dst *ebiten.Image) {
 	f := p.life / p.max
 	switch p.kind {
 	case 0:
-		glow(dst, p.x, p.y, p.size*2.2, p.col, 0.6*f)
-		circle(dst, p.x, p.y, p.size*f, alpha(light(p.col, 0.4), f))
+		glow(dst, p.x, p.y, p.size*2.4, p.col, 0.6*f)
+		circle(dst, p.x, p.y, p.size*f*0.8, alpha(light(p.col, 0.5), f))
 	case 1:
 		r := p.size * (0.5 + f*0.5)
-		shape(dst, []float64{p.x, p.y - r, p.x + r*0.25, p.y - r*0.25, p.x + r, p.y, p.x + r*0.25, p.y + r*0.25, p.x, p.y + r, p.x - r*0.25, p.y + r*0.25, p.x - r, p.y, p.x - r*0.25, p.y - r*0.25}, alpha(colWhite, f), alpha(p.col, f), 0)
+		shape(dst, []float64{p.x, p.y - r, p.x + r*0.2, p.y - r*0.2, p.x + r, p.y, p.x + r*0.2, p.y + r*0.2, p.x, p.y + r, p.x - r*0.2, p.y + r*0.2, p.x - r, p.y, p.x - r*0.2, p.y - r*0.2}, alpha(colWhite, f), alpha(p.col, f), 0)
 	case 2:
-		strokeCircle(dst, p.x, p.y, p.size*(1.6-f), 4*f, alpha(p.col, f))
+		strokeCircle(dst, p.x, p.y, p.size*(1.6-f), 3*f, alpha(p.col, f))
 	}
 }

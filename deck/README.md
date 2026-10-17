@@ -19,13 +19,16 @@ Spire-style fights, Balatro-style deck customisation, Archero-style menus.
   ad, gem packs. Real-money items are free placeholders until Google Play Billing is added.
 - A run in progress is saved, so closing the app doesn't lose it.
 
-All art is drawn in code (shaded shapes, gradients, glows) at the screen's real pixel
-resolution: `S` in `art.go` maps the 540-wide layout to pixels.
+The look is dark fantasy, all drawn in code at the screen's real pixel resolution
+(`S` in `art.go` maps the 540-wide layout to pixels): textured stone and iron, gold
+trim (`ui.go`: `frame`, `button`, `ribbon`), moonlit arenas (`scenes.go`), a dark knight
+and monsters (`characters.go`). Keep new screens dark, detailed and sharp-edged.
 
 Code: `game/cards.go` (cards, rules, charms, enemies, chapters), `game/run.go` (map,
 run, merchant, events), `game/battle.go` (fights), `game/profile.go` (save, collection,
 energy, shop), `game/game.go` (input, flow, effects), `game/screens_*.go` (screens),
-`game/art.go` (drawing kit), `game/characters.go`, `game/cardart.go`, `game/scenes.go`. Font: Lilita One, SIL Open Font License (`game/FONT_LICENSE.txt`).
+`game/art.go` (drawing kit), `game/ui.go` (frames, buttons, icons), `game/characters.go`,
+`game/cardart.go`, `game/scenes.go`. Fonts: Cinzel and Barlow Condensed, SIL Open Font License (`game/FONT_LICENSE.txt`).
 
 ## Run and test here
 

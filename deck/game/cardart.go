@@ -15,8 +15,8 @@ import (
 const cardW, cardH = 120.0, 168.0
 
 var kindBG = [][2]color.RGBA{
-	{rgb(0xff, 0x9a, 0x6a), rgb(0x9a, 0x2a, 0x2a)},
-	{rgb(0x8a, 0xd0, 0xff), rgb(0x22, 0x4a, 0xa0)},
+	{rgb(0x9a, 0x30, 0x24), rgb(0x1e, 0x06, 0x08)},
+	{rgb(0x24, 0x5a, 0x9a), rgb(0x06, 0x0c, 0x1e)},
 }
 
 // drawCard draws card c with its top-left at (x,y), w wide.
@@ -27,97 +27,104 @@ func drawCard(dst *ebiten.Image, c Card, x, y, w float64, dim bool, t float64) {
 	base := c.def()
 	rc := rarityCol[base.Rarity]
 	R := func(a, b, ww, hh float64) rect { return rect{x + a*s, y + b*s, ww * s, hh * s} }
+	full := R(0, 0, cardW, cardH)
 
-	// enhancement aura and drop shadow
 	if c.Enh != eNone {
 		ec := enhDefs[c.Enh].Col
 		if c.Enh == eHolo {
 			ec = hue(t*0.4 + x*0.003)
 		}
-		roundRect(dst, R(-6, -6, cardW+12, cardH+12), 18*s, alpha(ec, 0.45+0.2*math.Sin(t*4)))
+		glow(dst, full.cx(), full.cy(), w*0.9, ec, 0.35+0.15*math.Sin(t*4))
 	}
-	roundRect(dst, R(-2, 3, cardW+4, cardH+4), 14*s, alpha(colInk, 0.45))
+	shadow(dst, full.cx(), full.y+full.h+2*s, w*0.6, 10*s, 0.7)
 	// frame
-	roundRect(dst, R(-3, -3, cardW+6, cardH+6), 15*s, colInk)
-	roundGrad(dst, R(0, 0, cardW, cardH), 12*s, light(rc, 0.35), shade(rc, 0.55))
-	roundGrad(dst, R(3, 3, cardW-6, 20), 9*s, alpha(colWhite, 0.4), clear)
+	fillPath(dst, chamfer(full.grow(3.5*s), 12*s), colInk)
+	goldEdge(dst, chamfer(full.grow(2.5*s), 11*s), chamfer(full.grow(1*s), 10*s))
+	texPath(dst, chamfer(full, 9*s), mix(rgb(0x30, 0x2c, 0x36), rc, 0.12), rgb(0x0c, 0x0a, 0x10))
+	if base.Rarity >= rRare {
+		strokePath(dst, chamfer(full.grow(-3*s), 7*s), 1.2*s, alpha(rc, 0.7))
+	}
 	if base.Rarity == rLegendary { // a light that runs around the frame
 		a := t * 2
-		px, py := x+w/2+math.Cos(a)*w*0.55, y+h/2+math.Sin(a)*h*0.55
-		glow(dst, math.Max(x, math.Min(x+w, px)), math.Max(y, math.Min(y+h, py)), 26*s, colWhite, 0.8)
+		px, py := full.cx()+math.Cos(a)*w*0.55, full.cy()+math.Sin(a)*h*0.55
+		glow(dst, math.Max(x, math.Min(x+w, px)), math.Max(y, math.Min(y+h, py)), 26*s, colGoldHi, 0.8)
 	}
 	// art window
-	aw := R(8, 26, cardW-16, 70)
-	roundRect(dst, aw.grow(2*s), 8*s, colInk)
+	aw := R(8, 24, cardW-16, 72)
+	fillPath(dst, chamfer(aw.grow(2*s), 6*s), colInk)
+	strokePath(dst, chamfer(aw.grow(1.5*s), 6*s), 1.2*s, colGoldLo)
 	bg := kindBG[d.Kind]
 	sub := clip(dst, aw)
-	radial(sub, aw.cx(), aw.cy(), aw.w*0.75, aw.h*0.95, 0, -0.1, bg[0], bg[1])
-	for i := 0; i < 8; i++ { // light rays behind the art
-		a := float64(i)*math.Pi/4 + t*0.15
+	radial(sub, aw.cx(), aw.cy(), aw.w*0.75, aw.h*0.95, 0, -0.15, bg[0], bg[1])
+	for i := 0; i < 8; i++ {
+		a := float64(i)*math.Pi/4 + t*0.12
 		cx, cy := aw.cx(), aw.cy()
-		shape(sub, []float64{cx, cy, cx + math.Cos(a)*w, cy + math.Sin(a)*w, cx + math.Cos(a+0.2)*w, cy + math.Sin(a+0.2)*w}, alpha(colWhite, 0.1), clear, 0)
+		shape(sub, []float64{cx, cy, cx + math.Cos(a)*w, cy + math.Sin(a)*w, cx + math.Cos(a+0.16)*w, cy + math.Sin(a+0.16)*w}, alpha(light(bg[0], 0.4), 0.12), clear, 0)
 	}
 	cardArt(sub, base.Art, aw.cx(), aw.cy()+2*s, 30*s, t, base.Rarity)
-	if c.Enh == eFoil || c.Enh == eHolo { // a shine sweeping across
+	if c.Enh == eFoil || c.Enh == eHolo {
 		sx := math.Mod(t*90*s, aw.w*3) - aw.w
-		col := alpha(colWhite, 0.35)
+		col := alpha(colWhite, 0.3)
 		if c.Enh == eHolo {
-			col = alpha(hue(t*0.5), 0.4)
+			col = alpha(hue(t*0.5), 0.35)
 		}
 		shape(sub, []float64{aw.x + sx, aw.y, aw.x + sx + 16*s, aw.y, aw.x + sx - 20*s, aw.y + aw.h, aw.x + sx - 36*s, aw.y + aw.h}, col, alpha(col, 0.3), 0)
 	}
-	roundGrad(dst, rect{aw.x, aw.y, aw.w, 14 * s}, 6*s, alpha(colWhite, 0.18), clear)
-	// name banner
-	nb := R(4, 5, cardW-8, 20)
-	roundRect(dst, nb.grow(1.5*s), 8*s, colInk)
-	roundGrad(dst, nb, 7*s, rgb(0x3a, 0x34, 0x5a), rgb(0x1e, 0x1a, 0x34))
-	ns := 14.5 * s
-	if tw := textWidth(base.Name, ns); tw > nb.w-26*s {
-		ns *= (nb.w - 26*s) / tw
+	gradRect(sub, aw.x, aw.y+aw.h*0.6, aw.w, aw.h*0.4, clear, alpha(colInk, 0.55))
+	// name
+	ns := 13.5 * s
+	if tw := titleWidth(base.Name, ns); tw > w-34*s {
+		ns *= (w - 34*s) / tw
 	}
-	drawText(dst, base.Name, nb.cx()+6*s, nb.cy(), ns, colWhite, 0.5)
+	drawFont(dst, fTitle, base.Name, x+w/2+5*s, y+13.5*s, ns, color.RGBA{0, 0, 0, 0xc0}, 0.5)
+	drawFont(dst, fTitle, base.Name, x+w/2+5*s, y+12.5*s, ns, colBone, 0.5)
+	gradRect(dst, x+14*s, y+22*s, w/2-14*s, 1.2*s, clear, rc)
+	gradRect(dst, x+w/2, y+22*s, w/2-14*s, 1.2*s, rc, clear)
 	// rules box
 	tb := R(8, 101, cardW-16, 58)
-	roundRect(dst, tb.grow(2*s), 7*s, colInk)
-	roundGrad(dst, tb, 6*s, rgb(0xff, 0xf8, 0xe8), rgb(0xf0, 0xdc, 0xb8))
+	fillPath(dst, chamfer(tb.grow(1.5*s), 5*s), colInk)
+	texPath(dst, chamfer(tb, 4*s), rgb(0x2e, 0x26, 0x1e), rgb(0x12, 0x0e, 0x0a))
+	gradRect(dst, tb.x+6*s, tb.y, tb.w-12*s, 1.2*s, alpha(colGold, 0.6), alpha(colGold, 0.6))
 	txt := c.text()
-	lines := 1
-	for _, ch := range txt {
-		if ch == '\n' {
-			lines++
-		}
-	}
+	lines := 1 + strings.Count(txt, "\n")
 	ts := 13.5 * s
 	if lines >= 4 {
 		ts = 11.5 * s
 	}
-	for _, ln := range strings.Split(txt, "\n") { // shrink long lines to fit the box
+	for _, ln := range strings.Split(txt, "\n") {
 		if tw := textWidth(ln, ts); tw > tb.w-6*s {
 			ts *= (tb.w - 6*s) / tw
 		}
 	}
-	drawText(dst, txt, tb.cx(), tb.cy(), ts, colInk, 0.5)
-	// cost orb
-	cc := rgb(0x3a, 0x8c, 0xff)
+	drawText(dst, txt, tb.cx(), tb.cy(), ts, colBone, 0.5)
+	// cost crystal
+	cc := colBlue
 	if d.Cost < base.Cost {
 		cc = colGreen
 	}
-	orb(dst, x+6*s, y+6*s, 14*s, 14*s, cc)
-	say(dst, itoa(d.Cost), x+6*s, y+5*s, 19*s, colWhite, 0.5)
+	cx, cy := x+5*s, y+5*s
+	hex := []float64{cx, cy - 15*s, cx + 13*s, cy - 7*s, cx + 13*s, cy + 7*s, cx, cy + 15*s, cx - 13*s, cy + 7*s, cx - 13*s, cy - 7*s}
+	glow(dst, cx, cy, 24*s, cc, 0.4)
+	shape(dst, scaleAround(hex, cx, cy, 1.18, 1.18), colGoldHi, colGoldLo, 1.2*s)
+	shape(dst, hex, light(cc, 0.35), shade(cc, 0.35), 0)
+	shape(dst, []float64{cx, cy - 15*s, cx + 13*s, cy - 7*s, cx, cy}, alpha(colWhite, 0.35), alpha(colWhite, 0.1), 0)
+	say(dst, itoa(d.Cost), cx, cy-1*s, 17*s, colWhite, 0.5)
 	// rarity gem
-	gx, gy := x+w/2, y+h-1*s
-	shape(dst, []float64{gx, gy - 7*s, gx + 7*s, gy, gx, gy + 7*s, gx - 7*s, gy}, light(rc, 0.4), shade(rc, 0.7), 1.8*s)
+	gx, gy := x+w/2, y+h+1*s
+	shape(dst, []float64{gx - 9*s, gy, gx, gy - 7*s, gx + 9*s, gy, gx, gy + 7*s}, colGoldHi, colGoldLo, 1.2*s)
+	shape(dst, []float64{gx - 5.5*s, gy, gx, gy - 4.5*s, gx + 5.5*s, gy, gx, gy + 4.5*s}, light(rc, 0.4), shade(rc, 0.5), 0)
+	glow(dst, gx, gy, 12*s, rc, 0.5)
 	// enhancement tag
 	if c.Enh != eNone {
 		ed := enhDefs[c.Enh]
-		tw := 44 * s
-		r := rect{x + w - tw - 2*s, y + h - 16*s, tw + 6*s, 18 * s}
-		roundRect(dst, r.grow(1.5*s), 8*s, colInk)
-		roundGrad(dst, r, 7*s, light(ed.Col, 0.3), shade(ed.Col, 0.8))
-		drawText(dst, ed.Name, r.cx(), r.cy(), 12*s, colInk, 0.5)
+		r := rect{x + w - 46*s, y + h - 14*s, 42 * s, 16 * s}
+		fillPath(dst, chamfer(r.grow(1.5*s), 5*s), colInk)
+		gradPath(dst, chamfer(r, 4*s), shade(ed.Col, 0.5), shade(ed.Col, 0.2))
+		strokePath(dst, chamfer(r, 4*s), 1*s, alpha(ed.Col, 0.9))
+		drawFont(dst, fTitle, ed.Name, r.cx(), r.cy(), 10*s, light(ed.Col, 0.4), 0.5)
 	}
 	if dim {
-		roundRect(dst, R(-3, -3, cardW+6, cardH+6), 15*s, color.RGBA{0x10, 0x10, 0x20, 0x90})
+		fillPath(dst, chamfer(full.grow(3.5*s), 12*s), color.RGBA{0x04, 0x02, 0x08, 0xa8})
 	}
 }
 
@@ -355,13 +362,22 @@ func burst(dst *ebiten.Image, x, y, r float64, c color.RGBA, t float64) {
 	}
 }
 
-// charmIcon draws a charm as a gem in a gold setting.
+// charmIcon draws a charm as an amulet: a gem in a gold hexagon.
 func charmIcon(dst *ebiten.Image, id string, x, y, r, t float64) {
 	ch := charmByID(id)
-	orb(dst, x, y, r, r, colGold)
-	orb(dst, x, y, r*0.7, r*0.7, ch.Col)
-	glow(dst, x, y, r*1.2, ch.Col, 0.25+0.1*math.Sin(t*3+x))
-	drawText(dst, string(ch.Name[0]), x, y, r*0.9, alpha(colWhite, 0.9), 0.5)
+	glow(dst, x, y, r*1.8, ch.Col, 0.3+0.1*math.Sin(t*3+x))
+	hex := func(k float64) []float64 {
+		var p []float64
+		for i := 0; i < 6; i++ {
+			a := float64(i)*math.Pi/3 - math.Pi/2
+			p = append(p, x+math.Cos(a)*r*k, y+math.Sin(a)*r*k)
+		}
+		return p
+	}
+	shape(dst, hex(1), colGoldHi, colGoldLo, 1.2)
+	shape(dst, hex(0.72), light(ch.Col, 0.3), shade(ch.Col, 0.3), 0)
+	shape(dst, []float64{x, y - r*0.72, x + r*0.62, y - r*0.36, x, y}, alpha(colWhite, 0.4), alpha(colWhite, 0.05), 0)
+	drawFont(dst, fTitle, string(ch.Name[0]), x, y+r*0.05, r*0.8, alpha(colWhite, 0.85), 0.5)
 }
 
 // nodeIcon draws a map node's symbol.
@@ -388,7 +404,8 @@ func nodeIcon(dst *ebiten.Image, kind int, x, y, r, t float64) {
 		line(dst, x+16*k, y+14*k, x-16*k, y+6*k, 5*k, rgb(0x6a, 0x3a, 0x18))
 		flames(dst, x, y+6*k, 16*k, t)
 	case nEvent:
-		say(dst, "?", x, y, 38*k, rgb(0x7a, 0xd0, 0xff), 0.5)
+		glow(dst, x, y, 22*k, colBlue, 0.5)
+		say(dst, "?", x, y, 34*k, rgb(0x9a, 0xd8, 0xff), 0.5)
 	case nTreasure:
 		chestIcon(dst, x, y+6*k, 0.34*k, false)
 	case nBoss:
@@ -405,28 +422,28 @@ func eventArt(dst *ebiten.Image, e int, x, y, t float64) {
 		shadow(dst, x, y+70, 110, 18, 0.4)
 		for _, d := range []float64{-1, 1} {
 			roundRect(dst, rect{x + d*70 - 7, y - 90, 14, 130}, 4, colInk)
-			roundGrad(dst, rect{x + d*70 - 5, y - 88, 10, 126}, 3, rgb(0x9a, 0x62, 0x38), rgb(0x5a, 0x34, 0x1a))
+			roundGrad(dst, rect{x + d*70 - 5, y - 88, 10, 126}, 3, rgb(0x4a, 0x30, 0x1e), rgb(0x1a, 0x10, 0x08))
 		}
-		shape(dst, []float64{x - 96, y - 74, x, y - 120, x + 96, y - 74, x + 86, y - 66, x - 86, y - 66}, rgb(0xd8, 0x5a, 0x4a), rgb(0x8a, 0x2a, 0x2a), 3)
+		shape(dst, []float64{x - 96, y - 74, x, y - 120, x + 96, y - 74, x + 86, y - 66, x - 86, y - 66}, rgb(0x3a, 0x1e, 0x1a), rgb(0x12, 0x08, 0x08), 3)
 		line(dst, x, y-70, x, y-20, 2, colInk)
 		roundRect(dst, rect{x - 12, y - 28, 24, 20}, 4, colInk)
-		roundGrad(dst, rect{x - 10, y - 26, 20, 16}, 3, rgb(0xb0, 0x7a, 0x44), rgb(0x6a, 0x40, 0x20))
+		roundGrad(dst, rect{x - 10, y - 26, 20, 16}, 3, rgb(0x4a, 0x34, 0x22), rgb(0x1e, 0x12, 0x0a))
 		radial(dst, x, y+14, 88, 30, 0, 0, colInk, colInk)
-		radial(dst, x, y+14, 82, 25, 0, -0.3, rgb(0x5a, 0xb8, 0xff), rgb(0x10, 0x30, 0x6a))
+		radial(dst, x, y+14, 82, 25, 0, -0.3, rgb(0x2a, 0x8a, 0x9a), rgb(0x04, 0x14, 0x1e))
 		for i := 0; i < 5; i++ {
 			gx := x - 50 + float64(i)*25
 			sparkle(dst, gx, y+14+math.Sin(float64(i))*8, 6, t+float64(i))
 		}
 		for i := 0; i < 11; i++ {
 			a := float64(i)/11*math.Pi + 0.05
-			orb(dst, x-math.Cos(a)*88, y+30+math.Sin(a)*26, 15, 12, rgb(0xa8, 0xa8, 0xb8))
+			orb(dst, x-math.Cos(a)*88, y+30+math.Sin(a)*26, 15, 12, rgb(0x4a, 0x48, 0x54))
 		}
 	case 1: // blood altar
 		glow(dst, x, y-10, 140, colRed, 0.45+0.1*math.Sin(t*3))
 		roundRect(dst, rect{x - 92, y + 6, 184, 60}, 10, colInk)
-		roundGrad(dst, rect{x - 89, y + 9, 178, 54}, 8, rgb(0x8a, 0x8a, 0x9a), rgb(0x3a, 0x3a, 0x48))
+		roundGrad(dst, rect{x - 89, y + 9, 178, 54}, 8, rgb(0x4a, 0x48, 0x54), rgb(0x16, 0x14, 0x1a))
 		roundRect(dst, rect{x - 110, y - 10, 220, 22}, 8, colInk)
-		roundGrad(dst, rect{x - 107, y - 7, 214, 16}, 6, rgb(0xa8, 0xa8, 0xb8), rgb(0x5a, 0x5a, 0x6a))
+		roundGrad(dst, rect{x - 107, y - 7, 214, 16}, 6, rgb(0x5a, 0x58, 0x64), rgb(0x22, 0x20, 0x28))
 		for i := 0; i < 3; i++ {
 			rx := x - 50 + float64(i)*50
 			glow(dst, rx, y+36, 18, colRed, 0.8)
@@ -445,13 +462,13 @@ func eventArt(dst *ebiten.Image, e int, x, y, t float64) {
 		merchant(dst, x, y+96, t)
 	case 3: // fairy spring
 		radial(dst, x, y+40, 150, 44, 0, 0, colInk, colInk)
-		radial(dst, x, y+40, 144, 40, 0, -0.4, rgb(0x9a, 0xf0, 0xff), rgb(0x20, 0x70, 0xb0))
+		radial(dst, x, y+40, 144, 40, 0, -0.4, rgb(0x3a, 0x9a, 0x9a), rgb(0x04, 0x18, 0x22))
 		for i := 0; i < 3; i++ {
 			f := math.Mod(t*0.5+float64(i)/3, 1)
 			strokeCircle(dst, x, y+40, 20+f*110, 3*(1-f), alpha(colWhite, 0.6*(1-f)))
 		}
 		for _, lp := range [][2]float64{{-100, 46}, {96, 34}} {
-			orb(dst, x+lp[0], y+lp[1], 22, 9, rgb(0x5a, 0xc8, 0x4a))
+			orb(dst, x+lp[0], y+lp[1], 22, 9, rgb(0x2a, 0x4a, 0x2a))
 		}
 		fy := y - 50 + math.Sin(t*2)*10
 		glow(dst, x, fy, 70, rgb(0xc8, 0xff, 0xd0), 0.8)
@@ -461,7 +478,7 @@ func eventArt(dst *ebiten.Image, e int, x, y, t float64) {
 		orb(dst, x, fy, 8, 8, rgb(0xff, 0xf8, 0xd0))
 	case 4: // gambler's cups
 		roundRect(dst, rect{x - 150, y + 30, 300, 40}, 12, colInk)
-		roundGrad(dst, rect{x - 147, y + 33, 294, 34}, 10, rgb(0x4a, 0xa0, 0x5a), rgb(0x1e, 0x5a, 0x2a))
+		roundGrad(dst, rect{x - 147, y + 33, 294, 34}, 10, rgb(0x3a, 0x22, 0x1a), rgb(0x14, 0x0a, 0x06))
 		lift := math.Max(0, math.Sin(t*2)) * 26
 		coinIcon(dst, x, y+28, 14)
 		for i, cx := range []float64{x - 90, x, x + 90} {
@@ -469,12 +486,12 @@ func eventArt(dst *ebiten.Image, e int, x, y, t float64) {
 			if i == 1 {
 				cy -= lift
 			}
-			shape(dst, []float64{cx - 34, cy, cx - 22, cy - 66, cx + 22, cy - 66, cx + 34, cy}, rgb(0xd8, 0x5a, 0x4a), rgb(0x7a, 0x22, 0x22), 3)
+			shape(dst, []float64{cx - 34, cy, cx - 22, cy - 66, cx + 22, cy - 66, cx + 34, cy}, rgb(0x5a, 0x3a, 0x26), rgb(0x1e, 0x10, 0x08), 3)
 			roundGrad(dst, rect{cx - 26, cy - 50, 52, 8}, 3, rgb(0xff, 0xd0, 0x50), rgb(0xc8, 0x8a, 0x10))
 		}
 	case 5: // old forge
 		glow(dst, x, y, 140, colOrange, 0.45)
-		shape(dst, []float64{x - 80, y - 20, x + 100, y - 20, x + 70, y + 4, x + 30, y + 4, x + 30, y + 40, x + 56, y + 70, x - 56, y + 70, x - 30, y + 40, x - 30, y + 4, x - 60, y + 4}, rgb(0x8a, 0x92, 0xa8), rgb(0x2e, 0x32, 0x40), 3)
+		shape(dst, []float64{x - 80, y - 20, x + 100, y - 20, x + 70, y + 4, x + 30, y + 4, x + 30, y + 40, x + 56, y + 70, x - 56, y + 70, x - 30, y + 40, x - 30, y + 4, x - 60, y + 4}, rgb(0x4a, 0x4e, 0x5a), rgb(0x12, 0x12, 0x18), 3)
 		swordArt(dst, x+10, y-30, 34, 1.57, rgb(0xff, 0xa0, 0x50))
 		h := rot([]float64{x + 40, y - 60, x + 46, y - 60, x + 46, y - 130, x + 40, y - 130}, x+43, y-60, 0.8+math.Sin(t*4)*0.3)
 		shape(dst, h, rgb(0xb0, 0x70, 0x40), rgb(0x60, 0x34, 0x18), 2)

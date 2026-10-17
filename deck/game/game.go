@@ -127,7 +127,7 @@ func NewGame() *Game {
 	}
 	g.rng = rand.New(rand.NewSource(g.seed))
 	g.bgs = map[[2]int]*ebiten.Image{}
-	g.heroSpr = newSprite(260, 260)
+	g.heroSpr = newSprite(340, 280)
 	g.foeSpr = newSprite(360, 360)
 	return g
 }
@@ -722,15 +722,17 @@ func (g *Game) stepEffects() {
 	g.shake *= 0.85
 	// drifting motes for atmosphere
 	if (g.sc == scBattle || g.sc == scMap || g.sc == scHome) && g.frame%9 == 0 && len(g.parts) < 120 {
-		c := rgb(0xff, 0xff, 0xe0)
+		c := rgb(0xff, 0x8a, 0x40) // embers
 		if r := g.run(); r != nil && g.sc != scHome {
 			switch (r.Chapter - 1) % len(themes) {
+			case 0:
+				c = rgb(0x9a, 0xd8, 0xff)
 			case 1:
-				c = rgb(0xb0, 0x9a, 0xff)
+				c = rgb(0xb0, 0x8a, 0xff)
 			case 3:
-				c = rgb(0xc8, 0xff, 0x60)
-			case 5:
-				c = rgb(0xff, 0x8a, 0x40)
+				c = rgb(0xff, 0x40, 0x50)
+			case 4:
+				c = rgb(0xe8, 0xf4, 0xff)
 			}
 		}
 		g.parts = append(g.parts, particle{x: g.rng.Float64() * W, y: g.h * (0.2 + g.rng.Float64()*0.6), vx: (g.rng.Float64() - 0.5) * 0.6, vy: -0.3 - g.rng.Float64()*0.5, life: 160, max: 160, size: 1.5 + g.rng.Float64()*1.5, col: c})
@@ -776,9 +778,11 @@ func (g *Game) Draw(dst *ebiten.Image) {
 	}
 	if g.toastT > 0 {
 		a := math.Min(1, float64(g.toastT)/20)
-		r := rect{20, 120, W - 40, 46}
-		roundRect(dst, r, 23, alpha(rgb(0x14, 0x12, 0x28), 0.88*a))
-		say(dst, g.toast, W/2, r.cy(), 18, alpha(colWhite, a), 0.5)
+		r := rect{24, 124, W - 48, 44}
+		fillPath(dst, chamfer(r.grow(2.5), 12), alpha(colInk, a))
+		strokePath(dst, chamfer(r.grow(1.5), 11), 1.4, alpha(colGold, a))
+		fillPath(dst, chamfer(r, 10), alpha(rgb(0x16, 0x12, 0x1c), 0.95*a))
+		say(dst, g.toast, W/2, r.cy(), 16, alpha(colBone, a), 0.5)
 	}
 	if g.popup != "" {
 		g.drawPopup(dst)
@@ -789,20 +793,21 @@ func (g *Game) Draw(dst *ebiten.Image) {
 }
 
 func (g *Game) drawPopup(dst *ebiten.Image) {
-	fillRect(dst, 0, 0, W, g.h, color.RGBA{0, 0, 0, 0xc0})
+	fillRect(dst, 0, 0, W, g.h, color.RGBA{0, 0, 0, 0xd8})
 	cx, cy := W/2.0, g.h/2
 	for i := 0; i < 14; i++ {
 		a := g.t()*0.5 + float64(i)*math.Pi/7
-		shape(dst, []float64{cx, cy, cx + math.Cos(a)*800, cy + math.Sin(a)*800, cx + math.Cos(a+0.14)*800, cy + math.Sin(a+0.14)*800}, alpha(colYellow, 0.16), clear, 0)
+		shape(dst, []float64{cx, cy, cx + math.Cos(a)*800, cy + math.Sin(a)*800, cx + math.Cos(a+0.14)*800, cy + math.Sin(a+0.14)*800}, alpha(colGold, 0.12), clear, 0)
 	}
-	glow(dst, cx, cy, 220, colYellow, 0.4)
-	say(dst, g.popup, cx, cy-230, 46, colYellow, 0.5)
+	runeCircle(dst, cx, cy, 190, g.t(), colGold, 0.4)
+	glow(dst, cx, cy, 220, colOrange, 0.3)
+	say(dst, g.popup, cx, cy-230, 40, colGoldHi, 0.5)
 	if g.popCard != nil {
 		drawCard(dst, *g.popCard, cx-105, cy-160, 210, false, g.t())
 		r := g.popCard.def().Rarity
 		say(dst, rarityNames[r], cx, cy+158, 26, light(rarityCol[r], 0.3), 0.5)
 	}
-	say(dst, "Tap to continue", cx, cy+215, 20, colWhite, 0.5)
+	say(dst, "Tap to continue", cx, cy+215, 20, colBone, 0.5)
 }
 
 func (g *Game) drawParticles(dst *ebiten.Image) {
@@ -819,7 +824,7 @@ func (g *Game) topBar(dst *ebiten.Image) {
 	boltIcon(dst, er.x+8, er.cy(), 15, colGreen)
 	if g.p.Energy < maxEnergy {
 		s := g.p.nextEnergyIn(now)
-		say(dst, "+1 in "+itoa(int(s/60))+":"+pad2(int(s%60)), er.cx()+6, er.y+er.h+14, 13, colWhite, 0.5)
+		say(dst, "+1 in "+itoa(int(s/60))+":"+pad2(int(s%60)), er.cx()+6, er.y+er.h+14, 13, colBone, 0.5)
 	}
 	gr := rect{186, 16, 160, 36}
 	pill(dst, gr, itoa(g.p.Gold))

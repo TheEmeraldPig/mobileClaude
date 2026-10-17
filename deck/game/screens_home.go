@@ -8,40 +8,40 @@ import (
 
 // ---- layout ----
 
-func (g *Game) navTab(i int) rect { return rect{W/3*float64(i) + 8, g.h - 80, W/3 - 16, 66} }
-func (g *Game) startBtn() rect    { return rect{110, g.h - 214, 320, 90} }
-func (g *Game) abandonBtn() rect  { return rect{448, g.h - 200, 64, 64} }
-func (g *Game) heroFeet() float64 { return math.Round(600 + (g.h-960)*0.45) }
-func (g *Game) heroBtn() rect     { return rect{360, g.heroFeet() - 128, 160, 58} }
-func (g *Game) chapCard() rect    { return rect{24, 84, 492, 290} }
+func (g *Game) navTab(i int) rect { return rect{W/3*float64(i) + 10, g.h - 82, W/3 - 20, 68} }
+func (g *Game) startBtn() rect    { return rect{100, g.h - 216, 340, 86} }
+func (g *Game) abandonBtn() rect  { return rect{456, g.h - 202, 58, 58} }
+func (g *Game) heroFeet() float64 { return math.Round(624 + (g.h-960)*0.45) }
+func (g *Game) heroBtn() rect     { return rect{366, g.heroFeet() - 120, 150, 54} }
+func (g *Game) chapCard() rect    { return rect{26, 92, 488, 300} }
 func (g *Game) chapArrow(d int) rect {
 	if d < 0 {
-		return rect{30, 196, 46, 66}
+		return rect{30, 210, 44, 64}
 	}
-	return rect{W - 76, 196, 46, 66}
+	return rect{W - 74, 210, 44, 64}
 }
 func (g *Game) shopTile(i int) rect {
-	tw := (W - 32 - 14) / 2.0
-	return rect{16 + float64(i%2)*(tw+14), 96 + float64(i/2)*186, tw, 172}
+	tw := (W - 36 - 16) / 2.0
+	return rect{18 + float64(i%2)*(tw+16), 104 + float64(i/2)*186, tw, 168}
 }
-func (g *Game) slot(i int) rect { return rect{26 + float64(i)*99, 112, 90, 90 * 1.4} }
-func (g *Game) colPanel() rect  { return rect{16, g.h - 336, W - 32, 240} }
-func (g *Game) colArea() rect   { return rect{16, 300, W - 32, g.colPanel().y - 310} }
+func (g *Game) slot(i int) rect { return rect{28 + float64(i)*98, 120, 88, 88 * 1.4} }
+func (g *Game) colPanel() rect  { return rect{18, g.h - 340, W - 36, 236} }
+func (g *Game) colArea() rect   { return rect{18, 316, W - 36, g.colPanel().y - 330} }
 
 const colCW = 86.0
 
 func (g *Game) colCard(i int) rect {
 	a := g.colArea()
-	return rect{37 + float64(i%5)*(colCW+9), a.y + 8 + float64(i/5)*(colCW*1.4+12) - g.colScroll, colCW, colCW * 1.4}
+	return rect{38 + float64(i%5)*(colCW+8), a.y + 34 + float64(i/5)*(colCW*1.4+14) - g.colScroll, colCW, colCW * 1.4}
 }
 func (g *Game) colMax() float64 {
 	rows := (len(g.p.Cards) + 4) / 5
-	return math.Max(0, float64(rows)*(colCW*1.4+12)+16-g.colArea().h)
+	return math.Max(0, float64(rows)*(colCW*1.4+14)+42-g.colArea().h)
 }
 func (g *Game) colBtn(i int) rect {
 	p := g.colPanel()
-	bw := (p.w - 168 - 10) / 2
-	return rect{p.x + 158 + float64(i%2)*(bw+10), p.y + 16 + float64(i/2)*72, bw, 58}
+	bw := (p.w - 172 - 12) / 2
+	return rect{p.x + 162 + float64(i%2)*(bw+12), p.y + 18 + float64(i/2)*70, bw, 54}
 }
 
 func (g *Game) clickHome(x, y float64) {
@@ -108,46 +108,78 @@ func (g *Game) clickHome(x, y float64) {
 
 // ---- drawing ----
 
+var romans = []string{"I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"}
+
+func roman(n int) string {
+	if n >= 1 && n <= len(romans) {
+		return romans[n-1]
+	}
+	return itoa(n)
+}
+
 func (g *Game) drawHome(dst *ebiten.Image) {
 	t := g.t()
-	homeSky(dst, W, g.h, t)
+	homeScene(dst, W, g.h, t)
 	switch g.tab {
 	case 0:
-		g.drawHomeShop(dst)
+		texRect(dst, 0, 0, W, g.h, alpha(rgb(0x14, 0x10, 0x1a), 0.85), alpha(rgb(0x06, 0x05, 0x0a), 0.95))
+		g.drawHomeShop(dst, t)
 	case 1:
 		g.drawHomeBattle(dst, t)
 	case 2:
+		texRect(dst, 0, 0, W, g.h, alpha(rgb(0x14, 0x10, 0x1a), 0.85), alpha(rgb(0x06, 0x05, 0x0a), 0.95))
 		g.drawCollection(dst, t)
 	}
-	g.drawNav(dst)
+	g.drawParticles(dst)
+	g.drawNav(dst, t)
 	g.topBar(dst)
 }
 
-func (g *Game) drawNav(dst *ebiten.Image) {
-	gradRect(dst, 0, g.h-96, W, 96, rgb(0x24, 0x2c, 0x5c), rgb(0x10, 0x14, 0x30))
-	fillRect(dst, 0, g.h-96, W, 3, colInk)
+func (g *Game) drawNav(dst *ebiten.Image, t float64) {
+	y := g.h - 100
+	texRect(dst, 0, y, W, 100, rgb(0x22, 0x1e, 0x28), rgb(0x08, 0x07, 0x0c))
+	gradRect(dst, 0, y-2, W, 4, colGoldLo, colGold)
+	gradRect(dst, 0, y+2, W, 10, alpha(colInk, 0.6), clear)
+	for i := 1; i < 3; i++ {
+		x := W / 3 * float64(i)
+		gradRect(dst, x-1, y+12, 2, 80, alpha(colGold, 0.4), clear)
+	}
 	for i, name := range []string{"SHOP", "BATTLE", "DECK"} {
 		r := g.navTab(i)
-		col := rgb(0x3d, 0x52, 0x9c)
-		if i == g.tab {
-			r = rect{r.x - 4, r.y - 16, r.w + 8, r.h + 12}
-			col = colYellow
+		on := i == g.tab
+		if on {
+			r = rect{r.x - 4, r.y - 18, r.w + 8, r.h + 14}
+			glow(dst, r.cx(), r.cy(), 90, colOrange, 0.25)
+			frame(dst, r, rgb(0x4a, 0x2a, 0x22), colOrange, true)
 		}
-		button(dst, r, col, "", 0, false)
-		ix, iy := r.cx(), r.y+24
+		ix, iy := r.cx(), r.y+26
+		a := 0.55
+		if on {
+			a = 1
+		}
 		switch i {
 		case 0:
-			chestIcon(dst, ix, iy+4, 0.3, false)
+			chestIcon(dst, ix, iy+6, 0.3, false)
 		case 1:
-			swordArt(dst, ix-10, iy, 14, -0.75, colSteel)
-			swordArt(dst, ix+10, iy, 14, 0.75, colSteel)
+			drawSword(dst, ix-6, iy+16, -0.6, 0.3)
+			drawSword(dst, ix+6, iy+16, 0.6, 0.3)
 		case 2:
-			roundRect(dst, rect{ix - 16, iy - 14, 20, 28}, 4, colInk)
-			roundGrad(dst, rect{ix - 14, iy - 12, 16, 24}, 3, colBlue, shade(colBlue, 0.6))
-			roundRect(dst, rect{ix - 4, iy - 12, 20, 28}, 4, colInk)
-			roundGrad(dst, rect{ix - 2, iy - 10, 16, 24}, 3, colCream, rgb(0xe0, 0xc8, 0x98))
+			for k := 0; k < 3; k++ {
+				cr := rect{ix - 16 + float64(k)*8, iy - 14 - float64(k%2)*2, 16, 24}
+				p := chamfer(cr, 3)
+				strokePath(dst, p, 2, colInk)
+				texPath(dst, p, rgb(0x5a, 0x4a, 0x3a), rgb(0x22, 0x1a, 0x12))
+				strokePath(dst, p, 1, colGold)
+			}
 		}
-		say(dst, name, r.cx(), r.y+r.h-20, 17, colWhite, 0.5)
+		if !on {
+			fillRect(dst, r.x, r.y, r.w, r.h-20, alpha(rgb(0x08, 0x07, 0x0c), 1-a))
+		}
+		c := alpha(colBone, a)
+		if on {
+			c = colGoldHi
+		}
+		say(dst, name, r.cx(), r.y+r.h-18, 16, c, 0.5)
 	}
 }
 
@@ -156,88 +188,95 @@ func (g *Game) drawHomeBattle(dst *ebiten.Image, t float64) {
 	if r := g.run(); r != nil {
 		ch = r.Chapter
 	}
-	// chapter card with a peek at the arena
+	// chapter card with a look at the arena and its lord
 	pr := g.chapCard()
-	panel(dst, pr, rgb(0x3a, 0x4e, 0x96), rgb(0x22, 0x2c, 0x5c), 20)
-	art := rect{pr.x + 12, pr.y + 50, pr.w - 24, 190}
-	bg := g.battleBG(ch)
+	frame(dst, pr, rgb(0x2a, 0x22, 0x2e), colRed, true)
+	art := rect{pr.x + 14, pr.y + 56, pr.w - 28, 196}
+	fillPath(dst, chamfer(art.grow(2), 8), colInk)
 	sub := clip(dst, art)
 	k := art.w / W
-	sub.DrawImage(bg, imgOp(art.x, art.y-(groundY-150)*k, k))
-	drawEnemy(g.foeSpr.buf(), shKing, 180, 330, t, chapterTheme(ch).Hue)
-	g.foeSpr.stamp(sub, art.cx(), art.y+art.h-8, 180, 330, 0.78, 1, 1, 1, 0)
-	gradRect(sub, art.x, art.y+art.h-40, art.w, 40, clear, alpha(colInk, 0.5))
-	strokePath(dst, roundPath(art, 6), 4, colInk)
-	say(dst, "CHAPTER "+itoa(ch), pr.cx(), pr.y+26, 32, colYellow, 0.5)
-	say(dst, chapterName(ch), art.cx(), art.y+22, 26, colWhite, 0.5)
+	sub.DrawImage(g.battleBG(ch), imgOp(art.x, art.y-(groundY-160)*k, k))
+	drawEnemy(g.foeSpr.buf(), shDemon, 180, 330, t, chapterTheme(ch).Hue)
+	g.foeSpr.stamp(sub, art.cx(), art.y+art.h-6, 180, 330, 0.56, 1, 1, 1, 0)
+	gradRect(sub, art.x, art.y+art.h-60, art.w, 60, clear, alpha(colInk, 0.85))
+	gradRect(sub, art.x, art.y, art.w, 50, alpha(colInk, 0.7), clear)
+	strokePath(dst, chamfer(art.grow(1), 8), 1.5, colGold)
+	say(dst, "CHAPTER "+roman(ch), pr.cx(), pr.y+30, 26, colGoldHi, 0.5)
+	divider(dst, pr.cx(), pr.y+50, 260)
+	say(dst, chapterName(ch), art.cx(), art.y+art.h-24, 26, colBone, 0.5)
 	best := g.p.best(ch)
-	label := "Best: floor " + itoa(best) + " / " + itoa(mapRows+1)
+	label := "Deepest floor  " + itoa(best) + " / " + itoa(mapRows+1)
 	if best > mapRows {
-		label = "Cleared!"
+		label = "Conquered"
 	}
-	say(dst, label, pr.cx(), pr.y+pr.h-26, 19, colCream, 0.5)
+	drawText(dst, label, pr.cx(), pr.y+pr.h-22, 17, colCream, 0.5)
 	if g.run() == nil {
 		if ch > 1 {
-			button(dst, g.chapArrow(-1), colBlue, "<", 30, false)
+			button(dst, g.chapArrow(-1), rgb(0x3a, 0x34, 0x44), "<", 26, false)
 		}
 		if ch < g.p.MaxChapter {
-			button(dst, g.chapArrow(1), colBlue, ">", 30, false)
+			button(dst, g.chapArrow(1), rgb(0x3a, 0x34, 0x44), ">", 26, false)
 		}
 	}
-	// hero on a floating island
-	hx, hf := W/2.0-30, g.heroFeet()
-	island(dst, hx, hf, 130, t)
-	drawHero(g.heroSpr.buf(), 130, 240, t, 0)
-	g.heroSpr.stamp(dst, hx, hf+math.Sin(t*1.2)*4, 130, 240, 1.25, 1, 1, 1, 0)
+	// the knight on a cliff
+	hx, hf := W/2.0-50, g.heroFeet()
+	cliff(dst, hx+30, hf, 170, t)
+	glow(dst, hx, hf-100, 120, rgb(0xff, 0x60, 0x50), 0.12)
+	drawHero(g.heroSpr.buf(), 150, 260, t, 0)
+	g.heroSpr.stamp(dst, hx, hf, 150, 260, 1.2, 1, 1, 1, 0)
+	// hero plate
 	hb := g.heroBtn()
-	say(dst, "Hero Lv "+itoa(g.p.HeroLv+1), hb.cx(), hb.y-40, 20, colWhite, 0.5)
-	heartIcon(dst, hb.cx()-30, hb.y-14, 10, colRed)
-	say(dst, itoa(g.p.maxHP())+" HP", hb.cx()+12, hb.y-14, 18, colWhite, 0.5)
-	button(dst, hb, colGreen, "", 0, g.p.Gold < g.p.heroCost())
-	say(dst, "+6", hb.x+16, hb.y+(hb.h-6)/2, 20, colWhite, 0)
-	coinIcon(dst, hb.x+hb.w-72, hb.y+(hb.h-6)/2, 11)
-	say(dst, itoa(g.p.heroCost()), hb.x+hb.w-12, hb.y+(hb.h-6)/2, 20, colWhite, 1)
-	// start or continue
+	plate := rect{hb.x - 6, hb.y - 92, hb.w + 12, 78}
+	frame(dst, plate, rgb(0x22, 0x1e, 0x2a), colRed, false)
+	say(dst, "KNIGHT", plate.cx(), plate.y+18, 15, colGoldHi, 0.5)
+	drawText(dst, "Level "+itoa(g.p.HeroLv+1), plate.cx(), plate.y+38, 15, colCream, 0.5)
+	heartIcon(dst, plate.cx()-26, plate.y+59, 8, colRed)
+	say(dst, itoa(g.p.maxHP())+" HP", plate.cx()+10, plate.y+59, 15, colBone, 0.5)
+	button(dst, hb, rgb(0x2e, 0x5a, 0x34), "", 0, g.p.Gold < g.p.heroCost())
+	say(dst, "+6", hb.x+16, hb.cy(), 17, colBone, 0)
+	coinIcon(dst, hb.x+hb.w-66, hb.cy(), 10)
+	say(dst, itoa(g.p.heroCost()), hb.x+hb.w-12, hb.cy(), 17, colBone, 1)
+	// descend or continue
 	sb := g.startBtn()
-	if g.run() != nil {
-		button(dst, sb, colGreen, "CONTINUE", 36, false)
-		ab := g.abandonBtn()
-		button(dst, ab, colRed, "X", 28, false)
-		say(dst, "Floor "+itoa(g.run().floor()), sb.cx(), sb.y-18, 18, colWhite, 0.5)
+	glow(dst, sb.cx(), sb.cy(), 200, colOrange, 0.18+0.06*math.Sin(t*2.5))
+	if r := g.run(); r != nil {
+		button(dst, sb, rgb(0x8a, 0x3a, 0x1a), "CONTINUE", 30, false)
+		button(dst, g.abandonBtn(), rgb(0x6a, 0x14, 0x1c), "X", 22, false)
+		drawText(dst, "Floor "+itoa(r.floor())+" of "+itoa(mapRows+1), sb.cx(), sb.y-16, 16, colCream, 0.5)
 		return
 	}
-	button(dst, sb, colYellow, "", 0, g.p.Energy < runCost)
-	say(dst, "START", sb.cx()-26, sb.y+(sb.h-6)/2, 40, colWhite, 0.5)
-	boltIcon(dst, sb.x+sb.w-66, sb.y+(sb.h-6)/2, 16, colGreen)
-	say(dst, itoa(runCost), sb.x+sb.w-28, sb.y+(sb.h-6)/2, 28, colWhite, 0.5)
+	button(dst, sb, rgb(0x9a, 0x40, 0x1a), "", 0, g.p.Energy < runCost)
+	say(dst, "DESCEND", sb.cx()-24, sb.cy(), 30, colBone, 0.5)
+	boltIcon(dst, sb.x+sb.w-64, sb.cy(), 14, colBlue)
+	say(dst, itoa(runCost), sb.x+sb.w-30, sb.cy(), 24, colBone, 0.5)
 }
 
-func (g *Game) drawHomeShop(dst *ebiten.Image) {
+func (g *Game) drawHomeShop(dst *ebiten.Image, t float64) {
 	now := g.now()
+	say(dst, "BLACK MARKET", W/2, 86, 22, colGoldHi, 0.5)
+	divider(dst, W/2, 100, 300)
 	for i, it := range shopItems {
 		r := g.shopTile(i)
-		top, bot := rgb(0x4a, 0x62, 0xb8), rgb(0x26, 0x34, 0x74)
+		fill, acc := rgb(0x2a, 0x24, 0x30), colOrange
 		if it.Price[0] == '$' {
-			top, bot = rgb(0x9a, 0x5a, 0xe8), rgb(0x4a, 0x24, 0x8a)
+			fill, acc = rgb(0x30, 0x16, 0x2a), colGem
 		}
-		panel(dst, r, top, bot, 16)
-		say(dst, it.Name, r.cx(), r.y+20, 20, colWhite, 0.5)
-		cy := r.y + 70
+		frame(dst, r, fill, acc, true)
+		say(dst, it.Name, r.cx(), r.y+22, 16, colGoldHi, 0.5)
+		cy := r.y + 66
+		runeCircle(dst, r.cx(), cy, 34, t, acc, 0.25)
 		switch {
 		case it.Chest > 0:
-			glow(dst, r.cx(), cy, 60, colYellow, 0.25)
-			chestIcon(dst, r.cx(), cy+4, 0.62, it.Chest == 2)
+			chestIcon(dst, r.cx(), cy+8, 0.5, it.Chest == 2)
 		case it.ID == "energy" || it.ID == "ad":
-			glow(dst, r.cx(), cy, 50, colGreen, 0.4)
-			boltIcon(dst, r.cx(), cy, 28, colGreen)
+			boltIcon(dst, r.cx(), cy, 26, colBlue)
 		default:
-			glow(dst, r.cx(), cy, 50, colGem, 0.35)
-			gemIcon(dst, r.cx()-20, cy+8, 16)
-			gemIcon(dst, r.cx()+20, cy+8, 16)
-			gemIcon(dst, r.cx(), cy-10, 20)
+			gemIcon(dst, r.cx()-20, cy+8, 13)
+			gemIcon(dst, r.cx()+20, cy+8, 13)
+			gemIcon(dst, r.cx(), cy-8, 17)
 		}
-		drawText(dst, it.Desc, r.cx(), r.y+112, 14, colCream, 0.5)
-		br := rect{r.x + 14, r.y + r.h - 48, r.w - 28, 40}
+		drawText(dst, it.Desc, r.cx(), r.y+110, 14, colCream, 0.5)
+		br := rect{r.x + 18, r.y + r.h - 44, r.w - 36, 34}
 		price, off := it.Price, false
 		switch it.ID {
 		case "free":
@@ -249,27 +288,26 @@ func (g *Game) drawHomeShop(dst *ebiten.Image) {
 				price, off = "OWNED", true
 			}
 		}
-		button(dst, br, colGreen, "", 0, off)
-		by := br.y + (br.h-6)/2
+		button(dst, br, rgb(0x2e, 0x5a, 0x34), "", 0, off)
 		switch {
 		case it.Gold > 0:
-			coinIcon(dst, br.cx()-30, by, 11)
-			say(dst, price, br.cx()+12, by, 20, colWhite, 0.5)
+			coinIcon(dst, br.cx()-28, br.cy(), 9)
+			say(dst, price, br.cx()+10, br.cy(), 17, colBone, 0.5)
 		case it.Gems > 0:
-			gemIcon(dst, br.cx()-26, by, 10)
-			say(dst, price, br.cx()+12, by, 20, colWhite, 0.5)
+			gemIcon(dst, br.cx()-26, br.cy(), 8)
+			say(dst, price, br.cx()+10, br.cy(), 17, colBone, 0.5)
 		default:
-			say(dst, price, br.cx(), by, 20, colWhite, 0.5)
+			say(dst, price, br.cx(), br.cy(), 17, colBone, 0.5)
 		}
 	}
-	say(dst, "Real-money items are free in this test build", W/2, g.h-112, 13, colWhite, 0.5)
+	drawText(dst, "Real-money items are free in this test build", W/2, g.h-118, 13, colDim, 0.5)
 }
 
 func (g *Game) drawCollection(dst *ebiten.Image, t float64) {
-	// starting deck
-	say(dst, "STARTING DECK", 26, 90, 22, colWhite, 0)
+	say(dst, "STARTING DECK", 28, 94, 18, colGoldHi, 0)
 	deck := g.p.Loadout()
-	say(dst, itoa(len(deck))+" / "+itoa(maxLoadout), W-26, 90, 20, colYellow, 1)
+	say(dst, itoa(len(deck))+" / "+itoa(maxLoadout), W-28, 94, 18, colBone, 1)
+	divider(dst, W/2, 108, W-60)
 	n := 0
 	for i, c := range g.p.Cards {
 		if c.In {
@@ -277,6 +315,7 @@ func (g *Game) drawCollection(dst *ebiten.Image, t float64) {
 			lift := 0.0
 			if i == g.sel {
 				lift = 6
+				glow(dst, r.cx(), r.cy(), 70, colOrange, 0.3)
 			}
 			drawCard(dst, Card{ID: c.ID, Enh: c.Enh}, r.x, r.y-lift, r.w, false, t)
 			n++
@@ -284,16 +323,22 @@ func (g *Game) drawCollection(dst *ebiten.Image, t float64) {
 	}
 	for ; n < maxLoadout; n++ {
 		r := g.slot(n)
-		roundRect(dst, r.grow(2), 12, alpha(colInk, 0.6))
-		strokePath(dst, roundPath(r, 10), 2.5, alpha(colWhite, 0.5))
-		say(dst, "+", r.cx(), r.cy(), 40, alpha(colWhite, 0.6), 0.5)
+		fillPath(dst, chamfer(r, 8), alpha(colInk, 0.7))
+		for k := 0.0; k < 1; k += 0.08 { // dashed gold outline
+			strokePath(dst, pathOf([]float64{r.x + r.w*k, r.y, r.x + r.w*(k+0.04), r.y}), 1.2, alpha(colGold, 0.6))
+			strokePath(dst, pathOf([]float64{r.x + r.w*k, r.y + r.h, r.x + r.w*(k+0.04), r.y + r.h}), 1.2, alpha(colGold, 0.6))
+		}
+		say(dst, "+", r.cx(), r.cy(), 30, alpha(colGold, 0.6), 0.5)
 	}
-	roundRect(dst, rect{20, 248, W - 40, 40}, 12, alpha(colInk, 0.55))
-	drawText(dst, "Fits 1 Legendary, or 2 Epics, or 3 Rares + 1 Uncommon,\nplus any Commons. Or any mix of Commons and Uncommons.", W/2, 268, 13, colWhite, 0.5)
+	rr := rect{24, 256, W - 48, 44}
+	fillPath(dst, chamfer(rr, 8), alpha(colInk, 0.7))
+	strokePath(dst, chamfer(rr, 8), 1, alpha(colGold, 0.5))
+	drawText(dst, "1 Legendary, or 2 Epics, or 3 Rares + 1 Uncommon, plus Commons.\nOr any mix of Commons and Uncommons.", W/2, rr.cy(), 14, colCream, 0.5)
 	// collection
 	a := g.colArea()
-	panel(dst, rect{a.x, a.y - 4, a.w, a.h + 8}, rgb(0x2e, 0x3c, 0x7a), rgb(0x1c, 0x24, 0x50), 16)
-	sub := clip(dst, a)
+	frame(dst, a, rgb(0x1e, 0x1a, 0x24), colOrange, true)
+	say(dst, "COLLECTION  "+itoa(len(g.p.Cards)), a.x+18, a.y+16, 13, colGold, 0)
+	sub := clip(dst, rect{a.x, a.y + 28, a.w, a.h - 32})
 	for i, c := range g.p.Cards {
 		r := g.colCard(i)
 		if r.y > a.y+a.h || r.y+r.h < a.y {
@@ -301,62 +346,66 @@ func (g *Game) drawCollection(dst *ebiten.Image, t float64) {
 		}
 		drawCard(sub, Card{ID: c.ID, Enh: c.Enh}, r.x, r.y, r.w, g.sel >= 0 && i != g.sel, t)
 		if c.In {
-			roundRect(sub, rect{r.x + r.w - 26, r.y + r.h - 30, 24, 24}, 12, colInk)
-			roundGrad(sub, rect{r.x + r.w - 24, r.y + r.h - 28, 20, 20}, 10, colGreen, shade(colGreen, 0.6))
-			drawText(sub, "IN", r.x+r.w-14, r.y+r.h-18, 10, colWhite, 0.5)
+			b := rect{r.x + r.w - 24, r.y + r.h - 26, 22, 18}
+			fillPath(sub, chamfer(b.grow(1.5), 5), colInk)
+			gradPath(sub, chamfer(b, 4), rgb(0x3a, 0x8a, 0x3a), rgb(0x14, 0x3a, 0x14))
+			drawFont(sub, fTitle, "IN", b.cx(), b.cy(), 9, colBone, 0.5)
 		}
 	}
 	if g.colMax() > 0 {
 		f := g.colScroll / g.colMax()
 		bh := a.h * a.h / (a.h + g.colMax())
-		roundRect(dst, rect{a.x + a.w - 7, a.y + (a.h-bh)*f, 5, bh}, 3, alpha(colWhite, 0.5))
+		fillRect(dst, a.x+a.w-8, a.y+(a.h-bh)*f, 4, bh, alpha(colGold, 0.6))
 	}
-	// selected card panel
+	// selected card
 	p := g.colPanel()
-	panel(dst, p, rgb(0x3a, 0x4e, 0x96), rgb(0x22, 0x2c, 0x5c), 18)
+	frame(dst, p, rgb(0x26, 0x20, 0x2c), colRed, true)
 	if g.sel < 0 || g.sel >= len(g.p.Cards) {
-		say(dst, "COLLECTION", p.cx(), p.y+30, 26, colYellow, 0.5)
-		drawText(dst, "Tap a card to add it to your starting deck or enhance it.\nEnhancements stay on the card for every run.", p.cx(), p.y+70, 14, colCream, 0.5)
+		say(dst, "THE FORGE", p.cx(), p.y+28, 20, colGoldHi, 0.5)
+		divider(dst, p.cx(), p.y+46, 240)
+		drawText(dst, "Pick a card to take it into the depths or reforge it.\nEnhancements stay on the card for every run.", p.cx(), p.y+74, 14, colCream, 0.5)
 		for i := 1; i < eCount; i++ {
 			e := enhDefs[i]
-			x := p.x + 18 + float64((i-1)/3)*244
-			y := p.y + 102 + float64((i-1)%3)*42
-			roundRect(dst, rect{x, y, 68, 30}, 9, colInk)
-			roundGrad(dst, rect{x + 2, y + 2, 64, 26}, 7, light(e.Col, 0.3), shade(e.Col, 0.8))
-			drawText(dst, e.Name, x+34, y+15, 15, colInk, 0.5)
-			drawText(dst, e.Desc, x+76, y+15, 14, colWhite, 0)
+			x := p.x + 20 + float64((i-1)/3)*244
+			y := p.y + 104 + float64((i-1)%3)*40
+			tr := rect{x, y, 64, 26}
+			fillPath(dst, chamfer(tr.grow(1.5), 6), colInk)
+			gradPath(dst, chamfer(tr, 5), shade(e.Col, 0.55), shade(e.Col, 0.22))
+			strokePath(dst, chamfer(tr, 5), 1, e.Col)
+			drawFont(dst, fTitle, e.Name, tr.cx(), tr.cy(), 12, light(e.Col, 0.4), 0.5)
+			drawText(dst, e.Desc, x+74, tr.cy(), 14, colBone, 0)
 		}
 		return
 	}
 	c := g.p.Cards[g.sel]
-	drawCard(dst, Card{ID: c.ID, Enh: c.Enh}, p.x+16, p.y+22, 128, false, t)
+	glow(dst, p.x+80, p.y+110, 80, rarityCol[c.def().Rarity], 0.25)
+	drawCard(dst, Card{ID: c.ID, Enh: c.Enh}, p.x+18, p.y+20, 124, false, t)
 	for i := 0; i < 6; i++ {
 		r := g.colBtn(i)
-		ty := r.y + (r.h-6)/2
 		if i == 0 {
 			if c.In {
-				button(dst, r, colRed, "Take out", 20, false)
+				button(dst, r, rgb(0x6a, 0x16, 0x20), "Take out", 17, false)
 			} else {
-				button(dst, r, colGreen, "Add to deck", 20, false)
+				button(dst, r, rgb(0x2e, 0x5a, 0x34), "Add to deck", 17, false)
 			}
 			continue
 		}
 		e := enhDefs[i]
 		on := c.Enh == i
-		button(dst, r, shade(e.Col, 0.85), "", 0, on)
+		button(dst, r, shade(e.Col, 0.55), "", 0, on)
 		name := e.Name
 		if on {
 			name += " (on)"
 		}
-		say(dst, name, r.x+14, ty, 18, colWhite, 0)
+		say(dst, name, r.x+14, r.cy(), 15, light(e.Col, 0.5), 0)
 		if e.Gems > 0 {
-			gemIcon(dst, r.x+r.w-46, ty, 9)
-			say(dst, itoa(e.Gems), r.x+r.w-12, ty, 18, colWhite, 1)
+			gemIcon(dst, r.x+r.w-44, r.cy(), 7)
+			say(dst, itoa(e.Gems), r.x+r.w-12, r.cy(), 15, colBone, 1)
 		} else {
-			coinIcon(dst, r.x+r.w-58, ty, 10)
-			say(dst, itoa(e.Gold), r.x+r.w-12, ty, 18, colWhite, 1)
+			coinIcon(dst, r.x+r.w-56, r.cy(), 8)
+			say(dst, itoa(e.Gold), r.x+r.w-12, r.cy(), 15, colBone, 1)
 		}
 	}
 	rc := rarityCol[c.def().Rarity]
-	drawText(dst, rarityNames[c.def().Rarity], p.x+80, p.y+p.h-14, 14, light(rc, 0.4), 0.5)
+	say(dst, rarityNames[c.def().Rarity], p.x+80, p.y+p.h-14, 13, light(rc, 0.3), 0.5)
 }
