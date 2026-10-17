@@ -34,6 +34,10 @@ func (g *Game) Update() error {
 		return nil
 	}
 	defer CatchCrash()
+	if ebiten.IsWindowBeingClosed() { // closing the window saves first
+		saveGame()
+		return ebiten.Termination
+	}
 	frame++
 	ops = ops[:0]
 	runScript()
@@ -239,6 +243,7 @@ func (g *Game) Layout(outW, outH int) (int, int) {
 // NewGame sets everything up; shared by the desktop main() and the Android wrapper.
 func NewGame() *Game {
 	loadPrefs()
+	ebiten.SetWindowClosingHandled(true)
 	initFonts()
 	initItems()
 	initAudio()

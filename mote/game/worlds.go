@@ -125,6 +125,22 @@ func migrateOldSave() {
 	os.Remove(dataPath("meta.json"))
 }
 
+// "played 5 minutes ago"
+func ago(unix int64) string {
+	d := time.Since(time.Unix(unix, 0))
+	switch {
+	case unix == 0:
+		return "new"
+	case d < time.Minute:
+		return "played just now"
+	case d < time.Hour:
+		return fmt.Sprintf("played %d min ago", int(d.Minutes()))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("played %d h ago", int(d.Hours()))
+	}
+	return fmt.Sprintf("played %d days ago", int(d.Hours()/24))
+}
+
 func newWorldID() string {
 	return fmt.Sprintf("w%d%03d", time.Now().Unix(), rand.Intn(1000))
 }
@@ -142,6 +158,7 @@ func createNewWorld(name, seed string, mode int) {
 	if name == "" {
 		name = randomWorldName()
 	}
+	saveGame() // keep the world we're leaving
 	createWorld(seed)
 	world = WorldInfo{ID: newWorldID(), Name: name, Seed: seedText, Mode: mode}
 	bossDown = false
@@ -160,6 +177,9 @@ func createNewWorld(name, seed string, mode int) {
 
 // Load a world from the list and start playing it
 func openWorld(info WorldInfo) bool {
+	if world.ID != "" && world.ID != info.ID {
+		saveGame() // keep the world we're leaving
+	}
 	b, err := os.ReadFile(worldFile(info.ID))
 	if err != nil {
 		toast("That world could not be opened")

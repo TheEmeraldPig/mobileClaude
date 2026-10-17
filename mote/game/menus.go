@@ -472,7 +472,7 @@ func worldsMenu() {
 		row := Rect{r.X + 18, y, r.W - 36, rh}
 		Inset(row, colSlateLo)
 		Text(w.Name, row.X+14, row.Y+rh*0.32, 16, colInk, text.AlignStart)
-		info := fmt.Sprintf("%s  -  seed %s", modeNames[w.Mode], w.Seed)
+		info := fmt.Sprintf("%s  -  seed %s  -  %s", modeNames[w.Mode], w.Seed, ago(w.Played))
 		if w.Deaths > 0 {
 			info += fmt.Sprintf("  -  %d deaths", w.Deaths)
 		}
