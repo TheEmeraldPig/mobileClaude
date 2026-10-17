@@ -282,8 +282,11 @@ func startWorldPointer(id int, x, y float64) {
 		aimSX, aimSY = x, y
 		if items[inv[selected].ID].once {
 			useOnce()
-		} else if usesShapes(heldBuildKind()) && buildShape != shapeBrush {
-			startShape()
+		} else if usesShapes(heldBuildKind()) {
+			beginAction()
+			if buildShape != shapeBrush {
+				startShape()
+			}
 		}
 		return
 	}
@@ -309,6 +312,7 @@ func endWorldPointer(id int) {
 	}
 	if id == useID {
 		finishShape()
+		endAction()
 		useID, useActive = -99, false
 	}
 	if tapObj.o != nil && tapObj.id == id {

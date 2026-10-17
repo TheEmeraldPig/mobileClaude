@@ -214,6 +214,97 @@ func cellInBuildReach(x, y int) bool {
 	return math.Hypot(float64(x)-pcx, float64(y)-pcy) <= reach*2
 }
 
+// ---- Undo ----
+// Each press of the pointer (a brush stroke or a shape) is one action that can be undone:
+// cells that are still as you left them go back, and their items come back (a hammered
+// wall goes back up and its item is taken back).
+
+type cellChange struct {
+	wx, y    int
+	layer    byte // 'g' block, 'w' wall, 'p' block paint, 'q' wall paint
+	old, now uint8
+	give     string // item to give back when this change is undone ("" none)
+	take     string // item to take back when it's undone
+}
+
+type buildAction struct{ changes []cellChange }
+
+var (
+	undoStack []*buildAction
+	curAction *buildAction
+)
+
+func beginAction() { curAction = &buildAction{} }
+
+func endAction() {
+	if curAction != nil && len(curAction.changes) > 0 {
+		undoStack = append(undoStack, curAction)
+		if len(undoStack) > 20 {
+			undoStack = undoStack[1:]
+		}
+	}
+	curAction = nil
+}
+
+func record(c cellChange, x int) {
+	if curAction != nil {
+		c.wx = x + baseChunk*CW
+		curAction.changes = append(curAction.changes, c)
+	}
+}
+
+func layerOf(l byte) []uint8 {
+	switch l {
+	case 'g':
+		return grid
+	case 'w':
+		return wall
+	case 'p':
+		return paint
+	}
+	return wpaint
+}
+
+func undoBuild() {
+	if len(undoStack) == 0 {
+		toast("Nothing to undo")
+		return
+	}
+	a := undoStack[len(undoStack)-1]
+	undoStack = undoStack[:len(undoStack)-1]
+	n := 0
+	for k := len(a.changes) - 1; k >= 0; k-- {
+		c := a.changes[k]
+		x := c.wx - baseChunk*CW
+		if x < 0 || x >= W {
+			continue
+		}
+		l := layerOf(c.layer)
+		i := c.y*W + x
+		if l[i] != c.now { // changed since (mined, painted over...): leave it
+			continue
+		}
+		if c.take != "" {
+			if countItem(c.take) == 0 {
+				continue
+			}
+			removeItem(c.take, 1)
+		}
+		l[i] = c.old
+		if c.give != "" {
+			giveItem(c.give, 1)
+		}
+		markDirty(x)
+		n++
+	}
+	if n > 0 {
+		sfx("dig")
+		toast("Undone")
+	} else {
+		toast("Nothing left to undo there")
+	}
+}
+
 // Apply the held item to these cells; returns how many changed
 func applyCells(cells [][2]int) int {
 	kind := heldBuildKind()
@@ -230,6 +321,10 @@ func applyCells(cells [][2]int) int {
 			if !isReplaceable(grid[i]) || (grid[i] == WATER && it.place == WATER) {
 				continue
 			}
+			if paint[i] != 0 {
+				record(cellChange{y: y, layer: 'p', old: paint[i], now: 0}, x)
+			}
+			record(cellChange{y: y, layer: 'g', old: grid[i], now: it.place, give: it.id}, x)
 			grid[i] = it.place
 			shade[i] = int8(hash32(x+baseChunk*CW, y, 9)%21) - 10
 			paint[i] = 0
@@ -239,9 +334,15 @@ func applyCells(cells [][2]int) int {
 			if wall[i] == it.wall {
 				continue
 			}
+			if wpaint[i] != 0 {
+				record(cellChange{y: y, layer: 'q', old: wpaint[i], now: 0}, x)
+			}
+			ch := cellChange{y: y, layer: 'w', old: wall[i], now: it.wall, give: it.id}
 			if wall[i] != 0 { // swap walls: the old one comes back
 				giveItem(wallItem[wall[i]], 1)
+				ch.take = wallItem[wall[i]]
 			}
+			record(ch, x)
 			wall[i] = it.wall
 			wpaint[i] = 0
 			takeSelected(1)
@@ -249,15 +350,21 @@ func applyCells(cells [][2]int) int {
 		case buildPaint:
 			if grid[i] != EMPTY && grid[i] != WATER && grid[i] != TORCH {
 				if paint[i] != uint8(paintIdx) {
+					record(cellChange{y: y, layer: 'p', old: paint[i], now: uint8(paintIdx)}, x)
 					paint[i] = uint8(paintIdx)
 					n++
 				}
 			} else if wall[i] != 0 && wpaint[i] != uint8(paintIdx) {
+				record(cellChange{y: y, layer: 'q', old: wpaint[i], now: uint8(paintIdx)}, x)
 				wpaint[i] = uint8(paintIdx)
 				n++
 			}
 		case buildHammer:
 			if wall[i] != 0 {
+				if wpaint[i] != 0 {
+					record(cellChange{y: y, layer: 'q', old: wpaint[i], now: 0}, x)
+				}
+				record(cellChange{y: y, layer: 'w', old: wall[i], now: 0, take: wallItem[wall[i]]}, x)
 				giveItem(wallItem[wall[i]], 1)
 				wall[i], wpaint[i] = 0, 0
 				n++
@@ -291,6 +398,9 @@ func brushCells() [][2]int {
 // ---- Keyboard ----
 
 func buildKeys() {
+	if inpututil.IsKeyJustPressed(ebiten.KeyZ) && ebiten.IsKeyPressed(ebiten.KeyControl) {
+		undoBuild()
+	}
 	k := heldBuildKind()
 	if k == buildNone {
 		return
@@ -349,6 +459,9 @@ func buildBar(hotbarTop float64) {
 		btns = append(btns, btn{"-", false, func() { brushSize = max(0, brushSize-1) }})
 		btns = append(btns, btn{sizeLabel(), false, nil})
 		btns = append(btns, btn{"+", false, func() { brushSize = min(8, brushSize+1) }})
+		if len(undoStack) > 0 {
+			btns = append(btns, btn{"Undo", false, undoBuild})
+		}
 	}
 	if k == buildPaint {
 		btns = append(btns, btn{"Colour", buildPaletteOpen, func() { buildPaletteOpen = !buildPaletteOpen }})

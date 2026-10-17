@@ -175,11 +175,15 @@ func runScript() {
 			var v [4]float64
 			fmt.Sscanf(strings.ReplaceAll(arg, ":", " "), "%f %f %f %f", &v[0], &v[1], &v[2], &v[3])
 			aimSX, aimSY = v[0], v[1]
+			beginAction()
 			startShape()
 			aimSX, aimSY = v[2], v[3]
 			finishShape()
+			endAction()
 		case "paint": // paint=N colour
 			paintIdx, _ = strconv.Atoi(arg)
+		case "undo":
+			undoBuild()
 		case "rot":
 			buildRot = (buildRot + 1) % 4
 		case "tpchest": // move next to the nearest chest (graves first, dungeons with arg=deep)
