@@ -69,7 +69,6 @@ func blockIcon(a, d byte) []string {
 	return rows
 }
 
-
 // Tools are drawn like the mote: dark outline, violet handle, gold tip.
 func toolIcon(rows []string, a, d byte) []string {
 	out := make([]string, len(rows))
@@ -96,15 +95,15 @@ var itemOrder = []string{"pickaxe", "copperpick", "ironpick", "goldpick", "corep
 	"seeds", "wheat", "berries", "bread", "heart", "gem", "bomb"}
 
 var items = map[string]*Item{
-	"pickaxe": {name: "Stone pickaxe", tool: true, desc: "Digs soft blocks, stone, coal and copper. Opens chests", reach: 4, dmg: 1, icon: toolIcon(pickRows, 'S', 's')},
+	"pickaxe":    {name: "Stone pickaxe", tool: true, desc: "Digs soft blocks, stone, coal and copper. Opens chests", reach: 4, dmg: 1, icon: toolIcon(pickRows, 'S', 's')},
 	"copperpick": {name: "Copper pickaxe", tool: true, desc: "Faster, and strong enough for iron, gold and crystal", reach: 4, dmg: 1, icon: toolIcon(pickRows, 'c', 'C')},
-	"goldpick": {name: "Gold pickaxe", tool: true, desc: "Very fast with a wide reach", reach: 6, dmg: 3, icon: toolIcon(pickRows, 'u', 'U')},
-	"ironpick": {name: "Iron pickaxe", tool: true, desc: "Faster and wider, and strong enough for obsidian", reach: 5, dmg: 2, icon: toolIcon(pickRows, 'i', 'I')},
-	"hoe": {name: "Hoe", tool: true, desc: "Turns dirt into soil for seeds, and harvests crops", reach: 2, icon: toolIcon(hoeRows, 'S', 's')},
+	"goldpick":   {name: "Gold pickaxe", tool: true, desc: "Very fast with a wide reach", reach: 6, dmg: 3, icon: toolIcon(pickRows, 'u', 'U')},
+	"ironpick":   {name: "Iron pickaxe", tool: true, desc: "Faster and wider, and strong enough for obsidian", reach: 5, dmg: 2, icon: toolIcon(pickRows, 'i', 'I')},
+	"hoe":        {name: "Hoe", tool: true, desc: "Turns dirt into soil for seeds, and harvests crops", reach: 2, icon: toolIcon(hoeRows, 'S', 's')},
 	"bucket": {name: "Bucket", tool: true, desc: "Scoops up water", reach: 5, icon: []string{
 		"..O..O..", ".O....O.", "OMMMMMMO", "OMwWWWmO", ".MWWWWm.", ".MMMMmm.", "..Mmmm..", "........"}},
 	"coppersword": {name: "Copper sword", tool: true, desc: "Hits creatures", reach: 7, dmg: 2, icon: toolIcon(swordRows, 'c', 'C')},
-	"ironsword": {name: "Iron sword", tool: true, desc: "Hits creatures hard", reach: 8, dmg: 4, icon: toolIcon(swordRows, 'i', 'I')},
+	"ironsword":   {name: "Iron sword", tool: true, desc: "Hits creatures hard", reach: 8, dmg: 4, icon: toolIcon(swordRows, 'i', 'I')},
 	"copperarmor": {name: "Copper armor", tool: true, armor: 1, desc: "Blocks some damage while you carry it", icon: []string{
 		"........", ".OO..OO.", "OccOOccO", "OcccccCO", ".OcccCO.", ".OccCCO.", ".OcCCCO.", "..OOOO.."}},
 	"ironarmor": {name: "Iron armor", tool: true, armor: 2, desc: "Blocks a lot of damage while you carry it", icon: []string{
@@ -560,6 +559,9 @@ type lootEntry struct {
 var graveLoot = []lootEntry{{"seeds", 3, 8, 0.8}, {"torch", 4, 10, 0.7}, {"berries", 2, 5, 0.6}, {"bread", 1, 2, 0.4},
 	{"copper", 4, 10, 0.5}, {"coal", 4, 10, 0.5}, {"heart", 1, 1, 0.12}, {"bomb", 1, 3, 0.3}, {"bp_farm", 1, 1, 0.1}}
 
+var skyLoot = []lootEntry{{"goldbar", 3, 8, 0.6}, {"crystal", 4, 10, 0.6}, {"gem", 1, 3, 0.6}, {"heart", 1, 1, 0.45},
+	{"lantern", 1, 1, 0.2}, {"goldpick", 1, 1, 0.1}, {"bread", 2, 5, 0.4}}
+
 var dungeonLoot = []lootEntry{{"ironbar", 3, 8, 0.6}, {"goldbar", 2, 5, 0.4}, {"heart", 1, 1, 0.4}, {"gem", 1, 2, 0.5},
 	{"bomb", 2, 5, 0.5}, {"bread", 2, 4, 0.5}, {"copperarmor", 1, 1, 0.15}, {"ironsword", 1, 1, 0.12},
 	{"crystal", 3, 8, 0.4}, {"bp_tower", 1, 1, 0.12}, {"bp_bunker", 1, 1, 0.15}}
@@ -585,7 +587,10 @@ func openChest(x, y int) {
 	}
 	wx := baseChunk*CW + minX
 	table := graveLoot
-	if minY > H*55/100 {
+	switch {
+	case minY < 140:
+		table = skyLoot
+	case minY > H*50/100:
 		table = dungeonLoot
 	}
 	rolls := 3

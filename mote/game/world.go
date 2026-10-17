@@ -281,6 +281,10 @@ var genPasses = []genPass{
 	plantFlowers,
 	placeGraves,
 	placeDungeons,
+	placeRuins,
+	placePyramids,
+	placeSkyIslands,
+	placeVillages,
 	placeCore,
 	// unbreakable floor at the very bottom
 	func(buf []uint8, cx, x0 int) {
@@ -416,7 +420,7 @@ func placeDungeons(buf []uint8, cx, x0 int) {
 		if r() > 0.4 {
 			continue
 		}
-		w, h := 26+int(r()*14), 16+int(r()*6)
+		w, h := 40+int(r()*30), 24+int(r()*12)
 		rx := c*CW + int(r()*float64(CW-w))
 		ry := int(H*0.62 + r()*H*0.22)
 		for y := ry; y < ry+h; y++ {
@@ -431,6 +435,9 @@ func placeDungeons(buf []uint8, cx, x0 int) {
 					}
 				} else {
 					set(buf, x0, x, y, EMPTY)
+					if hash01(x, y, 103) > 0.12 {
+						setW(x0, x, y, BRICK)
+					}
 				}
 			}
 		}
@@ -441,8 +448,15 @@ func placeDungeons(buf []uint8, cx, x0 int) {
 			set(buf, x0, rx+w-1, y, EMPTY)
 			set(buf, x0, rx+w-2, y, EMPTY)
 		}
-		chestAt(buf, x0, rx+w/2-1, ry+h-4)
-		if r() < 0.6 {
+		// an inner wall splits it into two rooms, with a gap low down
+		mid := rx + w/2 + int(r()*8) - 4
+		for y := ry + 2; y < ry+h-2-14; y++ {
+			set(buf, x0, mid, y, BRICK)
+			set(buf, x0, mid+1, y, BRICK)
+		}
+		set(buf, x0, rx+6, ry+5, TORCH)
+		chestAt(buf, x0, rx+w/2-1+int(r()*10), ry+h-4)
+		if r() < 0.7 {
 			chestAt(buf, x0, rx+4, ry+h-4)
 		}
 	}
@@ -651,7 +665,14 @@ func loadSlot(slot int) {
 			shade[row+lx] = int8(int(hash32(cx*CW+lx, y, 99)%21) - 10)
 		}
 	}
-	loadLayer(wall, savedWalls, slot)
+	if _, ok := savedWalls[cx]; ok {
+		loadLayer(wall, savedWalls, slot)
+	} else {
+		gw := genWalls(cx)
+		for y := 0; y < H; y++ {
+			copy(wall[y*W+slot*CW:y*W+slot*CW+CW], gw[y*CW:y*CW+CW])
+		}
+	}
 	loadLayer(paint, savedPaint, slot)
 	loadLayer(wpaint, savedWPaint, slot)
 	dirty[slot] = false
@@ -690,7 +711,7 @@ func saveLayer(layer []uint8, to map[int][]uint16, slot int) {
 }
 
 func saveLayers(slot int) {
-	saveLayer(wall, savedWalls, slot)
+	savedWalls[baseChunk+slot] = packLayer(wall, slot) // kept even when empty: generated walls may have been removed
 	saveLayer(paint, savedPaint, slot)
 	saveLayer(wpaint, savedWPaint, slot)
 }

@@ -18,7 +18,7 @@ func TestSeedsAreStable(t *testing.T) {
 		seed string
 		cx   int
 		sum  int32
-	}{{"12345", 0, 782178981}, {"12345", -3, 1492155978}, {"12345", 17, -1171153157}, {"hello", 0, 958037013}, {"hello", 5, -1773515645}}
+	}{{"12345", 0, 782178981}, {"12345", -3, 1492155978}, {"12345", 17, -1171153157}, {"hello", 0, 2063613477}, {"hello", 5, -1773515645}}
 	for _, w := range want {
 		seedN = seedFrom(w.seed)
 		a, b := chunkSum(w.cx), chunkSum(w.cx)
@@ -46,4 +46,34 @@ func TestWorldHasOresAndCaves(t *testing.T) {
 		}
 	}
 	t.Logf("counts: %v", count)
+}
+
+// Villages, sky islands, ruins and their back walls should show up, and walls must be
+// repeatable too
+func TestStructuresAppear(t *testing.T) {
+	seedN = seedFrom("12345")
+	doors, sky, walls := 0, 0, 0
+	for cx := -40; cx < 40; cx++ {
+		b := genChunk(cx)
+		for i, v := range b {
+			if v == DOOR {
+				doors++
+			}
+			if v == GRASS && i/CW < 130 {
+				sky++
+			}
+		}
+		w1, w2 := genWalls(cx), genWalls(cx)
+		for i := range w1 {
+			if w1[i] != w2[i] {
+				t.Fatalf("walls of chunk %d are not repeatable", cx)
+			}
+			if w1[i] != 0 {
+				walls++
+			}
+		}
+	}
+	if doors == 0 || sky == 0 || walls == 0 {
+		t.Errorf("structures missing: doors %d, sky island grass %d, walls %d", doors, sky, walls)
+	}
 }

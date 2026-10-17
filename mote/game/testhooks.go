@@ -279,6 +279,45 @@ func runScript() {
 					fmt.Println("P", row)
 				}
 			}
+		case "tpstruct": // tpstruct=village|sky|ruin|pyramid: go to the nearest one
+			wx0 := baseChunk*CW + int(player.x/CELL)
+			for d := 0; d < 40; d++ {
+				for _, s := range []int{d, -d - 1} {
+					switch arg {
+					case "village":
+						if hs := villageHouses(floorDiv(wx0, villageSlot) + s); hs != nil {
+							teleportTo(hs[0].x + hs[0].w/2)
+							return
+						}
+					case "sky":
+						if is, ok := skyIslandAt(floorDiv(wx0, skySlot) + s); ok {
+							teleportTo(is.cx)
+							player.y = float64((is.top - 14) * CELL)
+							player.x = float64((is.cx-12-baseChunk*CW)*CELL) - player.w/2
+							return
+						}
+					case "ruin":
+						sl := floorDiv(wx0, ruinSlot) + s
+						if hash01(sl, 0, 211) <= 0.55 {
+							w := 90 + int(hash01(sl, 1, 211)*70)
+							h := 44 + int(hash01(sl, 2, 211)*22)
+							rx := sl*ruinSlot + 40 + int(hash01(sl, 3, 211)*float64(ruinSlot-80-w))
+							ry := int(H*0.52 + hash01(sl, 4, 211)*H*0.18)
+							teleportTo(rx + w/2)
+							player.y = float64((ry + h - 3 - 14) * CELL)
+							player.x = float64((rx+w/2-baseChunk*CW)*CELL)
+							return
+						}
+					case "pyramid":
+						sl := floorDiv(wx0, pyramidSlot) + s
+						px := sl*pyramidSlot + 100 + int(hash01(sl, 1, 221)*float64(pyramidSlot-200))
+						if hash01(sl, 0, 221) <= 0.7 && isDesert(px) && isDesert(px-50) && isDesert(px+50) {
+							teleportTo(px - 70)
+							return
+						}
+					}
+				}
+			}
 		case "useonce":
 			useOnce()
 			fmt.Printf("useonce sel=%d toast=%q objs=%d aim=%.0f,%.0f\n", selected, toastText, len(objs), aimSX, aimSY)
