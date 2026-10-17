@@ -61,8 +61,11 @@ func openScreen(s screen) {
 		sfx("close")
 	}
 	cur = s
+	screenOpenedAt = frame
 	clearPointers()
 }
+
+var screenOpenedAt int
 
 func defaultInvInfo() string {
 	if isTouch {
@@ -217,12 +220,16 @@ func hud() {
 		}
 		pr := Rect{bx, logicalH/2 - 88, 48, 48}
 		ir := Rect{bx, logicalH/2 - 24, 48, 48}
-		hudRects = append(hudRects, pr, ir)
+		cr := Rect{bx, logicalH/2 + 40, 48, 48}
+		hudRects = append(hudRects, pr, ir, cr)
 		if Button(pr, "", styleSlate, true, icoPause) {
 			openScreen(scPause)
 		}
 		if Button(ir, "", styleSlate, true, icoBag) {
 			openScreen(scInv)
+		}
+		if Button(cr, "", styleSlate, true, icoCraft) {
+			openHandCrafting()
 		}
 		cx, cy := stickCenter()
 		ops = append(ops, func(dst *ebiten.Image) { drawStick(dst, cx, cy) })
@@ -721,13 +728,13 @@ func pauseMenu() {
 	if isTouch {
 		Label("TOUCH CONTROLS", kr.X+12, kr.Y+16)
 		rows = [][2]string{{"Move", "Joystick left / right"}, {"Levitate", "Push the joystick up"}, {"Inventory", "Bag button"},
-			{"Pause", "Pause button"}, {"Pick item", "Tap a hotbar slot"}, {"Use item", "Touch the world"},
+			{"Pause", "Pause button"}, {"Crafting", "Hammer button"}, {"Pick item", "Tap a hotbar slot"}, {"Use item", "Touch the world"},
 			{"Use a station", "Tap it"}, {"Build shapes", "Build bar over the hotbar"},
 			{"Look around", "Touch with no slot picked"}, {"Drop", "Drag out of the inventory"}}
 	} else {
 		Label("KEYBOARD AND MOUSE", kr.X+12, kr.Y+16)
 		rows = [][2]string{{"Move", keyLabel(b["left"]) + " / " + keyLabel(b["right"]) + " or arrows"}, {"Levitate", keyLabel(b["lev"]) + ", Up or Space"},
-			{"Inventory", keyLabel(b["inv"])}, {"Drop item", keyLabel(b["drop"]) + " (Ctrl for the stack)"}, {"Pause", "Esc"},
+			{"Inventory", keyLabel(b["inv"])}, {"Crafting", keyLabel(b["craft"])}, {"Drop item", keyLabel(b["drop"]) + " (Ctrl for the stack)"}, {"Pause", "Esc"},
 			{"Pick item", "1-8 or scroll"}, {"Use item", "Click the world"}, {"Use a station", "Right-click it"},
 			{"Build shape / size", "B, then - and ="}, {"Rotate / flip", "R / F"}, {"Paint colour", "C"},
 			{"Look around", "Hold click, no slot picked"}, {"Full screen", "F11"}}
@@ -1030,7 +1037,7 @@ func settingsMenu() {
 				savePrefs()
 			}
 		} else {
-			acts := [][2]string{{"left", "Move left"}, {"right", "Move right"}, {"lev", "Levitate"}, {"inv", "Open inventory"}, {"drop", "Drop item"}}
+			acts := [][2]string{{"left", "Move left"}, {"right", "Move right"}, {"lev", "Levitate"}, {"inv", "Open inventory"}, {"drop", "Drop item"}, {"craft", "Crafting"}}
 			colW := (r.W - 36 - 30) / 2
 			for k, a := range acts {
 				ax := x + float64(k%2)*(colW+30)
@@ -1076,6 +1083,9 @@ func drawToast() {
 	w := textWidth(toastText, 11, true) + 28
 	r := Rect{(logicalW - w) / 2, 14, w, 30}
 	if cur != scPlaying { // menus have their titles at the top: show it at the bottom instead
+		if toastUntil-150 < screenOpenedAt { // only messages from this menu
+			return
+		}
 		r.Y = logicalH - 40
 	}
 	Panel(r)

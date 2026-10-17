@@ -132,6 +132,9 @@ func (g *Game) Update() error {
 			}
 		}
 		buildKeys()
+		if bindJustPressed("craft") && heldBuildKind() != buildPaint {
+			openHandCrafting()
+		}
 	} else {
 		input = gameInput{}
 	}

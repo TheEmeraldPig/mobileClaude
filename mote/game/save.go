@@ -25,7 +25,7 @@ type Prefs struct {
 }
 
 var prefs = Prefs{FOV: 3, SfxVol: 4, MusicVol: 3, StickX: 0.12, StickY: 0.62, BtnSide: "right", Full: true,
-	Binds: map[string]string{"left": "A", "right": "D", "lev": "W", "inv": "E", "drop": "Q"}}
+	Binds: map[string]string{"left": "A", "right": "D", "lev": "W", "inv": "E", "drop": "Q", "craft": "C"}}
 
 // DataDir can be set before the game starts (the Android wrapper does this).
 var DataDir string

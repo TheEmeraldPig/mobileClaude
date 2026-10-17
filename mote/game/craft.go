@@ -44,7 +44,10 @@ func openStation(kind string) {
 	sfx("open")
 }
 
+var craftOpenedAt int
+
 func openHandCrafting() {
+	craftOpenedAt = frame
 	craftStation = ""
 	craftMsg = ""
 	fixCraftTab()
@@ -147,7 +150,7 @@ func craftMenu() {
 	w := math.Min(880, logicalW-28)
 	h := math.Min(420, logicalH-24)
 	r := sheet(w, h)
-	if _, cl := head(r, craftTitle(), false); cl {
+	if _, cl := head(r, craftTitle(), false); cl || (craftStation == "" && bindJustPressed("craft") && frame > craftOpenedAt+1) {
 		play()
 		return
 	}
