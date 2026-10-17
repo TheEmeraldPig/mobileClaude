@@ -24,7 +24,7 @@ var stationCol = map[byte][3]int{
 	'G': {120, 126, 140}, 'g': {84, 88, 102}, 'k': {60, 62, 74},
 	'f': {255, 150, 60}, 'T': {255, 222, 120}, 'r': {200, 70, 40},
 	'I': {150, 156, 172}, 'i': {200, 206, 220}, 'm': {96, 100, 116},
-	'c': {210, 126, 70}, 'w': {226, 230, 236},
+	'c': {210, 126, 70}, 'w': {226, 230, 236}, 'R': {200, 80, 96},
 }
 
 var stations = map[string]*stationDef{
@@ -48,6 +48,23 @@ var stations = map[string]*stationDef{
 		"OGgGGgGGgO",
 		"OOOOOOOOOO",
 	}},
+	"storage": {name: "Storage chest", sprite: []string{
+		".OOOOOOOOOO.",
+		"OPPPPPPPPPPO",
+		"OppppppppppO",
+		"OOOOOTTOOOOO",
+		"OPPPPTTPPPPO",
+		"OppppppppppO",
+		"OOOOOOOOOOOO",
+	}},
+	"bed": {name: "Bed", sprite: []string{
+		"OO..........",
+		"OhOOOOOOOOOO",
+		"OhwwwwRRRRRO",
+		"OhOOOOOOOOhO",
+		"OhO......OhO",
+		"OOO......OOO",
+	}},
 	"anvil": {name: "Anvil", sprite: []string{
 		"OOOOOOOOOOO",
 		"OiiiiiiiiIO",
@@ -59,28 +76,32 @@ var stations = map[string]*stationDef{
 }
 
 // Station order for menus and the item list
-var stationOrder = []string{"workbench", "furnace", "anvil"}
+var stationOrder = []string{"workbench", "furnace", "anvil", "bed", "storage"}
 
 type Obj struct {
 	kind  string
 	wx, y int // top-left cell; wx in world cells
 	flip  bool
-	hits  int // frames being mined
+	hits  int      // frames being mined
+	items []*Stack // what a storage chest holds
 }
 
 type SavedObj struct {
-	Kind string `json:"kind"`
-	WX   int    `json:"wx"`
-	Y    int    `json:"y"`
-	Flip bool   `json:"flip,omitempty"`
+	Kind  string   `json:"kind"`
+	WX    int      `json:"wx"`
+	Y     int      `json:"y"`
+	Flip  bool     `json:"flip,omitempty"`
+	Items []*Stack `json:"items,omitempty"`
 }
+
+const storageSize = 24
 
 var objs []*Obj
 
 func saveObjs() []SavedObj {
 	out := make([]SavedObj, 0, len(objs))
 	for _, o := range objs {
-		out = append(out, SavedObj{o.kind, o.wx, o.y, o.flip})
+		out = append(out, SavedObj{o.kind, o.wx, o.y, o.flip, o.items})
 	}
 	return out
 }
@@ -89,7 +110,16 @@ func loadObjs(s []SavedObj) {
 	objs = objs[:0]
 	for _, o := range s {
 		if stations[o.Kind] != nil {
-			objs = append(objs, &Obj{kind: o.Kind, wx: o.WX, y: o.Y, flip: o.Flip})
+			ob := &Obj{kind: o.Kind, wx: o.WX, y: o.Y, flip: o.Flip}
+			if o.Kind == "storage" {
+				ob.items = make([]*Stack, storageSize)
+				for i, s := range o.Items {
+					if i < storageSize && s != nil && items[s.ID] != nil {
+						ob.items[i] = s
+					}
+				}
+			}
+			objs = append(objs, ob)
 		}
 	}
 }
@@ -188,12 +218,27 @@ func placeStation(it *Item, ax, ay int) bool {
 		toast("Not enough room - it needs flat ground")
 		return false
 	}
-	objs = append(objs, &Obj{kind: it.station, wx: lx + baseChunk*CW, y: ty, flip: buildFlip})
+	ob := &Obj{kind: it.station, wx: lx + baseChunk*CW, y: ty, flip: buildFlip}
+	if it.station == "storage" {
+		ob.items = make([]*Stack, storageSize)
+	}
+	objs = append(objs, ob)
 	sort.SliceStable(objs, func(a, b int) bool { return objs[a].wx < objs[b].wx })
 	takeSelected(1)
 	burst(14, float64(lx+3), float64(ty+3), tipRGB, 1.2, 1.2, 24)
 	sfx("build")
-	toast(stations[it.station].name + " placed. Tap it to craft.")
+	how := "Right-click"
+	if isTouch {
+		how = "Tap"
+	}
+	switch it.station {
+	case "bed":
+		toast(how + " the bed to make it your spawn point")
+	case "storage":
+		toast(how + " the chest to store items")
+	default:
+		toast(stations[it.station].name + " placed. " + how + " it to craft.")
+	}
 	return true
 }
 
@@ -208,6 +253,14 @@ func removeObj(o *Obj, give bool) {
 	w, h := o.size()
 	if give {
 		dropItem(o.kind, 1, float64((o.lx()+w/2)*CELL), float64((o.y+h/2)*CELL), 0)
+		for _, s := range o.items { // a storage chest spills what it held
+			if s != nil {
+				dropItem(s.ID, s.N, float64((o.lx()+w/2)*CELL), float64((o.y+h/2)*CELL), 0)
+			}
+		}
+	}
+	if chestObj == o && cur == scChest {
+		play()
 	}
 	burst(16, float64(o.lx()+w/2), float64(o.y+h/2), stationCol['G'], 1.4, 1.4, 24)
 	sfx("dig")
@@ -285,6 +338,9 @@ func drawObjects(lit func(x, y int, c [3]int, s int), ox, oy int) {
 	for _, o := range objs {
 		w, h := o.size()
 		lx := o.lx()
+		// close enough to use: the outline glows gold
+		near := cur == scPlaying && objInReach(o)
+		glow := shadeRGB([3]int{255, 222, 120}, 0.75+0.25*math.Sin(float64(frame)*0.12))
 		for dy := 0; dy < h; dy++ {
 			for dx := 0; dx < w; dx++ {
 				ch := o.cell(dx, dy)
@@ -296,6 +352,10 @@ func drawObjects(lit func(x, y int, c [3]int, s int), ox, oy int) {
 					continue
 				}
 				c := stationCol[ch]
+				if near && ch == 'O' {
+					lit(x-ox, y-oy, glow, 30)
+					continue
+				}
 				if o.kind == "furnace" && (ch == 'f' || ch == 'T' || ch == 'r') {
 					f := 0.8 + 0.2*math.Sin(float64(frame)*0.25+float64(dx*3+dy))
 					c = shadeRGB(c, f)

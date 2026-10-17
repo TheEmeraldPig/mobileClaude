@@ -84,6 +84,7 @@ type SaveState struct {
 	Time      float64          `json:"time"`
 	HP        int              `json:"hp"`
 	SpawnWX   int              `json:"spawnWX"`
+	SpawnY    int              `json:"spawnY"`
 	Drops     []SavedDrop      `json:"drops"`
 	MaxHP     int              `json:"maxHP"`
 	World     WorldInfo        `json:"world"`
@@ -125,7 +126,7 @@ func serializeState() SaveState {
 	}
 	return SaveState{V: 1, Seed: seedText, BaseChunk: baseChunk, Chunks: chunks, Started: started,
 		PlayerWX: player.x + float64(baseChunk*CW*CELL), PlayerY: player.y, Energy: player.energy, Face: player.face,
-		Inv: append([]*Stack(nil), inv...), Selected: selected, Time: worldTime, HP: player.hp, SpawnWX: spawnWX, Drops: drops,
+		Inv: append([]*Stack(nil), inv...), Selected: selected, Time: worldTime, HP: player.hp, SpawnWX: spawnWX, SpawnY: spawnY, Drops: drops,
 		MaxHP: player.maxHP, World: world, BossDown: bossDown, Objs: saveObjs(),
 		Walls: savedWalls, Paint: savedPaint, WPaint: savedWPaint}
 }
@@ -172,7 +173,7 @@ func restoreState(st *SaveState) bool {
 	if selected < -1 || selected >= hotbarN {
 		selected = -1
 	}
-	worldTime, player.hp, spawnWX = st.Time, st.HP, st.SpawnWX
+	worldTime, player.hp, spawnWX, spawnY = st.Time, st.HP, st.SpawnWX, st.SpawnY
 	player.maxHP, bossDown = st.MaxHP, st.BossDown || st.Run.BossDown
 	if player.maxHP <= 0 {
 		player.maxHP = 10

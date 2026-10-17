@@ -49,7 +49,7 @@ func (g *Game) Update() error {
 		switch cur {
 		case scPlaying:
 			openScreen(scPause)
-		case scPause, scInv:
+		case scPause, scInv, scChest:
 			play()
 		case scSettings:
 			if settingsFrom == scMain {
@@ -66,7 +66,7 @@ func (g *Game) Update() error {
 				play()
 			}
 		}
-	} else if bindJustPressed("inv") && (cur == scPlaying || cur == scInv || cur == scCraft) && listening == "" {
+	} else if bindJustPressed("inv") && (cur == scPlaying || cur == scInv || cur == scCraft || cur == scChest) && listening == "" {
 		if cur == scPlaying {
 			openScreen(scInv)
 		} else {
@@ -174,6 +174,8 @@ func (g *Game) Update() error {
 	case scWorlds:
 		mainMenuArt()
 		worldsMenu()
+	case scChest:
+		storageMenu()
 	}
 	shake *= 0.86
 	drawToast()

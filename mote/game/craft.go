@@ -29,6 +29,14 @@ var (
 )
 
 func openStation(kind string) {
+	if kind == "bed" {
+		useBed()
+		return
+	}
+	if kind == "storage" {
+		openStorage()
+		return
+	}
 	craftStation = kind
 	craftMsg = ""
 	fixCraftTab()
@@ -360,6 +368,9 @@ func craftMenu() {
 	}
 	if !items[rc.out].tool && Button(Rect{bx, det.Y + 24 + bh, btnW, math.Min(36, bh*0.75)}, allLabel, styleViolet, times > 1, nil) {
 		doCraft(rc, min(times, 99))
+	}
+	if craftStation == "" {
+		Text("More recipes at the workbench, furnace and anvil.", det.X+14, det.Y+det.H-14, 11, colMuted, text.AlignStart)
 	}
 	if craftMsg != "" && frame-craftMsgAt < 180 {
 		Text(craftMsg, det.X+det.W-14, det.Y+det.H-14, 12, colT, text.AlignEnd)

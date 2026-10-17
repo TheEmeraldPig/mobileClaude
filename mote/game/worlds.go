@@ -215,7 +215,11 @@ func die() {
 	player.hp = 0
 	deathMode = world.Mode
 	ex, ey := player.x, player.y
-	dropAt := func(s *Stack) { dropItem(s.ID, s.N, ex, ey, 0) }
+	dropAt := func(s *Stack) { // scatter a little so the pile is easy to spot
+		dropItem(s.ID, s.N, ex+player.w/2, ey, 0)
+		e := ents[len(ents)-1]
+		e.vx, e.vy = (rand.Float64()-0.5)*4, -2-rand.Float64()*2
+	}
 	lost := 0
 	for i, s := range inv {
 		if s == nil {
@@ -264,7 +268,7 @@ func die() {
 func respawn() {
 	player.hp = player.maxHP
 	player.vx, player.vy, player.energy, player.invuln = 0, 0, 1, 90
-	teleportTo(spawnWX)
+	respawnPoint()
 	if world.Mode >= modeHard {
 		starterKit(true)
 	}
@@ -282,6 +286,41 @@ func keepItems(es []*Entity) []*Entity {
 		}
 	}
 	return out
+}
+
+// Sleeping in a bed makes it your respawn point
+func useBed() {
+	for _, o := range objs {
+		if o.kind == "bed" && objInReach(o) {
+			w, _ := o.size()
+			spawnWX, spawnY = o.wx+w/2, o.y
+			toast("Spawn point set")
+			sfx("gem")
+			burst(12, float64(o.lx()+w/2), float64(o.y), tipRGB, 1, 1, 30)
+			return
+		}
+	}
+}
+
+// Respawn at the bed if it's still there, otherwise on the surface at the spawn column
+func respawnPoint() {
+	if spawnY > 0 {
+		for _, o := range objs {
+			w, _ := o.size()
+			if o.kind == "bed" && o.wx+w/2 == spawnWX && o.y == spawnY {
+				shiftWindow(floorDiv(spawnWX, CW) - NCH/2 - baseChunk)
+				player.x = float64((spawnWX-baseChunk*CW)*CELL) - player.w/2
+				player.y = float64((spawnY+5)*CELL) - player.h
+				unstick()
+				updatePlayerCells()
+				placeCamera()
+				return
+			}
+		}
+		spawnY = 0
+		toast("Your bed is gone, so you woke up outside")
+	}
+	teleportTo(spawnWX)
 }
 
 // Move the mote to dry ground at world column wx, sliding the loaded window there

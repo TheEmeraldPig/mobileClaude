@@ -26,6 +26,7 @@ const (
 	scDead
 	scCraft
 	scWorlds
+	scChest
 )
 
 var (
@@ -153,6 +154,17 @@ func hud() {
 		dtxt += "  -  " + modeNames[world.Mode]
 	}
 	Text(dtxt, 14, 42, 12, colMuted, text.AlignStart)
+	// the mouse over a station shows its name
+	if !isTouch {
+		x, y := int(math.Floor((cam.x+hoverX/zoom)/CELL)), int(math.Floor((cam.y+hoverY/zoom)/CELL))
+		if o := objAt(x, y); o != nil {
+			name := stations[o.kind].name
+			hx, hy := hoverX+14, hoverY-6
+			ops = append(ops, func(dst *ebiten.Image) {
+				drawText(dst, name, hx, hy, textOpt{size: 13, shadow: true, col: colT})
+			})
+		}
+	}
 	// a nearby station: say how to use it
 	for _, o := range objs {
 		if objInReach(o) {
@@ -160,7 +172,14 @@ func hud() {
 			if isTouch {
 				how = "Tap"
 			}
-			Text(how+" the "+stations[o.kind].name+" to craft", 14, 60, 12, colT, text.AlignStart)
+			what := " to craft"
+			switch o.kind {
+			case "bed":
+				what = " to set your spawn point"
+			case "storage":
+				what = " to open it"
+			}
+			Text(how+" the "+stations[o.kind].name+what, 14, 60, 12, colT, text.AlignStart)
 			break
 		}
 	}

@@ -157,6 +157,7 @@ var (
 	seedText    string
 	seedN       uint32
 	spawnWX     int // world cell x of the spawn point
+	spawnY      int // cell y of a bed used as the spawn point (0 = the surface)
 )
 
 func initWorld(viewCells int) {
@@ -817,7 +818,7 @@ func createWorld(text string) {
 		}
 	}
 	sx = lx + baseChunk*CW
-	spawnWX = sx
+	spawnWX, spawnY = sx, 0
 	ents = ents[:0]
 	worldTime = 0.32 // morning
 	player.x = float64(lx * CELL)

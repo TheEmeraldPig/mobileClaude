@@ -73,7 +73,7 @@ func blockIcon(a, d byte) []string {
 var bpIcon = []string{"........", ".OOOOOO.", "OwWWWWwO", "OWwWWwWO", "OWWwwWWO", "OwWWWWwO", ".OOOOOO.", "........"}
 
 var itemOrder = []string{"pickaxe", "ironpick", "corepick", "hoe", "hammer", "paintbrush", "bucket", "coppersword", "ironsword",
-	"copperarmor", "ironarmor", "lantern", "torch", "workbench", "furnace", "anvil",
+	"copperarmor", "ironarmor", "lantern", "torch", "workbench", "furnace", "anvil", "bed", "storage",
 	"bp_hut", "bp_tower", "bp_bridge", "bp_farm", "bp_bunker",
 	"dirt", "sand", "stone", "brick", "plank", "wood", "glass", "leaves", "obsidian", "water",
 	"wall_dirt", "wall_stone", "wall_plank", "wall_brick", "wall_glass", "wall_obsidian",
@@ -107,6 +107,10 @@ var items = map[string]*Item{
 		"........", "........", "OOOOOOOO", "OppppppO", "OPPPPPPO", "OhOOOOhO", "OhO..OhO", "OOO..OOO"}},
 	"anvil": {name: "Anvil", once: true, station: "anvil", desc: "A station: metal tools, weapons and armor", icon: []string{
 		"........", "........", "OOOOOOO.", "OiiiiiIO", ".OIIIIO.", "..OmmO..", ".OmmmmO.", "OOOOOOOO"}},
+	"storage": {name: "Storage chest", once: true, station: "storage", desc: "Place it, then tap it to store items", icon: []string{
+		"........", ".OOOOOO.", "OPPPPPPO", "OppppppO", "OOOTTOOO", "OPPTTPPO", "OppppppO", "OOOOOOOO"}},
+	"bed": {name: "Bed", once: true, station: "bed", desc: "Place it, then tap it to make it your respawn point", icon: []string{
+		"........", "........", "O.......", "OhOOOOOO", "OhwwRRRO", "OhOOOOhO", "OhO..OhO", "OOO..OOO"}},
 	"hammer": {name: "Hammer", tool: true, desc: "Knocks down background walls", reach: 3, icon: []string{
 		".OOOOO..", "OSSSSsO.", "OSSSSsO.", ".OOhOO..", "...hH...", "...hH...", "...hH...", "...hh..."}},
 	"paintbrush": {name: "Paintbrush", tool: true, desc: "Paints blocks and walls. Pick a colour on the build bar (C)", reach: 3, icon: []string{
@@ -432,6 +436,8 @@ var recipes = []Recipe{
 	{"paintbrush", 1, [][2]any{{"wood", 2}, {"plank", 2}, {"berries", 1}}, "workbench"},
 	{"furnace", 1, [][2]any{{"stone", 20}, {"coal", 4}}, "workbench"},
 	{"anvil", 1, [][2]any{{"ironbar", 6}, {"stone", 10}}, "workbench"},
+	{"bed", 1, [][2]any{{"plank", 12}, {"leaves", 10}}, "workbench"},
+	{"storage", 1, [][2]any{{"plank", 20}}, "workbench"},
 	{"torch", 8, [][2]any{{"coal", 1}, {"wood", 2}}, "workbench"},
 	{"brick", 10, [][2]any{{"sand", 10}, {"water", 5}}, "workbench"},
 	{"bomb", 1, [][2]any{{"sand", 10}, {"coal", 2}}, "workbench"},
