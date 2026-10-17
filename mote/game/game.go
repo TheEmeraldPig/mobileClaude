@@ -164,6 +164,7 @@ func (g *Game) Update() error {
 		mainMenuArt()
 		seedMenu()
 	case scPlaying:
+		drawPopups()
 		hud()
 	case scPause:
 		pauseMenu()

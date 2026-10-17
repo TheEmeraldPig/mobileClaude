@@ -120,6 +120,7 @@ func hurtPlayer(dmg, dir int) {
 	}
 	dmg = max(1, int(math.Ceil(float64(dmg)*modeDamage[world.Mode]))-armorLevel())
 	p.hp -= dmg
+	popDamage(dmg, p.x+p.w/2, p.y, true)
 	p.invuln = 60
 	shake = math.Max(shake, 5)
 	p.regen = 0

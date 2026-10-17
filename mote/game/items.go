@@ -265,6 +265,7 @@ func addItem(id string, n int) int {
 
 // Add items, dropping whatever doesn't fit at the mote's feet
 func giveItem(id string, n int) {
+	popItem(id, n)
 	if got := addItem(id, n); got < n {
 		dropItem(id, n-got, player.x, player.y, 0)
 	}

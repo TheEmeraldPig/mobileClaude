@@ -270,6 +270,7 @@ func updateEntities() {
 				if got > 0 {
 					e.n -= got
 					sfx("pickup")
+					popItem(e.item, got)
 				}
 				if e.n <= 0 {
 					continue
@@ -491,6 +492,7 @@ func hitCreatures(cx, cy, r, dmg int) bool {
 		if math.Hypot(ex-float64(cx), ey-float64(cy)) <= float64(r)+3 {
 			e.hp -= dmg
 			e.hurt = 12
+			popDamage(dmg, e.x+e.w/2, e.y, false)
 			kb := float64(sign(ex - (player.x+player.w/2)/CELL))
 			e.vx, e.vy = kb*4, -3
 			burst(5, ex, ey, [3]int{240, 122, 106}, 1, 1, 14)

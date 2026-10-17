@@ -767,6 +767,7 @@ func shiftWindow(dc int) {
 	for _, e := range ents {
 		e.x -= shift
 	}
+	shiftPopups(shift)
 	updatePlayerCells()
 }
 
