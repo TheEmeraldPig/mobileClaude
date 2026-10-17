@@ -318,6 +318,9 @@ func runScript() {
 					}
 				}
 			}
+		case "shop":
+			k, _ := strconv.Atoi(arg)
+			openShop(k)
 		case "useonce":
 			useOnce()
 			fmt.Printf("useonce sel=%d toast=%q objs=%d aim=%.0f,%.0f\n", selected, toastText, len(objs), aimSX, aimSY)

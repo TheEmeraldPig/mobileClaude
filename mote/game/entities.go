@@ -449,6 +449,9 @@ func overlap(e *Entity) bool {
 
 func killEntity(e *Entity) {
 	cx, cy := (e.x+e.w/2)/CELL, (e.y+e.h/2)/CELL
+	if n := map[entKind]int{entGloom: 2, entBat: 1, entShade: 3, entSkitter: 2, entWisp: 4, entBrute: 8, entWarden: 60}[e.kind]; n > 0 {
+		dropItem("coin", n+rand.Intn(n+1), e.x, e.y, 0)
+	}
 	burst(18, cx, cy, [3]int{150, 90, 220}, 1.6, 1.6, 30)
 	sfx("die")
 	switch e.kind {

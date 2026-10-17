@@ -267,6 +267,10 @@ func startWorldPointer(id int, x, y float64) {
 		toggleDoor(aimX, aimY)
 		return
 	}
+	if t := traderAt(aimX, aimY, true); t != nil && (selected < 0 || inv[selected] == nil || !isPick(inv[selected].ID)) {
+		openShop(t.house.kind)
+		return
+	}
 	tapObj.o = nil
 	if o := objAt(aimX, aimY); o != nil && objInReach(o) {
 		if selected < 0 || inv[selected] == nil || !isPick(inv[selected].ID) {

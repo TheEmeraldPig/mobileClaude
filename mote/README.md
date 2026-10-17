@@ -41,6 +41,7 @@ Hand crafting covers planks, torches and the workbench. Everything else is made 
   - `worlds.go`: the world list, game modes (`modeDamage`, death drops in `die()`), respawning and the temporary kit.
   - `stations.go`: workstations (workbench, furnace, anvil). They are background objects kept in `objs` (not blocks): walk past them, tap or right-click to open their crafting menu, hold a pickaxe on one to pick it up. Add one to `stations` with a sprite, plus an item with `station:` set.
   - `structures.go`: big generated structures: sky islands with shrines, underground ruins, desert pyramids and surface villages (whose houses hold traders). They also get background walls through `genWalls`, which re-runs the structure passes into a wall buffer when a chunk without saved walls loads.
+  - `traders.go`: village traders (motes in other colours with hats) and their shops: stock and prices in `traderKinds`, what they pay in `sellValue`. Coins drop from creatures and are in chests.
   - `doors.go`: doors (a 3x14 group of `DOOR`/`DOOROPEN` blocks): tap to open and close, creatures can't pass a closed one.
   - `storage.go`: the storage chest screen (a station whose `items` hold 24 stacks).
   - `craft.go`: the crafting screen: category tabs, a row of recipes and a details panel. Recipes live in `recipes` in `items.go`; `at` names the station ("" = by hand).

@@ -53,7 +53,7 @@ func (g *Game) Update() error {
 		switch cur {
 		case scPlaying:
 			openScreen(scPause)
-		case scPause, scInv, scChest:
+		case scPause, scInv, scChest, scShop:
 			play()
 		case scSettings:
 			if settingsFrom == scMain {
@@ -124,7 +124,13 @@ func (g *Game) Update() error {
 		if !isTouch && inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
 			x, y := int(math.Floor((cam.x+hoverX/zoom)/CELL)), int(math.Floor((cam.y+hoverY/zoom)/CELL))
 			rightOnObj = true
-			if x >= 0 && x < W && y >= 0 && y < H && isDoor(grid[y*W+x]) {
+			if t := traderAt(x, y, false); t != nil {
+				if traderInReach(t) {
+					openShop(t.house.kind)
+				} else {
+					toast("Get closer to talk to " + traderKinds[t.house.kind].name)
+				}
+			} else if x >= 0 && x < W && y >= 0 && y < H && isDoor(grid[y*W+x]) {
 				if cellInBuildReach(x, y) {
 					toggleDoor(x, y)
 				}
@@ -165,6 +171,7 @@ func (g *Game) Update() error {
 		followPlayer()
 		useHeld()
 		updateEntities()
+		updateTraders()
 		checkObjects()
 		healWear()
 		updateParticles()
@@ -185,6 +192,7 @@ func (g *Game) Update() error {
 		mainMenuArt()
 		seedMenu()
 	case scPlaying:
+		traderLabels()
 		drawPopups()
 		hud()
 	case scPause:
@@ -205,6 +213,8 @@ func (g *Game) Update() error {
 		worldsMenu()
 	case scChest:
 		storageMenu()
+	case scShop:
+		shopMenu()
 	}
 	shake *= 0.86
 	drawToast()

@@ -27,6 +27,8 @@ const (
 	scCraft
 	scWorlds
 	scChest
+	scShop
+	scBook
 )
 
 var (

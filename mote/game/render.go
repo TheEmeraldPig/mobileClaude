@@ -406,6 +406,7 @@ func drawWorld(screen *ebiten.Image) {
 		sky[y*vw+x] = false
 	}
 	drawObjects(lit, ox, oy)
+	drawTraders(lit, put, ox, oy)
 	drawEntities(lit, put, ox, oy)
 	blend := func(x, y int, c [3]int, a float64) { emit(x, y, vw, vh, c, a) }
 	drawHologram(blend, ox, oy)

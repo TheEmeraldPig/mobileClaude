@@ -92,7 +92,7 @@ var itemOrder = []string{"pickaxe", "copperpick", "ironpick", "goldpick", "corep
 	"dirt", "sand", "stone", "brick", "plank", "wood", "glass", "leaves", "obsidian", "water",
 	"wall_dirt", "wall_stone", "wall_plank", "wall_brick", "wall_glass", "wall_obsidian",
 	"coal", "copper", "iron", "gold", "crystal", "copperbar", "ironbar", "goldbar", "coreshard",
-	"seeds", "wheat", "berries", "bread", "heart", "gem", "bomb"}
+	"seeds", "wheat", "berries", "bread", "potion", "heart", "gem", "bomb", "coin"}
 
 var items = map[string]*Item{
 	"pickaxe":    {name: "Stone pickaxe", tool: true, desc: "Digs soft blocks, stone, coal and copper. Opens chests", reach: 4, dmg: 1, icon: toolIcon(pickRows, 'S', 's')},
@@ -127,6 +127,10 @@ var items = map[string]*Item{
 	"hammer": {name: "Hammer", tool: true, desc: "Knocks down background walls", reach: 3, icon: toolIcon(hammerRows, 'S', 's')},
 	"paintbrush": {name: "Paintbrush", tool: true, desc: "Paints blocks and walls. Pick a colour on the build bar (C)", reach: 3, icon: []string{
 		"......qa", ".....qaa", "....OqO.", "...OBO..", "..ODO...", ".OBO....", "OTO.....", "OO......"}},
+	"coin": {name: "Coin", desc: "Traders in villages take these. Sell them things to earn more", icon: []string{
+		"........", "..OOOO..", ".OuuuUO.", "OuTuuuUO", "OuuTuuUO", "OuuuuUUO", ".OUUUUO.", "..OOOO.."}},
+	"potion": {name: "Healing potion", once: true, heal: 12, desc: "Drink to heal six hearts", icon: []string{
+		"...OO...", "...hh...", "..OkkO..", ".OaaaaO.", "OaAaaaaO", "OaaaaAaO", ".OaaaaO.", "..OOOO.."}},
 	"coreshard": {name: "Core shard", desc: "A piece of the Core. Forge it into the Core pickaxe", icon: []string{
 		"...OO...", "..OqAO..", ".OqAAqO.", "OqAAAAqO", ".OqAAqO.", "..OqqO..", "...OO...", "........"}},
 	"corepick": {name: "Core pickaxe", tool: true, desc: "Digs a huge area very fast and hits hard", reach: 8, dmg: 5, icon: toolIcon(pickRows, 'q', 'A')},
@@ -556,13 +560,13 @@ type lootEntry struct {
 	chance   float64
 }
 
-var graveLoot = []lootEntry{{"seeds", 3, 8, 0.8}, {"torch", 4, 10, 0.7}, {"berries", 2, 5, 0.6}, {"bread", 1, 2, 0.4},
+var graveLoot = []lootEntry{{"coin", 3, 10, 0.7}, {"seeds", 3, 8, 0.8}, {"torch", 4, 10, 0.7}, {"berries", 2, 5, 0.6}, {"bread", 1, 2, 0.4},
 	{"copper", 4, 10, 0.5}, {"coal", 4, 10, 0.5}, {"heart", 1, 1, 0.12}, {"bomb", 1, 3, 0.3}, {"bp_farm", 1, 1, 0.1}}
 
-var skyLoot = []lootEntry{{"goldbar", 3, 8, 0.6}, {"crystal", 4, 10, 0.6}, {"gem", 1, 3, 0.6}, {"heart", 1, 1, 0.45},
+var skyLoot = []lootEntry{{"coin", 15, 40, 0.8}, {"goldbar", 3, 8, 0.6}, {"crystal", 4, 10, 0.6}, {"gem", 1, 3, 0.6}, {"heart", 1, 1, 0.45},
 	{"lantern", 1, 1, 0.2}, {"goldpick", 1, 1, 0.1}, {"bread", 2, 5, 0.4}}
 
-var dungeonLoot = []lootEntry{{"ironbar", 3, 8, 0.6}, {"goldbar", 2, 5, 0.4}, {"heart", 1, 1, 0.4}, {"gem", 1, 2, 0.5},
+var dungeonLoot = []lootEntry{{"coin", 8, 25, 0.75}, {"potion", 1, 2, 0.35}, {"ironbar", 3, 8, 0.6}, {"goldbar", 2, 5, 0.4}, {"heart", 1, 1, 0.4}, {"gem", 1, 2, 0.5},
 	{"bomb", 2, 5, 0.5}, {"bread", 2, 4, 0.5}, {"copperarmor", 1, 1, 0.15}, {"ironsword", 1, 1, 0.12},
 	{"crystal", 3, 8, 0.4}, {"bp_tower", 1, 1, 0.12}, {"bp_bunker", 1, 1, 0.15}}
 
