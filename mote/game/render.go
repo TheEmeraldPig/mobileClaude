@@ -277,6 +277,8 @@ func clamp8(v int) byte {
 	return byte(v)
 }
 
+var skyCells []bool
+
 func drawWorld(screen *ebiten.Image) {
 	vw, vh := int(logicalW/zoom/CELL)+2, int(logicalH/zoom/CELL)+2
 	viewW, viewH = vw, vh
@@ -298,7 +300,11 @@ func drawWorld(screen *ebiten.Image) {
 	set := func(o int, c [3]int) {
 		pix[o], pix[o+1], pix[o+2], pix[o+3] = clamp8(c[0]), clamp8(c[1]), clamp8(c[2]), 255
 	}
-	sky := make([]bool, vw*vh) // cells showing the open sky (never darkened)
+	if len(skyCells) != vw*vh {
+		skyCells = make([]bool, vw*vh)
+	}
+	sky := skyCells // cells showing the open sky (never darkened)
+	clear(sky)
 	// The world is drawn at full brightness here; the light map darkens and colours it later.
 	for y := 0; y < vh; y++ {
 		wy := oy + y

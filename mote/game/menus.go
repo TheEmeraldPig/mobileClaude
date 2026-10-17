@@ -1007,6 +1007,11 @@ func settingsMenu() {
 			prefs.UISize = c
 			savePrefs()
 		}
+		Label("LIGHTING", x+380, y)
+		if c := seg(x+380, y+14, []string{"Fancy", "Simple"}, b2i(prefs.Simple)); c >= 0 {
+			prefs.Simple = c == 1
+			savePrefs()
+		}
 		y += 70
 		Label("TIPS", x, y)
 		if c := seg(x, y+14, []string{"On", "Off"}, b2i(!prefs.Tips)); c >= 0 {

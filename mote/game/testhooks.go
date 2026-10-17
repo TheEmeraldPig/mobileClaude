@@ -321,6 +321,8 @@ func runScript() {
 		case "book": // book=CHAPTER
 			bookChapter, _ = strconv.Atoi(arg)
 			openBook(scPause)
+		case "fps":
+			fmt.Printf("fps %.1f tps %.1f\n", ebiten.ActualFPS(), ebiten.ActualTPS())
 		case "shop":
 			k, _ := strconv.Atoi(arg)
 			openShop(k)

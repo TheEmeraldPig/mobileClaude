@@ -161,41 +161,51 @@ func buildLightMap(ox, oy, vw, vh int, skyCell func(x, y int) bool) {
 			}
 		}
 	}
-	blur3(lightBuf, vw, vh, 2)
-	blur3(hazeBuf, vw, vh, 3)
-	for i := 0; i < vw*vh; i++ {
-		for c := 0; c < 3; c++ {
-			lightPix[i*4+c] = byte(math.Min(255, float64(lightBuf[i*3+c])*255))
-			hazePix[i*4+c] = byte(math.Min(255, float64(hazeBuf[i*3+c])*255*0.16))
-		}
-		lightPix[i*4+3] = 255
-		hazePix[i*4+3] = 255
+	blur3(lightBuf, vw, vh, 1)
+	blur3(hazeBuf, vw, vh, 2)
+	for i, j := 0, 0; i < vw*vh*3; i, j = i+3, j+4 {
+		lightPix[j], lightPix[j+1], lightPix[j+2], lightPix[j+3] = toByte(lightBuf[i]), toByte(lightBuf[i+1]), toByte(lightBuf[i+2]), 255
+		hazePix[j], hazePix[j+1], hazePix[j+2], hazePix[j+3] = toByte(hazeBuf[i]*0.16), toByte(hazeBuf[i+1]*0.16), toByte(hazeBuf[i+2]*0.16), 255
 	}
 	lightImg.WritePixels(lightPix)
 	hazeImg.WritePixels(hazePix)
 }
 
-// A small separable [1 2 1] blur, repeated
+// A small separable [1 2 1] blur on interleaved RGB, repeated
 func blur3(b []float32, w, h, passes int) {
 	t := tmpBuf
+	row := w * 3
 	for p := 0; p < passes; p++ {
 		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
-				l, r := max(0, x-1), min(w-1, x+1)
-				for c := 0; c < 3; c++ {
-					t[(y*w+x)*3+c] = (b[(y*w+l)*3+c] + 2*b[(y*w+x)*3+c] + b[(y*w+r)*3+c]) * 0.25
-				}
+			r := b[y*row : y*row+row]
+			o := t[y*row : y*row+row]
+			o[0], o[1], o[2] = (3*r[0]+r[3])*0.25, (3*r[1]+r[4])*0.25, (3*r[2]+r[5])*0.25
+			for i := 3; i < row-3; i++ {
+				o[i] = (r[i-3] + 2*r[i] + r[i+3]) * 0.25
 			}
+			n := row - 3
+			o[n], o[n+1], o[n+2] = (r[n-3]+3*r[n])*0.25, (r[n-2]+3*r[n+1])*0.25, (r[n-1]+3*r[n+2])*0.25
 		}
-		for y := 0; y < h; y++ {
-			u, d := max(0, y-1), min(h-1, y+1)
-			for x := 0; x < w; x++ {
-				for c := 0; c < 3; c++ {
-					b[(y*w+x)*3+c] = (t[(u*w+x)*3+c] + 2*t[(y*w+x)*3+c] + t[(d*w+x)*3+c]) * 0.25
-				}
+		copy(b[:row], t[:row])
+		copy(b[(h-1)*row:], t[(h-1)*row:])
+		for y := 1; y < h-1; y++ {
+			u, c, d := t[(y-1)*row:y*row], t[y*row:(y+1)*row], t[(y+1)*row:(y+2)*row]
+			o := b[y*row : (y+1)*row]
+			for i := range o {
+				o[i] = (u[i] + 2*c[i] + d[i]) * 0.25
 			}
 		}
 	}
+}
+
+func toByte(v float32) byte {
+	if v >= 1 {
+		return 255
+	}
+	if v <= 0 {
+		return 0
+	}
+	return byte(v * 255)
 }
 
 // Put a glowing pixel on the emissive layer (a = 0..1)
@@ -231,6 +241,9 @@ func composeLight(screen *ebiten.Image, geo ebiten.GeoM) {
 	op = &ebiten.DrawImageOptions{}
 	op.GeoM = geo
 	screen.DrawImage(emitImg, op)
+	if prefs.Simple {
+		return
+	}
 	// coloured haze around lights
 	op = &ebiten.DrawImageOptions{Filter: ebiten.FilterLinear, Blend: ebiten.BlendLighter}
 	op.GeoM = geo
@@ -241,6 +254,9 @@ func composeLight(screen *ebiten.Image, geo ebiten.GeoM) {
 var vignetteImg *ebiten.Image
 
 func drawVignette(screen *ebiten.Image) {
+	if prefs.Simple {
+		return
+	}
 	const n = 64
 	if vignetteImg == nil {
 		vignetteImg = ebiten.NewImage(n, n)
