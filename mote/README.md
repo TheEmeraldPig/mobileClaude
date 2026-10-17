@@ -12,6 +12,22 @@ Every push that changes `mote/` builds both through `.github/workflows/mote.yml`
 
 Each world is its own save in `worlds/<id>.json`, listed in `worlds.json`, and holds the terrain, your character and inventory. A world's game mode is chosen when it is made: Easy (less damage, keep everything when you die), Normal (drop blocks and materials, keep tools and gear), Hard (more damage, drop everything, respawn with a temporary kit) and Hardcore (like Hard, but dying deletes the world). Saves and settings live in `%AppData%\Mote` on Windows and in the app's private storage on Android. A `save.json` from older versions is turned into a Normal world.
 
+## Playing
+
+| | PC | Phone |
+|---|---|---|
+| Move / levitate | A, D / W (or arrows, Space) | Joystick; push it up to levitate |
+| Use the selected item | Click the world | Touch the world |
+| Pick an item | 1-8 or the scroll wheel | Tap a hotbar slot |
+| Inventory / crafting | E / C | Bag / hammer buttons |
+| Use a station, chest, bed or door | Right-click it | Tap it |
+| Build shape, size | B, then - and = | Build bar above the hotbar |
+| Rotate / flip a blueprint or station | R / F | Rotate / Flip on the build bar |
+| Paint colour | C while holding the paintbrush | Colour on the build bar |
+| Undo building | Ctrl+Z | Undo on the build bar |
+
+Hand crafting covers planks, torches and the workbench. Everything else is made by opening a station: the workbench (tools, blocks, walls, stations, blueprints), the furnace (bars, glass, bread) and the anvil (metal tools, weapons, armor).
+
 ## Layout
 
 - `game/` holds the whole game as a library:
