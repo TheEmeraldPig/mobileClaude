@@ -48,7 +48,7 @@ var lightTints = [nSrc][3]float64{
 }
 
 var (
-	shadeCool   = [3]float64{0.48, 0.56, 0.92} // sky light in the shade
+	shadeCool   = [3]float64{0.48, 0.56, 0.92}  // sky light in the shade
 	ambientDark = [3]float64{0.035, 0.03, 0.07} // the darkest it gets
 )
 
