@@ -47,6 +47,24 @@ var lightTints = [nSrc][3]float64{
 	srcWarden:  {1.0, 0.45, 0.85},
 }
 
+var (
+	shadeCool   = [3]float64{0.48, 0.56, 0.92} // sky light in the shade
+	ambientDark = [3]float64{0.035, 0.03, 0.07} // the darkest it gets
+)
+
+func mixF(a, b [3]float64, t float64) [3]float64 {
+	return [3]float64{a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t, a[2] + (b[2]-a[2])*t}
+}
+
+// The colour a light fades to at the edge of its glow: deeper and redder for warm
+// lights, deeper for cool ones
+func warmEdge(c [3]float64) [3]float64 {
+	if c[0] > c[2] {
+		return [3]float64{c[0], c[1] * 0.62, c[2] * 0.45}
+	}
+	return [3]float64{c[0] * 0.7, c[1] * 0.8, c[2]}
+}
+
 func blockLightSrc(t uint8) uint8 {
 	switch t {
 	case TORCH:
@@ -143,15 +161,21 @@ func buildLightMap(ox, oy, vw, vh int, skyCell func(x, y int) bool) {
 			}
 			f := lightCurve[lvl]
 			tint := lightTints[src]
-			if src == srcSky {
-				tint = sky
+			switch {
+			case src == srcSky:
+				// daylight cools to blue in the shade, like light scattered off the sky
+				tint = mixF(shadeCool, sky, math.Pow(f, 0.7))
+			case src != srcNone:
+				// firelight reddens toward the edge of its glow
+				tint = mixF(warmEdge(tint), tint, math.Pow(f, 0.5))
 			}
 			for c := 0; c < 3; c++ {
-				lightBuf[k+c] = float32(f * tint[c])
+				// never fully black: darkness is a deep violet-blue
+				lightBuf[k+c] = float32(math.Max(f*tint[c], ambientDark[c]))
 			}
 			// haze: only from point lights, and stronger close to them
 			if src != srcSky && src != srcNone {
-				h := float32(math.Max(0, f-0.55) / 0.45)
+				h := float32(math.Max(0, f-0.5) / 0.5)
 				h *= h
 				for c := 0; c < 3; c++ {
 					hazeBuf[k+c] = h * float32(tint[c])
@@ -162,10 +186,10 @@ func buildLightMap(ox, oy, vw, vh int, skyCell func(x, y int) bool) {
 		}
 	}
 	blur3(lightBuf, vw, vh, 2)
-	blur3(hazeBuf, vw, vh, 2)
+	blur3(hazeBuf, vw, vh, 5) // a wide, soft bloom
 	for i, j := 0, 0; i < vw*vh*3; i, j = i+3, j+4 {
 		lightPix[j], lightPix[j+1], lightPix[j+2], lightPix[j+3] = toByte(lightBuf[i]), toByte(lightBuf[i+1]), toByte(lightBuf[i+2]), 255
-		hazePix[j], hazePix[j+1], hazePix[j+2], hazePix[j+3] = toByte(hazeBuf[i]*0.16), toByte(hazeBuf[i+1]*0.16), toByte(hazeBuf[i+2]*0.16), 255
+		hazePix[j], hazePix[j+1], hazePix[j+2], hazePix[j+3] = toByte(hazeBuf[i]*0.24), toByte(hazeBuf[i+1]*0.24), toByte(hazeBuf[i+2]*0.24), 255
 	}
 	lightImg.WritePixels(lightPix)
 	hazeImg.WritePixels(hazePix)

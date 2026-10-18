@@ -37,15 +37,15 @@ func isNight() bool { return daylight() < 0.3 }
 // (0-1023) with diagonal costs close to the true distance, so light spreads in smooth,
 // round pools instead of diamonds and steps. A full-strength light carries about 85
 // cells through open air and fades gently all the way, like real light does, and about
-// 40 cells into solid ground, so the ground darkens gradually below the surface.
+// 30 cells into solid ground, so the ground darkens gradually below the surface.
 
 const (
 	lightMax      = 64   // the scale used by sources and lightAt
 	lightFine     = 1023 // the internal scale
 	costAir       = 12   // per cell, internal steps (diagonals cost 17, about 12 x 1.41)
 	costDiag      = 17
-	costSolid     = 26 // light fades about twice as fast inside solid blocks
-	costSolidDiag = 37
+	costSolid     = 34 // light fades about three times as fast inside solid blocks
+	costSolidDiag = 48
 	lightReach    = lightFine/costAir + 1
 )
 
@@ -216,13 +216,13 @@ func shadeRGB(c [3]int, f float64) [3]int {
 }
 
 var (
-	skyTopDay   = [3]int{88, 120, 212}
-	skyLowDay   = [3]int{178, 202, 240}
-	skyTopNight = [3]int{8, 8, 24}
-	skyLowNight = [3]int{30, 26, 64}
+	skyTopDay   = [3]int{92, 136, 196}
+	skyLowDay   = [3]int{178, 206, 228}
+	skyTopNight = [3]int{10, 12, 32}
+	skyLowNight = [3]int{34, 36, 72}
 	duskGlow    = [3]int{244, 150, 112}
-	farHill     = [3]int{120, 112, 190}
-	nearHill    = [3]int{70, 62, 132}
+	farHill     = [3]int{128, 160, 186}
+	nearHill    = [3]int{84, 120, 140}
 	caveWall    = [3]int{112, 100, 132}
 )
 
@@ -260,13 +260,15 @@ func skyPixel(vx, vy, vw, vh int, ox, oy int, avgSurface float64) [3]int {
 			c = [3]int{180, 184, 206}
 		}
 	}
-	// clouds drifting across the upper sky
-	if t < 0.55 {
-		cn := noise2(float64(vx)+float64(ox)*0.15+float64(frame)*0.02, float64(vy)*2.2, 22, 41)
-		if cn > 0.7 {
-			cloud := mix([3]int{60, 56, 96}, [3]int{244, 244, 252}, d)
-			c = mix(c, cloud, math.Min(1, (cn-0.7)*8)*0.85)
+	// big soft clouds, lit from above
+	if ca, cl := cloudAt(vx, vy, vw, vh); ca > 0 {
+		hi := mix([3]int{70, 74, 110}, [3]int{252, 252, 255}, d)
+		lo := mix([3]int{30, 32, 60}, [3]int{150, 172, 208}, d)
+		cloud := mix(lo, hi, cl)
+		if dusk := math.Exp(-(sh / 0.2) * (sh / 0.2)); dusk > 0.02 {
+			cloud = mix(cloud, [3]int{255, 170, 130}, dusk*cl*0.5)
 		}
+		c = mix(c, cloud, ca)
 	}
 	// two layers of distant hills, moving slower than the world
 	for _, layer := range []struct {
@@ -277,14 +279,75 @@ func skyPixel(vx, vy, vw, vh int, ox, oy int, avgSurface float64) [3]int {
 	}{{0.2, 34, farHill, 51}, {0.45, 24, nearHill, 52}} {
 		hx := float64(vx) + float64(ox)*layer.f
 		horizon := float64(vh)*0.58 + (avgSurface-float64(oy)-float64(vh)*0.58)*layer.f
-		hTop := horizon - (noise1(hx, 40, layer.salt)*0.5+0.5)*layer.amp - noise1(hx, 9, layer.salt+5)*4
+		// rolling hills topped with bumpy treetops
+		hTop := horizon - (noise1(hx, 40, layer.salt)*0.5+0.5)*layer.amp - noise1(hx, 9, layer.salt+5)*4 -
+			math.Abs(noise1(hx, 3.5, layer.salt+9))*3
 		if float64(vy) >= hTop {
-			hc := mix(layer.col, low, 0.35)
-			c = shadeRGB(hc, 0.35+0.65*d)
+			// far things fade into the sky, and mist gathers lower down
+			mist := 0.3 + 0.35*smoothstep(0, 40, float64(vy)-hTop)
+			hc := mix(layer.col, low, mist)
+			if float64(vy)-hTop < 1.5 { // a lit rim along the top
+				hc = mix(hc, low, 0.35)
+			}
+			c = shadeRGB(hc, 0.3+0.7*d)
 			break
 		}
 	}
 	return c
+}
+
+// Clouds: fractal noise drifting across the upper sky, shaded so their tops catch the
+// light and their undersides are blue-grey. Worked out every few frames (they move
+// slowly) into a buffer: coverage and light, 0..1.
+var (
+	cloudBuf          []float32
+	cloudW, cloudH    int
+	cloudAt0, cloudOX int
+)
+
+func cloudField(x, y float64) float64 {
+	return noise2(x, y, 52, 41)*0.58 + noise2(x, y, 21, 42)*0.28 + noise2(x, y, 8, 43)*0.14
+}
+
+func updateClouds(vw, vh, ox int) {
+	if cloudW != vw || cloudH != vh {
+		cloudBuf = make([]float32, vw*vh*2)
+		cloudW, cloudH = vw, vh
+		cloudAt0 = -100
+	}
+	if frame-cloudAt0 < 3 && abs(ox-cloudOX) < 2 {
+		return
+	}
+	cloudAt0, cloudOX = frame, ox
+	drift := float64(ox)*0.12 + float64(frame)*0.015
+	for y := 0; y < vh; y++ {
+		t := float64(y) / float64(vh)
+		band := 1 - smoothstep(0.3, 0.62, t) // clouds stay in the upper sky
+		for x := 0; x < vw; x++ {
+			k := (y*vw + x) * 2
+			cloudBuf[k], cloudBuf[k+1] = 0, 0
+			if band <= 0 {
+				continue
+			}
+			fx, fy := float64(x)+drift, float64(y)*1.15
+			n := cloudField(fx, fy)*band + 0.08*band
+			if n < 0.56 {
+				continue
+			}
+			up := cloudField(fx-2, fy-4)*band + 0.08*band // toward the light
+			a := math.Min(1, (n-0.56)*5)
+			cloudBuf[k] = float32(a * a * (3 - 2*a) * 0.95)
+			cloudBuf[k+1] = float32(math.Max(0, math.Min(1, 0.6+(n-up)*6+(n-0.56)*1.5)))
+		}
+	}
+}
+
+func cloudAt(x, y, vw, vh int) (float64, float64) {
+	if x < 0 || y < 0 || x >= cloudW || y >= cloudH {
+		return 0, 0
+	}
+	k := (y*cloudW + x) * 2
+	return float64(cloudBuf[k]), float64(cloudBuf[k+1])
 }
 
 // ---- Compose the frame ----
@@ -319,6 +382,7 @@ func drawWorld(screen *ebiten.Image) {
 		avg += float64(surf[x])
 	}
 	avg /= float64(vw)
+	updateClouds(vw, vh, ox+baseChunk*CW)
 	set := func(o int, c [3]int) {
 		pix[o], pix[o+1], pix[o+2], pix[o+3] = clamp8(c[0]), clamp8(c[1]), clamp8(c[2]), 255
 	}
@@ -407,8 +471,12 @@ func drawWorld(screen *ebiten.Image) {
 					}
 				}
 				// a lighter top edge on blocks open to the air above, for depth
-				if wy > 0 && wy < H && wx >= 0 && wx < W && !isSolid(grid[(wy-1)*W+wx]) && t != GRASS {
-					c = mix(c, [3]int{255, 255, 255}, 0.12)
+				if wy > 0 && wy < H && wx >= 0 && wx < W && !isSolid(grid[(wy-1)*W+wx]) {
+					if wy-1 < surf[x] { // sunlit rim along the land's top
+						c = mix(c, [3]int{255, 244, 206}, 0.1+0.22*daylight())
+					} else if t != GRASS {
+						c = mix(c, [3]int{255, 255, 255}, 0.12)
+					}
 				}
 				set(o, c)
 				switch t {
