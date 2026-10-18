@@ -140,9 +140,10 @@ var blockItem = map[uint8]string{SAND: "sand", STONE: "stone", BRICK: "brick", C
 	FLOWER: "seeds", BUSH: "berries", GRAVE: "stone", OBSIDIAN: "obsidian", SANDSTONE: "sandstone"}
 
 const (
-	CELL = 2   // world px per cell
-	CW   = 128 // chunk width in cells
-	H    = 600 // world height in cells
+	CELL = 2    // world px per cell
+	CW   = 128  // chunk width in cells
+	H    = 1600 // world height in cells
+	topH = 600  // the sky and the land's shape are laid out in the top 600 rows (the old world height)
 )
 
 var (
@@ -232,11 +233,11 @@ func chunkRng(cx, salt int) func() float64 {
 
 // ---- Terrain ----
 
-var waterLevel = int(math.Floor(H * 0.5))
+var waterLevel = int(math.Floor(topH * 0.5))
 
 func surfaceAt(x int) int {
 	fx := float64(x)
-	return int(math.Floor(H*0.45 + noise1(fx, 220, 1)*H*0.2 + noise1(fx, 60, 2)*H*0.05 + noise1(fx, 14, 3)*H*0.012))
+	return int(math.Floor(topH*0.45 + noise1(fx, 220, 1)*topH*0.2 + noise1(fx, 60, 2)*topH*0.05 + noise1(fx, 14, 3)*topH*0.012))
 }
 
 type genPass func(buf []uint8, cx, x0 int)
@@ -437,49 +438,56 @@ func chestAt(buf []uint8, x0, x, y int) {
 // Brick dungeon rooms underground, with a chest and a torch-less dark inside
 func placeDungeons(buf []uint8, cx, x0 int) {
 	for c := cx - 1; c <= cx+1; c++ {
-		r := chunkRng(c, 101)
-		if r() > 0.4 {
-			continue
+		for band := 0; band < 3; band++ {
+			placeDungeon(buf, c, x0, band)
 		}
-		w, h := 40+int(r()*30), 24+int(r()*12)
-		rx := c*CW + int(r()*float64(CW-w))
-		ry := int(H*0.62 + r()*H*0.22)
-		for y := ry; y < ry+h; y++ {
-			for x := rx; x < rx+w; x++ {
-				wall := x < rx+2 || x >= rx+w-2 || y < ry+2 || y >= ry+h-2
-				if wall {
-					// cracked walls: a few gaps so you can get in
-					if hash01(x, y, 102) < 0.08 {
-						set(buf, x0, x, y, EMPTY)
-					} else {
-						set(buf, x0, x, y, BRICK)
-					}
-				} else {
+	}
+}
+
+// One possible dungeon per chunk in each of three depth bands
+func placeDungeon(buf []uint8, c, x0, band int) {
+	r := chunkRng(c, 101+band*17)
+	if r() > 0.4 {
+		return
+	}
+	w, h := 40+int(r()*30), 24+int(r()*12)
+	rx := c*CW + int(r()*float64(CW-w))
+	ry := 370 + band*360 + int(r()*240)
+	for y := ry; y < ry+h; y++ {
+		for x := rx; x < rx+w; x++ {
+			wall := x < rx+2 || x >= rx+w-2 || y < ry+2 || y >= ry+h-2
+			if wall {
+				// cracked walls: a few gaps so you can get in
+				if hash01(x, y, 102) < 0.08 {
 					set(buf, x0, x, y, EMPTY)
-					if hash01(x, y, 103) > 0.12 {
-						setW(x0, x, y, BRICK)
-					}
+				} else {
+					set(buf, x0, x, y, BRICK)
+				}
+			} else {
+				set(buf, x0, x, y, EMPTY)
+				if hash01(x, y, 103) > 0.12 {
+					setW(x0, x, y, BRICK)
 				}
 			}
 		}
-		// doorways on both sides
-		for y := ry + h - 2 - 14; y < ry+h-2; y++ {
-			set(buf, x0, rx, y, EMPTY)
-			set(buf, x0, rx+1, y, EMPTY)
-			set(buf, x0, rx+w-1, y, EMPTY)
-			set(buf, x0, rx+w-2, y, EMPTY)
-		}
-		// an inner wall splits it into two rooms, with a gap low down
-		mid := rx + w/2 + int(r()*8) - 4
-		for y := ry + 2; y < ry+h-2-14; y++ {
-			set(buf, x0, mid, y, BRICK)
-			set(buf, x0, mid+1, y, BRICK)
-		}
-		set(buf, x0, rx+6, ry+5, TORCH)
-		chestAt(buf, x0, rx+w/2-1+int(r()*10), ry+h-4)
-		if r() < 0.7 {
-			chestAt(buf, x0, rx+4, ry+h-4)
-		}
+	}
+	// doorways on both sides
+	for y := ry + h - 2 - 14; y < ry+h-2; y++ {
+		set(buf, x0, rx, y, EMPTY)
+		set(buf, x0, rx+1, y, EMPTY)
+		set(buf, x0, rx+w-1, y, EMPTY)
+		set(buf, x0, rx+w-2, y, EMPTY)
+	}
+	// an inner wall splits it into two rooms, with a gap low down
+	mid := rx + w/2 + int(r()*8) - 4
+	for y := ry + 2; y < ry+h-2-14; y++ {
+		set(buf, x0, mid, y, BRICK)
+		set(buf, x0, mid+1, y, BRICK)
+	}
+	set(buf, x0, rx+6, ry+5, TORCH)
+	chestAt(buf, x0, rx+w/2-1+int(r()*10), ry+h-4)
+	if r() < 0.7 {
+		chestAt(buf, x0, rx+4, ry+h-4)
 	}
 }
 
@@ -518,7 +526,8 @@ func placeCore(buf []uint8, cx, x0 int) {
 func noise2(x, y, scale float64, salt int) float64 {
 	fx, fy := x/scale, y/scale
 	ix, iy := math.Floor(fx), math.Floor(fy)
-	tx, ty := (1-math.Cos((fx-ix)*math.Pi))/2, (1-math.Cos((fy-iy)*math.Pi))/2
+	tx, ty := fx-ix, fy-iy
+	tx, ty = tx*tx*(3-2*tx), ty*ty*(3-2*ty) // smooth, like a cosine ease but cheaper
 	i, j := int(ix), int(iy)
 	a, b := hash01(i, j, salt), hash01(i+1, j, salt)
 	c, d := hash01(i, j+1, salt), hash01(i+1, j+1, salt)
@@ -529,16 +538,20 @@ func noise2(x, y, scale float64, salt int) float64 {
 func carveCaves(buf []uint8, cx, x0 int) {
 	for c := cx - 6; c <= cx+6; c++ {
 		r := chunkRng(c, 5)
-		worms := 1
+		worms := 4
 		if r() < 0.6 {
-			worms = 2
+			worms++
 		}
-		if r() < 0.25 {
+		if r() < 0.4 {
 			worms++
 		}
 		for k := 0; k < worms; k++ {
 			x := float64(c*CW) + r()*CW
-			y := H*0.5 + r()*H*0.45
+			// one tunnel always starts near the top; the rest anywhere down to the bottom
+			y := topH*0.5 + r()*(topH*0.45)
+			if k > 0 {
+				y = topH*0.5 + r()*(H-topH*0.5-60)
+			}
 			a := r() * math.Pi * 2
 			length := 120 + r()*260
 			base := 5 + r()*4
@@ -570,8 +583,12 @@ func carveCaverns(buf []uint8, cx, x0 int) {
 		x := float64(x0 + lx)
 		top := surfaceAt(x0+lx) + 30
 		for y := max(top, 0); y < H-4; y++ {
-			n := noise2(x, float64(y), 56, 11)*0.7 + noise2(x, float64(y), 18, 12)*0.3
 			fade := math.Min(1, float64(y-top)/40) // caverns open up gradually below the surface
+			n := noise2(x, float64(y), 56, 11) * 0.7
+			if (n+0.3)*fade <= 0.63 {
+				continue // too low even if the fine noise were at its highest
+			}
+			n += noise2(x, float64(y), 18, 12) * 0.3
 			if n*fade > 0.63 {
 				buf[y*CW+lx] = EMPTY
 			}
@@ -579,11 +596,10 @@ func carveCaverns(buf []uint8, cx, x0 int) {
 	}
 }
 
-// Ore veins in stone, rarer and richer deeper down
-// Ore veins: every 14x14-cell region may hold one clump of a single ore, so ores come in
+// Ore veins: every 18x18-cell region may hold (about a third of the time) one clump of a single ore, so ores come in
 // clean groups of their own kind. A cell checks the clumps of its own and the eight
 // neighbouring regions (clumps can spill over region and chunk borders).
-const oreRegion = 14
+const oreRegion = 18
 
 type oreKind struct {
 	t           uint8
@@ -594,14 +610,14 @@ type oreKind struct {
 
 var oreKinds = []oreKind{
 	{COAL, 4, 1.0, 2.6, 2.4},
-	{COPPER, 25, 0.8, 2.4, 2.0},
-	{IRON, 70, 0.6, 2.2, 1.8},
-	{GOLD, 140, 0.35, 2.0, 1.5},
+	{COPPER, 30, 0.8, 2.4, 2.0},
+	{IRON, 160, 0.6, 2.2, 1.8},
+	{GOLD, 450, 0.4, 2.0, 1.6},
 }
 
 // The clump in region (rx, ry), if any: centre, radius and ore
 func oreClump(rx, ry int) (float64, float64, float64, uint8, bool) {
-	if hash01(rx, ry, 41) > 0.55 {
+	if hash01(rx, ry, 41) > 0.3 {
 		return 0, 0, 0, 0, false
 	}
 	cx := float64(rx*oreRegion) + 2 + hash01(rx, ry, 42)*(oreRegion-4)
@@ -701,6 +717,40 @@ func packLayer(layer []uint8, slot int) []uint16 {
 				}
 				last, n = v, 1
 			}
+		}
+	}
+	return append(runs, uint16(last), uint16(n))
+}
+
+// Saves from a shallower world: keep the changed chunks down to just above where the
+// old lava started, and generate everything below that fresh.
+func deepenSaved(oldH int) {
+	keep := min(oldH-75, H) * CW
+	for cx, r := range saved {
+		buf := genChunk(cx)
+		copy(buf[:keep], unpackChunk(r)[:keep])
+		saved[cx] = packBuf(buf)
+	}
+	for cx, r := range savedWalls {
+		buf := genWalls(cx)
+		copy(buf[:keep], unpackChunk(r)[:keep])
+		savedWalls[cx] = packBuf(buf)
+	}
+}
+
+// Run-length pack a chunk-sized buffer (the same format as packLayer)
+func packBuf(buf []uint8) []uint16 {
+	runs := make([]uint16, 0, 256)
+	last, n := -1, 0
+	for _, b := range buf {
+		v := int(b)
+		if v == last && n < 65535 {
+			n++
+		} else {
+			if n > 0 {
+				runs = append(runs, uint16(last), uint16(n))
+			}
+			last, n = v, 1
 		}
 	}
 	return append(runs, uint16(last), uint16(n))

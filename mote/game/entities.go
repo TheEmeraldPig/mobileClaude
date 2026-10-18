@@ -81,10 +81,10 @@ func foeForDepth(depth int) entKind {
 		w float64
 	}
 	table := []pick{{entGloom, 45}, {entBat, 35}, {entSkitter, 20}}
-	if depth > 120 {
+	if depth > 250 {
 		table = append(table, pick{entWisp, 25})
 	}
-	if depth > 240 {
+	if depth > 550 {
 		table = append(table, pick{entBrute, 22})
 	}
 	sum := 0.0

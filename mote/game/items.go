@@ -602,7 +602,7 @@ func openChest(x, y int) {
 	switch {
 	case minY < 140:
 		table = skyLoot
-	case minY > H*50/100:
+	case minY > topH*50/100:
 		table = dungeonLoot
 	}
 	rolls := 3

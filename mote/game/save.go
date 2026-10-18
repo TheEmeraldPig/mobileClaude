@@ -99,6 +99,7 @@ type SaveState struct {
 	Walls     map[int][]uint16 `json:"walls,omitempty"`
 	Paint     map[int][]uint16 `json:"paint,omitempty"`
 	WPaint    map[int][]uint16 `json:"wpaint,omitempty"`
+	Height    int              `json:"height,omitempty"` // world height the chunks were saved at (0 = the old 600)
 	Run       struct {         // older saves kept the boss here
 		BossDown bool `json:"bossDown"`
 	} `json:"run"`
@@ -134,7 +135,7 @@ func serializeState() SaveState {
 		PlayerWX: player.x + float64(baseChunk*CW*CELL), PlayerY: player.y, Energy: player.energy, Face: player.face,
 		Inv: append([]*Stack(nil), inv...), Selected: selected, Time: worldTime, HP: player.hp, SpawnWX: spawnWX, SpawnY: spawnY, Guide: guideStepAt, Drops: drops,
 		MaxHP: player.maxHP, World: world, BossDown: bossDown, Objs: saveObjs(),
-		Walls: savedWalls, Paint: savedPaint, WPaint: savedWPaint}
+		Walls: savedWalls, Paint: savedPaint, WPaint: savedWPaint, Height: H}
 }
 
 func restoreState(st *SaveState) bool {
@@ -153,6 +154,13 @@ func restoreState(st *SaveState) bool {
 		for k, v := range l.from {
 			l.to[k] = v
 		}
+	}
+	if st.Height != H {
+		oldH := st.Height
+		if oldH == 0 {
+			oldH = 600
+		}
+		deepenSaved(oldH)
 	}
 	baseChunk = st.BaseChunk
 	ents = ents[:0]

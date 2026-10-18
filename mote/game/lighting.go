@@ -151,7 +151,7 @@ func buildLightMap(ox, oy, vw, vh int, skyCell func(x, y int) bool) {
 			}
 			// haze: only from point lights, and stronger close to them
 			if src != srcSky && src != srcNone {
-				h := float32(math.Max(0, f-0.35) / 0.65)
+				h := float32(math.Max(0, f-0.55) / 0.45)
 				h *= h
 				for c := 0; c < 3; c++ {
 					hazeBuf[k+c] = h * float32(tint[c])

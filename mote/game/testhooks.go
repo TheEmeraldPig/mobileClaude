@@ -164,6 +164,11 @@ func runScript() {
 			}
 		case "worlds":
 			openScreen(scWorlds)
+		case "openlast": // open the most recently played world
+			loadWorldList()
+			if len(worldList) > 0 {
+				openWorld(worldList[0])
+			}
 		case "die":
 			player.invuln = 0
 			hurtPlayer(999, 1)
@@ -193,7 +198,7 @@ func runScript() {
 		case "rot":
 			buildRot = (buildRot + 1) % 4
 		case "tpchest": // move next to the nearest chest (graves first, dungeons with arg=deep)
-			teleportNear(func(t uint8, y int) bool { return t == CHEST && (arg != "deep" || y > H*55/100) })
+			teleportNear(func(t uint8, y int) bool { return t == CHEST && (arg != "deep" || y > topH*55/100) })
 		case "tpcore":
 			shiftWindow(floorDiv(coreX(), CW) - NCH/2 - baseChunk)
 			teleportNear(func(t uint8, y int) bool { return t == CORE })
@@ -308,7 +313,7 @@ func runScript() {
 							w := 90 + int(hash01(sl, 1, 211)*70)
 							h := 44 + int(hash01(sl, 2, 211)*22)
 							rx := sl*ruinSlot + 40 + int(hash01(sl, 3, 211)*float64(ruinSlot-80-w))
-							ry := int(H*0.52 + hash01(sl, 4, 211)*H*0.18)
+							ry := ruinY(sl)
 							teleportTo(rx + w/2)
 							player.y = float64((ry + h - 3 - 14) * CELL)
 							player.x = float64((rx + w/2 - baseChunk*CW) * CELL)

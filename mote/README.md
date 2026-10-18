@@ -34,8 +34,8 @@ Hand crafting covers planks, torches and the workbench. Everything else is made 
 ## Layout
 
 - `game/` holds the whole game as a library:
-  - `world.go`: seeded chunk world: terrain, caves, caverns, ores and crystals. Follow the rules at the top of the file when adding terrain.
-  - `render.go`: the light flood fill (fog of war), the day/night sky and background, and drawing the world at full brightness.
+  - `world.go`: seeded chunk world: terrain, caves, caverns, ores and crystals. Follow the rules at the top of the file when adding terrain. The world is `H` = 1600 cells tall; the sky and the land's shape use the top `topH` = 600 rows, so everything below is underground. Saves from before record no height and are deepened on load (`deepenSaved`).
+  - `render.go`: the light flood fill (fog of war), the day/night sky and background, and drawing the world at full brightness. Light carries about 85 cells through air and about 40 into solid ground, fading gradually.
   - `lighting.go`: coloured lighting: a blurred RGB light map multiplied over the world (linear filtering for smooth falloff), an emissive layer for things that glow, coloured haze around lights and a vignette.
   - `mining.go`: block hardness, pickaxe tiers and power, crack wear, and mining background walls. With no pickaxe at all, an empty hand digs slowly, and a wooden pickaxe can be crafted by hand from 8 wood, so the mote can never get stuck.
   - `held.go`: draws the item in the mote's hand while it is used (pickaxes swing, swords slash, blocks bob). Swords hit along a slash from the mote to the aim, as far as a pickaxe reaches; better swords only do more damage.

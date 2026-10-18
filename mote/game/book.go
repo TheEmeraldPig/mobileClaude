@@ -47,7 +47,7 @@ var book = []chapter{
 		"Deep down, the Warden guards the Core. Beat it and the Core can be mined for shards that make the Core pickaxe.",
 	}},
 	{"Places to explore", "crystal", []string{
-		"Graves on the surface hide a small chest. Brick dungeons lie underground, and much bigger ruined temples, three floors high, deeper still.",
+		"Graves on the surface hide a small chest. The underground goes down a long way, over 1300 cells to the lava and the Core: brick dungeons and ruined temples, three floors high, are hidden at every depth. Iron is found deeper than copper, and gold deeper still.",
 		"Deserts have pyramids with a treasure room. High above the land float sky islands with gold, crystal and a shrine: levitate up to reach them.",
 		"Villages sit on the surface. Each house has a trader.",
 	}},

@@ -144,6 +144,9 @@ func placeSkyIslands(buf []uint8, cx, x0 int) {
 
 const ruinSlot = 640
 
+// Ruins lie anywhere from just under the land down to the lava
+func ruinY(sl int) int { return int(topH*0.55 + hash01(sl, 4, 211)*(H-topH*0.55-180)) }
+
 func placeRuins(buf []uint8, cx, x0 int) {
 	for sl := floorDiv(x0-220, ruinSlot); sl <= floorDiv(x0+CW+220, ruinSlot); sl++ {
 		if hash01(sl, 0, 211) > 0.55 {
@@ -152,7 +155,7 @@ func placeRuins(buf []uint8, cx, x0 int) {
 		w := 90 + int(hash01(sl, 1, 211)*70)
 		h := 44 + int(hash01(sl, 2, 211)*22)
 		rx := sl*ruinSlot + 40 + int(hash01(sl, 3, 211)*float64(ruinSlot-80-w))
-		ry := int(H*0.52 + hash01(sl, 4, 211)*H*0.18)
+		ry := ruinY(sl)
 		if rx+w < x0-2 || rx > x0+CW+2 {
 			continue
 		}
