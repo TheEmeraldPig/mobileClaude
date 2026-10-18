@@ -343,7 +343,7 @@ func drawWorld(screen *ebiten.Image) {
 						sky[y*vw+x] = true
 					}
 					// a bright line on the water's surface
-					if wy > 0 && wx >= 0 && wx < W && grid[(wy-1)*W+wx] == EMPTY {
+					if wy > 0 && wy < H && wx >= 0 && wx < W && grid[(wy-1)*W+wx] == EMPTY {
 						wc = mix(wc, [3]int{200, 230, 255}, 0.35)
 					}
 					bg = mix(bg, wc, 0.78)
@@ -386,7 +386,7 @@ func drawWorld(screen *ebiten.Image) {
 					}
 				}
 				// a lighter top edge on blocks open to the air above, for depth
-				if wy > 0 && wx >= 0 && wx < W && !isSolid(grid[(wy-1)*W+wx]) && t != GRASS {
+				if wy > 0 && wy < H && wx >= 0 && wx < W && !isSolid(grid[(wy-1)*W+wx]) && t != GRASS {
 					c = mix(c, [3]int{255, 255, 255}, 0.12)
 				}
 				set(o, c)
