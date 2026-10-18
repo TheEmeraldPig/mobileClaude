@@ -30,6 +30,8 @@ func hardness(t uint8) float64 {
 		return 5
 	case GLASS, GRAVE:
 		return 6
+	case SANDSTONE:
+		return 8
 	case STONE, BRICK:
 		return 10
 	case COAL:

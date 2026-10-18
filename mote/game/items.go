@@ -89,7 +89,7 @@ var bpIcon = []string{"........", ".OOOOOO.", "OwWWWWwO", "OWwWWwWO", "OWWwwWWO"
 var itemOrder = []string{"pickaxe", "copperpick", "ironpick", "goldpick", "corepick", "hoe", "hammer", "paintbrush", "bucket", "coppersword", "ironsword",
 	"copperarmor", "ironarmor", "lantern", "torch", "workbench", "furnace", "anvil", "bed", "storage", "door",
 	"bp_hut", "bp_tower", "bp_bridge", "bp_farm", "bp_bunker",
-	"dirt", "sand", "stone", "brick", "plank", "wood", "glass", "leaves", "obsidian", "water",
+	"dirt", "sand", "sandstone", "stone", "brick", "plank", "wood", "glass", "leaves", "obsidian", "water",
 	"wall_dirt", "wall_stone", "wall_plank", "wall_brick", "wall_glass", "wall_obsidian",
 	"coal", "copper", "iron", "gold", "crystal", "copperbar", "ironbar", "goldbar", "coreshard",
 	"seeds", "wheat", "berries", "bread", "potion", "heart", "gem", "bomb", "coin"}
@@ -133,12 +133,13 @@ var items = map[string]*Item{
 		"...OO...", "...hh...", "..OkkO..", ".OaaaaO.", "OaAaaaaO", "OaaaaAaO", ".OaaaaO.", "..OOOO.."}},
 	"coreshard": {name: "Core shard", desc: "A piece of the Core. Forge it into the Core pickaxe", icon: []string{
 		"...OO...", "..OqAO..", ".OqAAqO.", "OqAAAAqO", ".OqAAqO.", "..OqqO..", "...OO...", "........"}},
-	"corepick": {name: "Core pickaxe", tool: true, desc: "Digs a huge area very fast and hits hard", reach: 8, dmg: 5, icon: toolIcon(pickRows, 'q', 'A')},
-	"sand":     {name: "Sand", place: SAND, desc: "Falls when nothing holds it up", icon: blockIcon('Y', 'y')},
-	"dirt":     {name: "Dirt", place: DIRT, desc: "Ground. Till it with a hoe for crops", icon: blockIcon('d', 'P')},
-	"stone":    {name: "Stone", place: STONE, desc: "A solid building block", icon: blockIcon('G', 'g')},
-	"plank":    {name: "Plank", place: PLANK, desc: "A wooden building block", icon: blockIcon('p', 'P')},
-	"obsidian": {name: "Obsidian", place: OBSIDIAN, desc: "Very dark, very solid", icon: blockIcon('b', 'j')},
+	"corepick":  {name: "Core pickaxe", tool: true, desc: "Digs a huge area very fast and hits hard", reach: 8, dmg: 5, icon: toolIcon(pickRows, 'q', 'A')},
+	"sand":      {name: "Sand", place: SAND, desc: "Falls when nothing holds it up", icon: blockIcon('Y', 'y')},
+	"sandstone": {name: "Sandstone", place: SANDSTONE, desc: "Packed sand that stays where you put it", icon: blockIcon('y', 'n')},
+	"dirt":      {name: "Dirt", place: DIRT, desc: "Ground. Till it with a hoe for crops", icon: blockIcon('d', 'P')},
+	"stone":     {name: "Stone", place: STONE, desc: "A solid building block", icon: blockIcon('G', 'g')},
+	"plank":     {name: "Plank", place: PLANK, desc: "A wooden building block", icon: blockIcon('p', 'P')},
+	"obsidian":  {name: "Obsidian", place: OBSIDIAN, desc: "Very dark, very solid", icon: blockIcon('b', 'j')},
 	"brick": {name: "Brick", place: BRICK, desc: "A sturdy building block", icon: []string{
 		"OOOOOOOO", "ORRrORRO", "OrrrOrrO", "OOOOOOOO", "ORORRrRO", "OrOrrrrO", "OOOOOOOO", "........"}},
 	"glass": {name: "Glass", place: GLASS, desc: "A window block that lets light through", icon: []string{
@@ -458,6 +459,7 @@ var recipes = []Recipe{
 	{"torch", 8, [][2]any{{"coal", 1}, {"wood", 2}}, "workbench"},
 	{"brick", 10, [][2]any{{"sand", 10}, {"water", 5}}, "workbench"},
 	{"bomb", 1, [][2]any{{"sand", 10}, {"coal", 2}}, "workbench"},
+	{"sandstone", 4, [][2]any{{"sand", 4}}, "workbench"},
 	{"wall_dirt", 4, [][2]any{{"dirt", 1}}, "workbench"},
 	{"wall_stone", 4, [][2]any{{"stone", 1}}, "workbench"},
 	{"wall_plank", 4, [][2]any{{"plank", 1}}, "workbench"},

@@ -28,72 +28,74 @@ import (
 )
 
 const (
-	EMPTY    = 0
-	SAND     = 1
-	WATER    = 2
-	STONE    = 3
-	BRICK    = 4
-	COAL     = 5
-	COPPER   = 6
-	IRON     = 7
-	GOLD     = 8
-	CRYSTAL  = 9
-	TORCH    = 10
-	DIRT     = 11
-	GRASS    = 12
-	WOOD     = 13 // tree trunk (you can walk through it)
-	LEAVES   = 14
-	PLANK    = 15
-	GLASS    = 16
-	CHEST    = 17
-	LAVA     = 18
-	SOIL     = 19 // tilled ground for crops
-	CROP1    = 20
-	CROP2    = 21
-	CROP3    = 22 // ripe
-	FLOWER   = 23
-	BUSH     = 24 // berry bush
-	GRAVE    = 25
-	CORE     = 26 // the goal at the bottom of the world
-	OBSIDIAN = 27
-	BEDROCK  = 28
-	FURNACE  = 29 // old saves only: furnaces are station objects now
-	DOOR     = 30 // closed door (solid)
-	DOOROPEN = 31 // open door (walk through it)
+	EMPTY     = 0
+	SAND      = 1
+	WATER     = 2
+	STONE     = 3
+	BRICK     = 4
+	COAL      = 5
+	COPPER    = 6
+	IRON      = 7
+	GOLD      = 8
+	CRYSTAL   = 9
+	TORCH     = 10
+	DIRT      = 11
+	GRASS     = 12
+	WOOD      = 13 // tree trunk (you can walk through it)
+	LEAVES    = 14
+	PLANK     = 15
+	GLASS     = 16
+	CHEST     = 17
+	LAVA      = 18
+	SOIL      = 19 // tilled ground for crops
+	CROP1     = 20
+	CROP2     = 21
+	CROP3     = 22 // ripe
+	FLOWER    = 23
+	BUSH      = 24 // berry bush
+	GRAVE     = 25
+	CORE      = 26 // the goal at the bottom of the world
+	OBSIDIAN  = 27
+	BEDROCK   = 28
+	FURNACE   = 29 // old saves only: furnaces are station objects now
+	DOOR      = 30 // closed door (solid)
+	DOOROPEN  = 31 // open door (walk through it)
+	SANDSTONE = 32 // sand packed solid: it doesn't fall
 )
 
 var blockRGB = map[uint8][3]int{
-	SAND:     {226, 194, 107},
-	WATER:    {59, 142, 232},
-	STONE:    {120, 126, 140},
-	BRICK:    {176, 92, 72},
-	COAL:     {40, 40, 48},
-	COPPER:   {210, 126, 70},
-	IRON:     {214, 190, 172},
-	GOLD:     {246, 204, 70},
-	CRYSTAL:  {120, 232, 255},
-	TORCH:    {255, 204, 96},
-	DIRT:     {122, 86, 60},
-	GRASS:    {88, 168, 74},
-	WOOD:     {112, 78, 52},
-	LEAVES:   {58, 132, 66},
-	PLANK:    {178, 132, 84},
-	GLASS:    {190, 226, 240},
-	CHEST:    {170, 116, 52},
-	LAVA:     {250, 108, 40},
-	SOIL:     {84, 58, 40},
-	CROP1:    {110, 180, 80},
-	CROP2:    {150, 196, 80},
-	CROP3:    {232, 200, 90},
-	FLOWER:   {236, 120, 170},
-	BUSH:     {46, 112, 58},
-	GRAVE:    {150, 150, 162},
-	CORE:     {255, 120, 220},
-	OBSIDIAN: {44, 30, 64},
-	BEDROCK:  {26, 24, 32},
-	FURNACE:  {96, 90, 104},
-	DOOR:     {150, 104, 62},
-	DOOROPEN: {150, 104, 62},
+	SAND:      {226, 194, 107},
+	WATER:     {59, 142, 232},
+	STONE:     {120, 126, 140},
+	BRICK:     {176, 92, 72},
+	COAL:      {40, 40, 48},
+	COPPER:    {210, 126, 70},
+	IRON:      {214, 190, 172},
+	GOLD:      {246, 204, 70},
+	CRYSTAL:   {120, 232, 255},
+	TORCH:     {255, 204, 96},
+	DIRT:      {122, 86, 60},
+	GRASS:     {88, 168, 74},
+	WOOD:      {112, 78, 52},
+	LEAVES:    {58, 132, 66},
+	PLANK:     {178, 132, 84},
+	GLASS:     {190, 226, 240},
+	CHEST:     {170, 116, 52},
+	LAVA:      {250, 108, 40},
+	SOIL:      {84, 58, 40},
+	CROP1:     {110, 180, 80},
+	CROP2:     {150, 196, 80},
+	CROP3:     {232, 200, 90},
+	FLOWER:    {236, 120, 170},
+	BUSH:      {46, 112, 58},
+	GRAVE:     {150, 150, 162},
+	CORE:      {255, 120, 220},
+	OBSIDIAN:  {44, 30, 64},
+	BEDROCK:   {26, 24, 32},
+	FURNACE:   {96, 90, 104},
+	DOOR:      {150, 104, 62},
+	SANDSTONE: {204, 168, 96},
+	DOOROPEN:  {150, 104, 62},
 }
 
 // Ores are drawn as specks of their colour in stone
@@ -101,7 +103,7 @@ func isOre(t uint8) bool { return t >= COAL && t <= GOLD }
 
 func isSolid(t uint8) bool {
 	switch t {
-	case SAND, STONE, BRICK, CRYSTAL, DIRT, GRASS, PLANK, GLASS, SOIL, GRAVE, CORE, OBSIDIAN, BEDROCK, DOOR:
+	case SAND, STONE, BRICK, CRYSTAL, DIRT, GRASS, PLANK, GLASS, SOIL, GRAVE, CORE, OBSIDIAN, BEDROCK, DOOR, SANDSTONE:
 		return true
 	}
 	return isOre(t)
@@ -135,7 +137,7 @@ func blockLight(t uint8) int {
 var blockItem = map[uint8]string{SAND: "sand", STONE: "stone", BRICK: "brick", COAL: "coal", COPPER: "copper",
 	IRON: "iron", GOLD: "gold", CRYSTAL: "crystal", TORCH: "torch", DIRT: "dirt", GRASS: "dirt", WOOD: "wood",
 	LEAVES: "leaves", PLANK: "plank", GLASS: "glass", SOIL: "dirt", CROP1: "seeds", CROP2: "seeds", CROP3: "wheat",
-	FLOWER: "seeds", BUSH: "berries", GRAVE: "stone", OBSIDIAN: "obsidian"}
+	FLOWER: "seeds", BUSH: "berries", GRAVE: "stone", OBSIDIAN: "obsidian", SANDSTONE: "sandstone"}
 
 const (
 	CELL = 2   // world px per cell
@@ -286,6 +288,7 @@ var genPasses = []genPass{
 	placeSkyIslands,
 	placeVillages,
 	placeCore,
+	supportSand,
 	// unbreakable floor at the very bottom
 	func(buf []uint8, cx, x0 int) {
 		for y := H - 3; y < H; y++ {
@@ -294,6 +297,24 @@ var genPasses = []genPass{
 			}
 		}
 	},
+}
+
+// Sand never generates over air or water (it would fall the moment the chunk loads):
+// any sand with nothing solid under it is packed into sandstone, and so is the sand
+// resting on that, up to a few cells, so the whole overhang holds.
+func supportSand(buf []uint8, cx, x0 int) {
+	for lx := 0; lx < CW; lx++ {
+		for y := H - 2; y >= 0; y-- {
+			i := y*CW + lx
+			if buf[i] != SAND {
+				continue
+			}
+			below := buf[i+CW]
+			if below == EMPTY || below == WATER || below == LAVA || below == SANDSTONE {
+				buf[i] = SANDSTONE
+			}
+		}
+	}
 }
 
 // Deserts: long sandy stretches with no trees
@@ -559,27 +580,75 @@ func carveCaverns(buf []uint8, cx, x0 int) {
 }
 
 // Ore veins in stone, rarer and richer deeper down
-func placeOres(buf []uint8, cx, x0 int) {
-	type ore struct {
-		t      uint8
-		depth  int
-		scale  float64
-		thresh float64
-		salt   int
+// Ore veins: every 14x14-cell region may hold one clump of a single ore, so ores come in
+// clean groups of their own kind. A cell checks the clumps of its own and the eight
+// neighbouring regions (clumps can spill over region and chunk borders).
+const oreRegion = 14
+
+type oreKind struct {
+	t           uint8
+	minDepth    int     // cells below the surface
+	weight      float64 // how common, among the ores allowed at a depth
+	rMin, rSpan float64 // clump radius
+}
+
+var oreKinds = []oreKind{
+	{COAL, 4, 1.0, 2.6, 2.4},
+	{COPPER, 25, 0.8, 2.4, 2.0},
+	{IRON, 70, 0.6, 2.2, 1.8},
+	{GOLD, 140, 0.35, 2.0, 1.5},
+}
+
+// The clump in region (rx, ry), if any: centre, radius and ore
+func oreClump(rx, ry int) (float64, float64, float64, uint8, bool) {
+	if hash01(rx, ry, 41) > 0.55 {
+		return 0, 0, 0, 0, false
 	}
-	ores := []ore{{COAL, 4, 6, 0.85, 21}, {COPPER, 25, 5, 0.865, 22}, {IRON, 70, 5, 0.88, 23}, {GOLD, 140, 4, 0.9, 24}}
-	for lx := 0; lx < CW; lx++ {
-		x := x0 + lx
-		s := surfaceAt(x)
-		for y := max(s, 0); y < H; y++ {
-			i := y*CW + lx
-			if buf[i] != STONE {
+	cx := float64(rx*oreRegion) + 2 + hash01(rx, ry, 42)*(oreRegion-4)
+	cy := float64(ry*oreRegion) + 2 + hash01(rx, ry, 43)*(oreRegion-4)
+	depth := int(cy) - surfaceAt(int(cx))
+	sum := 0.0
+	for _, o := range oreKinds {
+		if depth >= o.minDepth {
+			sum += o.weight
+		}
+	}
+	if sum == 0 {
+		return 0, 0, 0, 0, false
+	}
+	pick := hash01(rx, ry, 44) * sum
+	for _, o := range oreKinds {
+		if depth < o.minDepth {
+			continue
+		}
+		if pick -= o.weight; pick < 0 {
+			return cx, cy, o.rMin + hash01(rx, ry, 45)*o.rSpan, o.t, true
+		}
+	}
+	return 0, 0, 0, 0, false
+}
+
+func placeOres(buf []uint8, cx, x0 int) {
+	for rx := floorDiv(x0, oreRegion) - 1; rx <= floorDiv(x0+CW, oreRegion)+1; rx++ {
+		for ry := 0; ry <= H/oreRegion; ry++ {
+			ccx, ccy, r, t, ok := oreClump(rx, ry)
+			if !ok {
 				continue
 			}
-			for _, o := range ores {
-				if y-s >= o.depth && noise2(float64(x), float64(y)*1.3, o.scale, o.salt) > o.thresh {
-					buf[i] = o.t
-					break
+			ri := int(r) + 2
+			for y := int(ccy) - ri; y <= int(ccy)+ri; y++ {
+				for x := int(ccx) - ri; x <= int(ccx)+ri; x++ {
+					if x < x0 || x >= x0+CW || y < 0 || y >= H {
+						continue
+					}
+					// a lumpy edge so clumps don't look like perfect circles
+					rr := r * (0.8 + 0.4*hash01(x, y, 46))
+					if math.Hypot(float64(x)+0.5-ccx, (float64(y)+0.5-ccy)*1.2) > rr {
+						continue
+					}
+					if i := y*CW + x - x0; buf[i] == STONE {
+						buf[i] = t
+					}
 				}
 			}
 		}

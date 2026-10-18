@@ -18,7 +18,7 @@ func TestSeedsAreStable(t *testing.T) {
 		seed string
 		cx   int
 		sum  int32
-	}{{"12345", 0, 782178981}, {"12345", -3, 1492155978}, {"12345", 17, -1171153157}, {"hello", 0, 2063613477}, {"hello", 5, -1773515645}}
+	}{{"12345", 0, 287081024}, {"12345", -3, 832534417}, {"12345", 17, -197295708}, {"hello", 0, 1212825273}, {"hello", 5, 525584777}}
 	for _, w := range want {
 		seedN = seedFrom(w.seed)
 		a, b := chunkSum(w.cx), chunkSum(w.cx)
@@ -75,5 +75,30 @@ func TestStructuresAppear(t *testing.T) {
 	}
 	if doors == 0 || sky == 0 || walls == 0 {
 		t.Errorf("structures missing: doors %d, sky island grass %d, walls %d", doors, sky, walls)
+	}
+}
+
+// Sand never generates on top of air or liquid (it would fall as soon as it loads)
+func TestNoFloatingSand(t *testing.T) {
+	seedN = seedFrom("12345")
+	for cx := -20; cx < 20; cx++ {
+		b := genChunk(cx)
+		for i := 0; i < len(b)-CW; i++ {
+			if b[i] == SAND && (b[i+CW] == EMPTY || b[i+CW] == WATER || b[i+CW] == LAVA) {
+				t.Fatalf("floating sand in chunk %d at (%d, %d)", cx, i%CW, i/CW)
+			}
+		}
+	}
+}
+
+// Each ore clump is one kind of ore
+func TestOreClumpsArePure(t *testing.T) {
+	seedN = seedFrom("12345")
+	for rx := -30; rx < 30; rx++ {
+		for ry := 0; ry <= H/oreRegion; ry++ {
+			if _, _, r, o, ok := oreClump(rx, ry); ok && (r <= 0 || !isOre(o)) {
+				t.Fatalf("bad clump at %d,%d", rx, ry)
+			}
+		}
 	}
 }

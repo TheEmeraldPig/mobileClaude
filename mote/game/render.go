@@ -32,15 +32,25 @@ func isNight() bool { return daylight() < 0.3 }
 // ---- Lighting ----
 // Light flows out from the sky, the mote, torches and crystals. It travels easily
 // through air and water and only a little way into solid blocks. Unlit = black.
+//
+// Sources and lightAt() use levels 0-64. Inside, the flood fill works at 4x finer steps
+// (0-255) with diagonal costs close to the true distance, so light spreads in smooth,
+// round pools instead of diamonds and steps.
 
-const lightMax = 64 // light falls by 2 per cell through air (3 diagonally), 4 through solid blocks
+const (
+	lightMax  = 64  // the scale used by sources and lightAt
+	lightFine = 255 // the internal scale
+	costAir   = 8   // per cell, internal steps (diagonals cost 11, about 8 x 1.41)
+	costDiag  = 11
+	solidMul  = 2 // light fades 2x faster inside solid blocks
+)
 
 var (
-	light            []uint8
+	light            []uint8 // internal levels 0-255
 	lightSrc         []uint8 // which kind of light reached each cell (see lightTints)
 	lightW, lightH   int
 	lightX0, lightY0 int
-	buckets          [lightMax + 1][]int32
+	buckets          [lightFine + 1][]int32
 )
 
 func lightAt(x, y int) int {
@@ -48,43 +58,36 @@ func lightAt(x, y int) int {
 	if lx < 0 || ly < 0 || lx >= lightW || ly >= lightH {
 		return 0
 	}
-	return int(light[ly*lightW+lx])
+	return int(light[ly*lightW+lx]) * lightMax / lightFine
 }
 
 func playerLightLevel() int {
 	if countItem("lantern") > 0 {
 		return 64
 	}
-	return 54
+	return 52
 }
 
 func computeLight(ox, oy, vw, vh int) {
-	const m = lightMax / 2
+	const m = 40 // light from beyond the screen edge can still reach in
 	lightX0, lightY0, lightW, lightH = ox-m, oy-m, vw+2*m, vh+2*m
 	n := lightW * lightH
 	if cap(light) < n {
 		light = make([]uint8, n)
-	}
-	light = light[:n]
-	if cap(lightSrc) < n {
 		lightSrc = make([]uint8, n)
 	}
-	lightSrc = lightSrc[:n]
-	for i := range light {
-		light[i] = 0
-		lightSrc[i] = 0
-	}
+	light, lightSrc = light[:n], lightSrc[:n]
+	clear(light)
+	clear(lightSrc)
 	for i := range buckets {
 		buckets[i] = buckets[i][:0]
 	}
 	seed := func(idx, lvl int, src uint8) {
-		if lvl > lightMax {
-			lvl = lightMax
-		}
-		if lvl > int(light[idx]) {
-			light[idx] = uint8(lvl)
+		f := min(lightFine, lvl*lightFine/lightMax)
+		if f > int(light[idx]) {
+			light[idx] = uint8(f)
 			lightSrc[idx] = src
-			buckets[lvl] = append(buckets[lvl], int32(idx))
+			buckets[f] = append(buckets[f], int32(idx))
 		}
 	}
 	sky := skyLevel()
@@ -137,48 +140,46 @@ func computeLight(ox, oy, vw, vh int) {
 		}
 		seed(pcy*lightW+pcx, playerLightLevel(), src)
 	}
-	for lvl := lightMax; lvl > 0; lvl-- {
+	solid := func(nc, nr int) bool {
+		wx, wy := lightX0+nc, lightY0+nr
+		return wx < 0 || wx >= W || wy >= H || (wy >= 0 && blocksLight(grid[wy*W+wx]))
+	}
+	for lvl := lightFine; lvl > 0; lvl-- {
 		for k := 0; k < len(buckets[lvl]); k++ {
 			idx := int(buckets[lvl][k])
 			if int(light[idx]) != lvl {
 				continue
 			}
 			c, r := idx%lightW, idx/lightW
-			try := func(nc, nr, cost int) {
+			src := lightSrc[idx]
+			for _, d := range [8][3]int{{-1, 0, costAir}, {1, 0, costAir}, {0, -1, costAir}, {0, 1, costAir},
+				{-1, -1, costDiag}, {1, -1, costDiag}, {-1, 1, costDiag}, {1, 1, costDiag}} {
+				nc, nr := c+d[0], r+d[1]
 				if nc < 0 || nr < 0 || nc >= lightW || nr >= lightH {
-					return
+					continue
 				}
-				wx, wy := lightX0+nc, lightY0+nr
-				if wx < 0 || wx >= W || wy >= H || (wy >= 0 && blocksLight(grid[wy*W+wx])) {
-					cost *= 2 // a little way into solid blocks, so surfaces get a lit edge
+				cost := d[2]
+				if solid(nc, nr) {
+					cost *= solidMul
 				}
 				nl := lvl - cost
 				ni := nr*lightW + nc
 				if nl > int(light[ni]) {
 					light[ni] = uint8(nl)
-					lightSrc[ni] = lightSrc[idx]
-					if nl > 0 {
-						buckets[nl] = append(buckets[nl], int32(ni))
-					}
+					lightSrc[ni] = src
+					buckets[nl] = append(buckets[nl], int32(ni))
 				}
 			}
-			try(c-1, r, 2)
-			try(c+1, r, 2)
-			try(c, r-1, 2)
-			try(c, r+1, 2)
-			try(c-1, r-1, 3)
-			try(c+1, r-1, 3)
-			try(c-1, r+1, 3)
-			try(c+1, r+1, 3)
 		}
 	}
 }
 
-var lightCurve = func() [lightMax + 1]float64 {
-	var t [lightMax + 1]float64
+// Brightness for an internal light level: a long, even fade with no hard edge
+var lightCurve = func() [lightFine + 1]float64 {
+	var t [lightFine + 1]float64
 	for i := range t {
-		u := 1 - math.Min(1, float64(i)/52)
-		t[i] = 1 - u*u // bright near the source, fading smoothly to nothing at the edge
+		x := math.Min(1, float64(i)/210)
+		t[i] = 1 - math.Pow(1-x, 1.7)
 	}
 	return t
 }()
@@ -368,8 +369,8 @@ func drawWorld(screen *ebiten.Image) {
 				}
 			default:
 				c := blockRGB[t]
-				if isOre(t) && (sh+10)%3 == 0 {
-					c = blockRGB[STONE]
+				if isOre(t) { // ores sparkle a little
+					c = shadeRGB(c, 0.9+0.2*float64((sh+10)%3)/2)
 				}
 				if pt != 0 {
 					c = mix(c, paintRGB[pt], 0.7)

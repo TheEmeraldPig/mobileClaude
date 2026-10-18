@@ -161,7 +161,7 @@ func buildLightMap(ox, oy, vw, vh int, skyCell func(x, y int) bool) {
 			}
 		}
 	}
-	blur3(lightBuf, vw, vh, 1)
+	blur3(lightBuf, vw, vh, 2)
 	blur3(hazeBuf, vw, vh, 2)
 	for i, j := 0, 0; i < vw*vh*3; i, j = i+3, j+4 {
 		lightPix[j], lightPix[j+1], lightPix[j+2], lightPix[j+3] = toByte(lightBuf[i]), toByte(lightBuf[i+1]), toByte(lightBuf[i+2]), 255
