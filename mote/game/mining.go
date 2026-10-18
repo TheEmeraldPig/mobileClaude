@@ -12,8 +12,20 @@ import (
 // phones) mines background walls instead.
 
 // Pickaxe tiers: 1 stone, 2 copper, 3 iron, 4 gold, 5 core
-var pickTier = map[string]int{"pickaxe": 1, "copperpick": 2, "ironpick": 3, "goldpick": 4, "corepick": 5}
-var pickPower = map[string]float64{"pickaxe": 1, "copperpick": 1.6, "ironpick": 2.4, "goldpick": 3.4, "corepick": 5}
+var pickTier = map[string]int{"hands": 1, "woodpick": 1, "pickaxe": 1, "copperpick": 2, "ironpick": 3, "goldpick": 4, "corepick": 5}
+var pickPower = map[string]float64{"hands": 0.4, "woodpick": 0.7, "pickaxe": 1, "copperpick": 1.6, "ironpick": 2.4, "goldpick": 3.4, "corepick": 5}
+
+// Does the mote carry any pickaxe? Without one it digs (slowly) with its bare hands.
+func hasPickaxe() bool {
+	for _, s := range inv {
+		if s != nil && isPick(s.ID) && s.ID != "hands" {
+			return true
+		}
+	}
+	return false
+}
+
+var handMining bool // digging with bare hands (no pickaxe owned, nothing selected)
 
 var tierNames = []string{"", "stone", "copper", "iron", "gold", "core"}
 

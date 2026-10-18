@@ -47,8 +47,8 @@ var sellValue = map[string]int{
 	"coal": 1, "copper": 2, "iron": 4, "gold": 7, "crystal": 6, "copperbar": 5, "ironbar": 9, "goldbar": 15,
 	"coreshard": 40, "wood": 1, "plank": 0, "wheat": 2, "berries": 1, "bread": 4, "seeds": 0, "gem": 20,
 	"heart": 60, "obsidian": 2, "glass": 1, "brick": 1, "leaves": 0, "potion": 7,
-	"pickaxe": 4, "copperpick": 20, "ironpick": 50, "goldpick": 90, "corepick": 200, "hoe": 5, "hammer": 5,
-	"bucket": 10, "coppersword": 18, "ironsword": 45, "copperarmor": 30, "ironarmor": 70, "lantern": 25,
+	"woodpick": 1, "pickaxe": 4, "copperpick": 20, "ironpick": 50, "goldpick": 90, "corepick": 200, "hoe": 5, "hammer": 5,
+	"bucket": 10, "coppersword": 18, "ironsword": 45, "goldsword": 80, "copperarmor": 30, "ironarmor": 70, "lantern": 25,
 	"bomb": 4, "workbench": 4, "furnace": 8, "anvil": 20, "storage": 6, "bed": 6, "door": 4, "paintbrush": 3,
 }
 
@@ -177,6 +177,16 @@ func openShop(kind int) {
 
 func coins() int { return countItem("coin") }
 
+func countPicks() int {
+	n := 0
+	for _, s := range inv {
+		if s != nil && isPick(s.ID) {
+			n++
+		}
+	}
+	return n
+}
+
 func shopMenu() {
 	k := traderKinds[shopKind]
 	r := sheet(940, 470)
@@ -258,6 +268,8 @@ func shopMenu() {
 				shopMsg, shopMsgAt = "The temporary kit can't be sold.", frame
 			case v == 0:
 				shopMsg, shopMsgAt = k.name+" doesn't want "+items[s.ID].name+".", frame
+			case isPick(s.ID) && countPicks() <= 1:
+				shopMsg, shopMsgAt = "Keep your last pickaxe!", frame
 			default:
 				got := v * s.N
 				shopMsg, shopMsgAt = fmt.Sprintf("Sold %d %s for %d coins.", s.N, items[s.ID].name, got), frame

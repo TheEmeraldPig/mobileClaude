@@ -24,7 +24,8 @@ type Prefs struct {
 	Full      bool              `json:"fullscreen"`
 	UISize    int               `json:"uiSize"` // 0 small .. 3 largest, 1 normal
 	Tips      bool              `json:"tips"`
-	Simple    bool              `json:"simpleLight"` // no haze or vignette, for slow devices
+	Simple    bool              `json:"simpleLight"`  // no haze or vignette, for slow devices
+	Used      map[string]bool   `json:"usedStations"` // stations used once: their "how to use" hint stops showing
 }
 
 var prefs = Prefs{FOV: 3, SfxVol: 4, MusicVol: 3, StickX: 0.12, StickY: 0.62, BtnSide: "right", Full: true, UISize: 1, Tips: true,

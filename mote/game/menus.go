@@ -173,7 +173,7 @@ func hud() {
 	guideY = 60
 	// a nearby station: say how to use it
 	for _, o := range objs {
-		if objInReach(o) {
+		if objInReach(o) && !prefs.Used[o.kind] {
 			how := "Right-click"
 			if isTouch {
 				how = "Tap"

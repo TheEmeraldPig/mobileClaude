@@ -86,7 +86,7 @@ var swordRows = []string{".....OOO", "....OaaO", "...OaAO.", "O.OaAO..", "OTOAO.
 // A rolled-up blueprint
 var bpIcon = []string{"........", ".OOOOOO.", "OwWWWWwO", "OWwWWwWO", "OWWwwWWO", "OwWWWWwO", ".OOOOOO.", "........"}
 
-var itemOrder = []string{"pickaxe", "copperpick", "ironpick", "goldpick", "corepick", "hoe", "hammer", "paintbrush", "bucket", "coppersword", "ironsword",
+var itemOrder = []string{"woodpick", "pickaxe", "copperpick", "ironpick", "goldpick", "corepick", "hoe", "hammer", "paintbrush", "bucket", "coppersword", "ironsword", "goldsword",
 	"copperarmor", "ironarmor", "lantern", "torch", "workbench", "furnace", "anvil", "bed", "storage", "door",
 	"bp_hut", "bp_tower", "bp_bridge", "bp_farm", "bp_bunker",
 	"dirt", "sand", "sandstone", "stone", "brick", "plank", "wood", "glass", "leaves", "obsidian", "water",
@@ -95,6 +95,9 @@ var itemOrder = []string{"pickaxe", "copperpick", "ironpick", "goldpick", "corep
 	"seeds", "wheat", "berries", "bread", "potion", "heart", "gem", "bomb", "coin"}
 
 var items = map[string]*Item{
+	"hands": {name: "Bare hands", tool: true, desc: "Digging without a pickaxe", reach: 2, icon: []string{
+		"........", "..OOOO..", ".OBBBBO.", ".OBLBBO.", ".OBBBBO.", "..OOOO..", "........", "........"}},
+	"woodpick":   {name: "Wooden pickaxe", tool: true, desc: "A rough pickaxe made by hand. Slow, but it gets you started", reach: 3, dmg: 1, icon: toolIcon(pickRows, 'p', 'P')},
 	"pickaxe":    {name: "Stone pickaxe", tool: true, desc: "Digs soft blocks, stone, coal and copper. Opens chests", reach: 4, dmg: 1, icon: toolIcon(pickRows, 'S', 's')},
 	"copperpick": {name: "Copper pickaxe", tool: true, desc: "Faster, and strong enough for iron, gold and crystal", reach: 4, dmg: 1, icon: toolIcon(pickRows, 'c', 'C')},
 	"goldpick":   {name: "Gold pickaxe", tool: true, desc: "Very fast with a wide reach", reach: 6, dmg: 3, icon: toolIcon(pickRows, 'u', 'U')},
@@ -102,8 +105,9 @@ var items = map[string]*Item{
 	"hoe":        {name: "Hoe", tool: true, desc: "Turns dirt into soil for seeds, and harvests crops", reach: 2, icon: toolIcon(hoeRows, 'S', 's')},
 	"bucket": {name: "Bucket", tool: true, desc: "Scoops up water", reach: 5, icon: []string{
 		"..O..O..", ".O....O.", "OMMMMMMO", "OMwWWWmO", ".MWWWWm.", ".MMMMmm.", "..Mmmm..", "........"}},
-	"coppersword": {name: "Copper sword", tool: true, desc: "Hits creatures", reach: 7, dmg: 2, icon: toolIcon(swordRows, 'c', 'C')},
-	"ironsword":   {name: "Iron sword", tool: true, desc: "Hits creatures hard", reach: 8, dmg: 4, icon: toolIcon(swordRows, 'i', 'I')},
+	"coppersword": {name: "Copper sword", tool: true, desc: "Hits creatures anywhere your pickaxe reaches. 3 damage", reach: swordR, dmg: 3, icon: toolIcon(swordRows, 'c', 'C')},
+	"ironsword":   {name: "Iron sword", tool: true, desc: "Hits creatures anywhere your pickaxe reaches. 5 damage", reach: swordR, dmg: 5, icon: toolIcon(swordRows, 'i', 'I')},
+	"goldsword":   {name: "Gold sword", tool: true, desc: "Hits creatures anywhere your pickaxe reaches. 8 damage", reach: swordR, dmg: 8, icon: toolIcon(swordRows, 'u', 'U')},
 	"copperarmor": {name: "Copper armor", tool: true, armor: 1, desc: "Blocks some damage while you carry it", icon: []string{
 		"........", ".OO..OO.", "OccOOccO", "OcccccCO", ".OcccCO.", ".OccCCO.", ".OcCCCO.", "..OOOO.."}},
 	"ironarmor": {name: "Iron armor", tool: true, armor: 2, desc: "Blocks a lot of damage while you carry it", icon: []string{
@@ -446,6 +450,7 @@ var recipes = []Recipe{
 	{"plank", 4, [][2]any{{"wood", 1}}, ""},
 	{"torch", 4, [][2]any{{"coal", 1}, {"wood", 1}}, ""},
 	{"workbench", 1, [][2]any{{"plank", 12}}, ""},
+	{"woodpick", 1, [][2]any{{"wood", 8}}, ""},
 	// workbench
 	{"pickaxe", 1, [][2]any{{"wood", 6}, {"stone", 10}}, "workbench"},
 	{"hoe", 1, [][2]any{{"wood", 4}, {"stone", 4}}, "workbench"},
@@ -482,6 +487,7 @@ var recipes = []Recipe{
 	{"coppersword", 1, [][2]any{{"copperbar", 6}, {"wood", 2}}, "anvil"},
 	{"copperarmor", 1, [][2]any{{"copperbar", 10}}, "anvil"},
 	{"ironsword", 1, [][2]any{{"ironbar", 6}, {"wood", 2}}, "anvil"},
+	{"goldsword", 1, [][2]any{{"goldbar", 6}, {"ironbar", 2}}, "anvil"},
 	{"copperpick", 1, [][2]any{{"copperbar", 8}, {"wood", 4}}, "anvil"},
 	{"ironpick", 1, [][2]any{{"ironbar", 8}, {"wood", 4}}, "anvil"},
 	{"goldpick", 1, [][2]any{{"goldbar", 10}, {"ironbar", 4}}, "anvil"},
@@ -620,6 +626,9 @@ func openChest(x, y int) {
 
 const reach = 46
 
+// How wide a sword's slash is around the line it sweeps
+const swordR = 7
+
 var (
 	useActive bool
 	aimSX     float64
@@ -656,11 +665,29 @@ func digRadius(it *Item) int { return it.reach }
 var coreDust int
 
 func useHeld() {
+	if useActive {
+		usedAt = frame
+	}
+	if useActive && handMining {
+		if aimCell() {
+			useTick++
+			mineBlocks(items["hands"])
+		}
+		return
+	}
 	if !useActive || selected < 0 || inv[selected] == nil {
 		return
 	}
 	id := inv[selected].ID
 	it := items[id]
+	if it.dmg > 0 && !isPick(id) { // swords: swing every 18 frames while held, wherever you aim
+		aimCell()
+		useTick++
+		if useTick%18 == 1 {
+			swing(it)
+		}
+		return
+	}
 	if it.once || !aimCell() {
 		return
 	}
@@ -715,10 +742,6 @@ func useHeld() {
 		if n > 0 {
 			sfx("place")
 		}
-	case it.dmg > 0: // swords: swing every 18 frames while held
-		if useTick%18 == 1 {
-			swing(it)
-		}
 	case usesShapes(heldBuildKind()):
 		// the brush builds (or paints, or knocks down walls) every frame; other shapes
 		// are dragged out and built when you let go
@@ -740,23 +763,26 @@ func useHeld() {
 
 func swing(it *Item) {
 	pcx, pcy := (player.x+player.w/2)/CELL, (player.y+player.h/2)/CELL
-	// swing toward the aim, but never further than the sword reaches
-	dx, dy := float64(aimX)-pcx, float64(aimY)-pcy
+	// Every sword reaches as far as a pickaxe: the slash runs from the mote to where
+	// you aim (cut short at the pickaxe's reach) and hits anything along it. Better
+	// swords only hit harder.
+	dx, dy := float64(aimX)+0.5-pcx, float64(aimY)+0.5-pcy
 	d := math.Hypot(dx, dy)
-	r := float64(it.reach + 6)
-	if d > r {
-		dx, dy = dx/d*r, dy/d*r
+	if d > reach {
+		dx, dy, d = dx/d*reach, dy/d*reach, reach
 	}
 	if dx != 0 {
 		player.face = sign(dx)
 	}
-	cx, cy := int(pcx+dx), int(pcy+dy)
-	for k := 0; k < 10; k++ {
-		a := math.Atan2(dy, dx) + (float64(k)-5)*0.15
-		burst(1, pcx+math.Cos(a)*r*0.8, pcy+math.Sin(a)*r*0.8, [3]int{230, 230, 250}, 0.2, 0.2, 8)
+	cx, cy := pcx+dx, pcy+dy
+	a0 := math.Atan2(dy, dx)
+	for k := 0; k < 12; k++ {
+		a := a0 + (float64(k)-6)*0.13
+		burst(1, cx+math.Cos(a)*float64(it.reach), cy+math.Sin(a)*float64(it.reach), [3]int{236, 236, 252}, 0.2, 0.2, 9)
 	}
 	sfx("swing")
-	hitCreatures(cx, cy, it.reach, it.dmg)
+	swingAt, swingAng = frame, a0
+	hitAlong(pcx, pcy, cx, cy, float64(it.reach), it.dmg)
 }
 
 func useOnce() {

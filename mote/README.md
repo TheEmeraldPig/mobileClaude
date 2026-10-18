@@ -37,7 +37,8 @@ Hand crafting covers planks, torches and the workbench. Everything else is made 
   - `world.go`: seeded chunk world: terrain, caves, caverns, ores and crystals. Follow the rules at the top of the file when adding terrain.
   - `render.go`: the light flood fill (fog of war), the day/night sky and background, and drawing the world at full brightness.
   - `lighting.go`: coloured lighting: a blurred RGB light map multiplied over the world (linear filtering for smooth falloff), an emissive layer for things that glow, coloured haze around lights and a vignette.
-  - `mining.go`: block hardness, pickaxe tiers and power, crack wear, and mining background walls.
+  - `mining.go`: block hardness, pickaxe tiers and power, crack wear, and mining background walls. With no pickaxe at all, an empty hand digs slowly, and a wooden pickaxe can be crafted by hand from 8 wood, so the mote can never get stuck.
+  - `held.go`: draws the item in the mote's hand while it is used (pickaxes swing, swords slash, blocks bob). Swords hit along a slash from the mote to the aim, as far as a pickaxe reaches; better swords only do more damage.
   - `entities.go`: creatures (gloomlings, bats, skitters, wisps, brutes, night shades, the Warden boss) and dropped items. Each kind's size, health, damage, speed and sensing range is in the `kinds` table; every speed is a fraction under 1 of the mote's, so the mote can always outrun them. Spawning is slow (`spawnEvery`, `maxCreatures`).
   - `ai.go`: creature path finding. A breadth-first search over 4x4-cell blocks spreads out from the mote every few frames; creatures step toward the neighbouring block that is closer, so they go around walls and through tunnels. Walkers can only climb where a jump reaches.
   - `blueprints.go`: ready-made structures and the placement hologram. Add a structure by adding a template in `initBlueprints()`, an item and a recipe.

@@ -29,6 +29,13 @@ var (
 )
 
 func openStation(kind string) {
+	if !prefs.Used[kind] {
+		if prefs.Used == nil {
+			prefs.Used = map[string]bool{}
+		}
+		prefs.Used[kind] = true
+		savePrefs()
+	}
 	if kind == "bed" {
 		useBed()
 		return

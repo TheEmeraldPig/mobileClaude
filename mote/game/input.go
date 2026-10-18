@@ -280,7 +280,7 @@ func startWorldPointer(id int, x, y float64) {
 		tapObj.id, tapObj.o, tapObj.frame, tapObj.sx, tapObj.sy = id, o, frame, x, y
 	}
 	if selected >= 0 && inv[selected] != nil && useID == -99 {
-		useID, useActive = id, true
+		useID, useActive, useTick = id, true, 0
 		aimSX, aimSY = x, y
 		if items[inv[selected].ID].once {
 			useOnce()
@@ -292,11 +292,22 @@ func startWorldPointer(id int, x, y float64) {
 		}
 		return
 	}
+	// no pickaxe at all: an empty hand digs, so you can never get stuck
+	if (selected < 0 || inv[selected] == nil) && !hasPickaxe() && useID == -99 {
+		useID, useActive, handMining, useTick = id, true, true, 0
+		if frame-handHintAt > 600 {
+			handHintAt = frame
+			toast("No pickaxe: digging by hand. Craft a wooden pickaxe from 8 wood")
+		}
+		return
+	}
 	if peekID == -99 {
 		peekID = id
 		setPeek(x, y)
 	}
 }
+
+var handHintAt = -10000
 
 func moveWorldPointer(id int, x, y float64) {
 	if id == peekID {
@@ -315,7 +326,7 @@ func endWorldPointer(id int) {
 	if id == useID {
 		finishShape()
 		endAction()
-		useID, useActive = -99, false
+		useID, useActive, handMining = -99, false, false
 	}
 	if tapObj.o != nil && tapObj.id == id {
 		o := tapObj.o
@@ -347,6 +358,7 @@ func clearPointers() {
 	ptr = uiPointer{}
 	releaseStick()
 	peekID, useID, useActive, peekX, peekY = -99, -99, false, 0, 0
+	handMining = false
 	shapeOn, shapeCells = false, nil
 	tapObj.o = nil
 }

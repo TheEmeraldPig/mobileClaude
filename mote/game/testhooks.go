@@ -117,9 +117,15 @@ func runScript() {
 			a, b, _ := strings.Cut(arg, ":")
 			aimSX, _ = strconv.ParseFloat(a, 64)
 			aimSY, _ = strconv.ParseFloat(b, 64)
-			useActive, scriptAim = true, true
+			useActive, scriptAim, useTick = true, true, 0
+			handMining = (selected < 0 || inv[selected] == nil) && !hasPickaxe()
 		case "unaim":
-			useActive, scriptAim = false, false
+			useActive, scriptAim, handMining = false, false, false
+		case "clearinv": // empty the bag and hotbar
+			for i := range inv {
+				inv[i] = nil
+			}
+			selected = -1
 		case "dropone":
 			dropSlot(selected, 1)
 		case "log":

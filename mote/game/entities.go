@@ -513,6 +513,36 @@ func hitCreatures(cx, cy, r, dmg int) bool {
 	return hit
 }
 
+// Hit every creature within r cells of the segment (x0,y0)-(x1,y1)
+func hitAlong(x0, y0, x1, y1, r float64, dmg int) bool {
+	hit := false
+	sx, sy := x1-x0, y1-y0
+	l2 := sx*sx + sy*sy
+	for _, e := range ents {
+		if e.kind == entItem || e.hurt > 0 {
+			continue
+		}
+		ex, ey := (e.x+e.w/2)/CELL, (e.y+e.h/2)/CELL
+		t := 0.0
+		if l2 > 0 {
+			t = math.Max(0, math.Min(1, ((ex-x0)*sx+(ey-y0)*sy)/l2))
+		}
+		if math.Hypot(ex-(x0+sx*t), ey-(y0+sy*t)) <= r+math.Max(e.w, e.h)/CELL/2 {
+			e.hp -= dmg
+			e.hurt = 12
+			popDamage(dmg, e.x+e.w/2, e.y, false)
+			kb := float64(sign(ex - x0))
+			e.vx, e.vy = kb*4, -3
+			burst(5, ex, ey, [3]int{240, 122, 106}, 1, 1, 14)
+			hit = true
+		}
+	}
+	if hit {
+		sfx("hit")
+	}
+	return hit
+}
+
 func dropItem(id string, n int, x, y float64, dir int) {
 	e := &Entity{kind: entItem, item: id, n: n, x: x, y: y, w: 4 * CELL, h: 4 * CELL, hp: 1,
 		vx: float64(dir) * 3, vy: -2.5, pickupDelay: 20}

@@ -398,10 +398,17 @@ func hasTemp() bool {
 }
 
 // Picking up a real tool or utility item ends the temporary kit
+// (the temporary pickaxe stays until you have a real one, so you can always dig)
 func clearTemp() {
 	n := 0
+	realPick := false
+	for _, s := range inv {
+		if s != nil && !s.Temp && isPick(s.ID) {
+			realPick = true
+		}
+	}
 	for i, s := range inv {
-		if s != nil && s.Temp {
+		if s != nil && s.Temp && (realPick || !isPick(s.ID)) {
 			inv[i] = nil
 			n++
 		}

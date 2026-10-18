@@ -43,7 +43,7 @@ var book = []chapter{
 	}},
 	{"Creatures", "coppersword", []string{
 		"Gloomlings crawl cave floors, bats flit about, skitters dart in and back off, wisps glow and circle before diving, and brutes are slow but tough. Shades walk the surface at night.",
-		"They find their way around walls and through tunnels, but you are always a little faster. They drop materials and coins. Swords hit harder than a pickaxe; armor in your bag blocks damage.",
+		"They find their way around walls and through tunnels, but you are always a little faster. They drop materials and coins. Every sword reaches as far as your pickaxe and hits everything along its slash; better swords just hit harder. Armor in your bag blocks damage.",
 		"Deep down, the Warden guards the Core. Beat it and the Core can be mined for shards that make the Core pickaxe.",
 	}},
 	{"Places to explore", "crystal", []string{

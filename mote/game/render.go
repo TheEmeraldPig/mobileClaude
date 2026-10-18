@@ -421,6 +421,7 @@ func drawWorld(screen *ebiten.Image) {
 	drawDoorHologram(blend, ox, oy)
 	drawBuildHologram(blend, ox, oy)
 	drawPlayer(put, ox, oy)
+	drawHeld(put, ox, oy)
 	for _, q := range parts {
 		put(int(math.Floor(q.x))-ox, int(math.Floor(q.y))-oy, q.c, 0)
 	}
