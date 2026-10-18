@@ -99,7 +99,7 @@ func drawTraders(lit func(x, y int, c [3]int, s int), put func(x, y int, c [3]in
 			face = -1
 		}
 		blink := (frame+t.house.id*37)%200 < 7
-		rows := playerFrame(blink, false, []string{"stand", "a", "stand", "b"}[(frame/12+t.house.id)%4], 0)
+		rows := playerFrame(blink, false, []string{"stand", "a", "stand", "b"}[((frame/12+t.house.id)%4+4)%4], 0)
 		x0 := int(math.Round(t.lx)) - sprW/2 - ox
 		y0 := t.feet - len(rows) + 1 - oy
 		bob := 0

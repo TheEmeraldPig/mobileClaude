@@ -102,3 +102,13 @@ func TestOreClumpsArePure(t *testing.T) {
 		}
 	}
 }
+
+// Villages left of the start have negative ids; drawing their traders must not crash
+func TestTradersWithNegativeIDs(t *testing.T) {
+	traderSpots = []traderSpot{{house: vHouse{id: -13, kind: 2, w: 30}, lx: 10, feet: 20}}
+	none := func(x, y int, c [3]int, s int) {}
+	for frame = 0; frame < 100; frame++ {
+		drawTraders(none, none, 0, 0)
+	}
+	traderSpots = nil
+}
