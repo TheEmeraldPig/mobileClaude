@@ -71,10 +71,10 @@ const (
 var (
 	light            []uint16 // internal levels 0-1023
 	lightSrc         []uint8  // which kind of light reached each cell (see lightTints)
-	lightCost        []uint8 // 1 for cells where light travels through something solid
-	sunLit           []bool  // cells the sun (or moon) shines on directly
-	sunSlope         float64 // cells sideways per cell down that sunlight travels
-	colTop           []int   // per column of the light window: first block that stops light
+	lightCost        []uint8  // 1 for cells where light travels through something solid
+	sunLit           []bool   // cells the sun (or moon) shines on directly
+	sunSlope         float64  // cells sideways per cell down that sunlight travels
+	colTop           []int    // per column of the light window: first block that stops light
 	lightW, lightH   int
 	lightX0, lightY0 int
 	buckets          [lightFine + 1][]int32
