@@ -31,6 +31,7 @@ const (
 	srcLantern
 	srcWisp
 	srcWarden
+	srcSun // direct sunlight (or moonlight); srcSky is the softer light from the open sky
 	nSrc
 )
 
@@ -51,6 +52,11 @@ var (
 	shadeCool   = [3]float64{0.48, 0.56, 0.92}  // sky light in the shade
 	ambientDark = [3]float64{0.035, 0.03, 0.07} // the darkest it gets
 )
+
+// Sunlight is a touch warmer than the sky's overall colour
+func sunWarm(c [3]float64) [3]float64 {
+	return [3]float64{math.Min(1, c[0]*1.04), c[1], c[2] * 0.9}
+}
 
 func mixF(a, b [3]float64, t float64) [3]float64 {
 	return [3]float64{a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t, a[2] + (b[2]-a[2])*t}
@@ -162,9 +168,12 @@ func buildLightMap(ox, oy, vw, vh int, skyCell func(x, y int) bool) {
 			f := lightCurve[lvl]
 			tint := lightTints[src]
 			switch {
+			case src == srcSun:
+				// direct sun is warm, cooling to blue as it fades
+				tint = mixF(shadeCool, sunWarm(sky), math.Pow(f, 0.7))
 			case src == srcSky:
-				// daylight cools to blue in the shade, like light scattered off the sky
-				tint = mixF(shadeCool, sky, math.Pow(f, 0.7))
+				// shade under open sky is cooler, lit by the blue sky rather than the sun
+				tint = mixF(shadeCool, sky, math.Pow(f, 0.7)*0.75)
 			case src != srcNone:
 				// firelight reddens toward the edge of its glow
 				tint = mixF(warmEdge(tint), tint, math.Pow(f, 0.5))
@@ -174,7 +183,7 @@ func buildLightMap(ox, oy, vw, vh int, skyCell func(x, y int) bool) {
 				lightBuf[k+c] = float32(math.Max(f*tint[c], ambientDark[c]))
 			}
 			// haze: only from point lights, and stronger close to them
-			if src != srcSky && src != srcNone {
+			if src != srcSky && src != srcSun && src != srcNone {
 				h := float32(math.Max(0, f-0.5) / 0.5)
 				h *= h
 				for c := 0; c < 3; c++ {
@@ -185,7 +194,7 @@ func buildLightMap(ox, oy, vw, vh int, skyCell func(x, y int) bool) {
 			}
 		}
 	}
-	blur3(lightBuf, vw, vh, 2)
+	blur3(lightBuf, vw, vh, 3)
 	blur3(hazeBuf, vw, vh, 5) // a wide, soft bloom
 	for i, j := 0, 0; i < vw*vh*3; i, j = i+3, j+4 {
 		lightPix[j], lightPix[j+1], lightPix[j+2], lightPix[j+3] = toByte(lightBuf[i]), toByte(lightBuf[i+1]), toByte(lightBuf[i+2]), 255

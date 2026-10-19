@@ -25,7 +25,26 @@ func smoothstep(a, b, x float64) float64 {
 // 0 at night, 1 in full day
 func daylight() float64 { return smoothstep(-0.15, 0.25, sunHeight()) }
 
-func skyLevel() int { return 30 + int(math.Round(34*daylight())) }
+// Sky brightness, in fine light steps (0-1023): smooth through dawn and dusk
+func skyFine() float64 { return lightFine * (0.47 + 0.53*daylight()) }
+
+// Direct and ambient daylight (fine steps) and the slant of the light: how many cells
+// sideways a ray moves for each cell it falls. The sun rises on the left and sets on
+// the right; at night the moon (dimmer) does the same.
+func sunLight() (direct, ambient int, slope float64) {
+	th := 2 * math.Pi * (worldTime - 0.25)
+	bx, by := -math.Cos(th), math.Sin(th) // the sun's position: x -1 left .. 1 right, y up
+	if by < 0 {
+		bx, by = -bx, -by // the moon is opposite the sun
+	}
+	slope = math.Max(-2.5, math.Min(2.5, -bx/math.Max(by, 0.2)))
+	sky := skyFine()
+	// the low sun at dawn and dusk is weaker, and its light goes further sideways
+	strength := smoothstep(0, 0.35, by)
+	direct = int(sky * (0.72 + 0.28*strength))
+	ambient = int(sky * 0.55)
+	return
+}
 
 func isNight() bool { return daylight() < 0.3 }
 
@@ -52,11 +71,23 @@ const (
 var (
 	light            []uint16 // internal levels 0-1023
 	lightSrc         []uint8  // which kind of light reached each cell (see lightTints)
-	lightCost        []uint8  // 1 for cells where light travels through something solid
+	lightCost        []uint8 // 1 for cells where light travels through something solid
+	sunLit           []bool  // cells the sun (or moon) shines on directly
+	sunSlope         float64 // cells sideways per cell down that sunlight travels
+	colTop           []int   // per column of the light window: first block that stops light
 	lightW, lightH   int
 	lightX0, lightY0 int
 	buckets          [lightFine + 1][]int32
 )
+
+// Does the sun shine straight onto loaded cell (x, y)?
+func sunLitAt(x, y int) bool {
+	lx, ly := x-lightX0, y-lightY0
+	if lx < 0 || ly < 0 || lx >= lightW || ly >= lightH {
+		return false
+	}
+	return sunLit[ly*lightW+lx]
+}
 
 func lightAt(x, y int) int {
 	lx, ly := x-lightX0, y-lightY0
@@ -91,36 +122,95 @@ func computeLight(ox, oy, vw, vh int) {
 	for i := range buckets {
 		buckets[i] = buckets[i][:0]
 	}
-	seed := func(idx, lvl int, src uint8) {
-		f := min(lightFine, lvl*lightFine/lightMax)
+	seedFine := func(idx, f int, src uint8) {
+		f = min(lightFine, f)
 		if f > int(light[idx]) {
 			light[idx] = uint16(f)
 			lightSrc[idx] = src
 			buckets[f] = append(buckets[f], int32(idx))
 		}
 	}
-	sky := skyLevel()
+	seed := func(idx, lvl int, src uint8) { seedFine(idx, lvl*lightFine/lightMax, src) }
+	// 1 where light is slowed by a solid block
+	for r := 0; r < lightH; r++ {
+		wy := lightY0 + r
+		row := lightCost[r*lightW : (r+1)*lightW]
+		for c := range row {
+			wx := lightX0 + c
+			if wx < 0 || wx >= W || wy >= H || (wy >= 0 && blocksLight(grid[wy*W+wx])) {
+				row[c] = 1
+			} else {
+				row[c] = 0
+			}
+		}
+	}
+	// Daylight comes from where the sun (or at night the moon) is. Direct light follows
+	// slanted rays and stops at the first solid block, so hills and cliffs cast shadows
+	// that swing round through the day. Open sky everywhere also gives softer, bluer
+	// light straight down, so shade is dimmer but never black.
+	direct, ambient, slope := sunLight()
+	sunSlope = slope
+	if cap(sunLit) < n {
+		sunLit = make([]bool, n)
+	}
+	sunLit = sunLit[:n]
+	clear(sunLit)
+	if cap(colTop) < lightW {
+		colTop = make([]int, lightW)
+	}
+	colTop = colTop[:lightW]
+	for c := 0; c < lightW; c++ {
+		wx := lightX0 + c
+		top, lim := 0, min(H, lightY0+lightH)
+		if wx >= 0 && wx < W {
+			for top < lim && !blocksLight(grid[top*W+wx]) {
+				top++
+			}
+		}
+		colTop[c] = top
+	}
+	for r := 0; r < lightH; r++ {
+		wy := lightY0 + r
+		for c := 0; c < lightW; c++ {
+			i := r*lightW + c
+			if lightCost[i] != 0 {
+				continue
+			}
+			var lit bool
+			// where this cell's ray to the sun crosses the row above
+			pc := c - int(math.Round(slope*float64(r+1))) + int(math.Round(slope*float64(r)))
+			switch {
+			case wy < 0:
+				lit = true
+			case r == 0 || pc < 0 || pc >= lightW:
+				lit = wy < colTop[c] // outside the window: straight up
+			default:
+				lit = sunLit[i-lightW+pc-c]
+				// a slanting ray also crosses the cells between, in this row
+				for k := min(pc, c) + 1; lit && k < max(pc, c); k++ {
+					lit = lightCost[r*lightW+k] == 0
+				}
+			}
+			sunLit[i] = lit
+			if lit {
+				seedFine(i, direct, srcSun)
+			} else if wy < colTop[c] {
+				seedFine(i, ambient, srcSky)
+			}
+		}
+	}
 	for c := 0; c < lightW; c++ {
 		wx := lightX0 + c
 		if wx < 0 || wx >= W {
 			continue
 		}
-		// sky light reaches down until the first solid block in this column
-		top, lim := 0, min(H, lightY0+lightH)
-		for top < lim && !blocksLight(grid[top*W+wx]) {
-			top++
-		}
 		for r := 0; r < lightH; r++ {
 			wy := lightY0 + r
 			if wy < 0 {
-				seed(r*lightW+c, sky, srcSky)
 				continue
 			}
 			if wy >= H {
 				break
-			}
-			if wy < top {
-				seed(r*lightW+c, sky, srcSky)
 			}
 			if t := grid[wy*W+wx]; t != EMPTY {
 				if l := blockLight(t); l > 0 {
@@ -148,19 +238,6 @@ func computeLight(ox, oy, vw, vh int) {
 			src = srcLantern
 		}
 		seed(pcy*lightW+pcx, playerLightLevel(), src)
-	}
-	// 1 where light is slowed by a solid block
-	for r := 0; r < lightH; r++ {
-		wy := lightY0 + r
-		row := lightCost[r*lightW : (r+1)*lightW]
-		for c := range row {
-			wx := lightX0 + c
-			if wx < 0 || wx >= W || wy >= H || (wy >= 0 && blocksLight(grid[wy*W+wx])) {
-				row[c] = 1
-			} else {
-				row[c] = 0
-			}
-		}
 	}
 	type step struct{ dc, dr, air, solid int }
 	steps := [8]step{{-1, 0, costAir, costSolid}, {1, 0, costAir, costSolid}, {0, -1, costAir, costSolid}, {0, 1, costAir, costSolid},
@@ -194,13 +271,13 @@ func computeLight(ox, oy, vw, vh int) {
 	}
 }
 
-// Brightness for an internal light level: bright near the source, then a long, even
-// fade with no hard edge
+// Brightness for an internal light level: a long, even fade that eases in and out at
+// both ends (no visible edge where the light runs out, no flat plateau near a source)
 var lightCurve = func() [lightFine + 1]float64 {
 	var t [lightFine + 1]float64
 	for i := range t {
-		x := math.Min(1, float64(i)/880)
-		t[i] = 1 - math.Pow(1-x, 1.8)
+		x := math.Min(1, float64(i)/900)
+		t[i] = math.Pow(x*x*(3-2*x), 0.62)
 	}
 	return t
 }()
@@ -485,13 +562,20 @@ func drawWorld(screen *ebiten.Image) {
 					up, up2 := gridAt(wx, wy-1), gridAt(wx, wy-2)
 					switch {
 					case !isSolid(up):
-						if wy-1 < surf[x] { // sunlit rim along the land's top
+						if sunLitAt(wx, wy-1) { // the sun catches the top edge
 							c = mix(c, [3]int{255, 244, 206}, 0.12+0.22*daylight())
 						} else if t != GRASS {
-							c = mix(c, [3]int{255, 255, 255}, 0.14)
+							c = mix(c, [3]int{255, 255, 255}, 0.1)
 						}
 					case !isSolid(up2):
 						c = mix(c, [3]int{255, 255, 255}, 0.05)
+					}
+					// a low sun also lights the faces turned toward it
+					if s := sunSlope; math.Abs(s) > 0.5 {
+						sx := wx - int(math.Copysign(1, s))
+						if !isSolid(gridAt(sx, wy)) && sunLitAt(sx, wy) {
+							c = mix(c, [3]int{255, 222, 170}, math.Min(0.3, (math.Abs(s)-0.5)*0.2)*daylight())
+						}
 					}
 					if !isSolid(gridAt(wx, wy+1)) {
 						c = shadeRGB(c, 0.68)
