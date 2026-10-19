@@ -95,7 +95,7 @@ func skyTint() [3]float64 {
 		c[k] = night[k] + (day[k]-night[k])*d
 	}
 	sh := sunHeight()
-	if dusk := math.Exp(-(sh / 0.22) * (sh / 0.22)); dusk > 0.02 {
+	if dusk := math.Exp(-(sh / 0.3) * (sh / 0.3)); dusk > 0.02 {
 		dc := [3]float64{1.0, 0.62, 0.42}
 		for k := range c {
 			c[k] += (dc[k] - c[k]) * dusk * 0.55

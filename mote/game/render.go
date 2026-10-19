@@ -23,7 +23,9 @@ func smoothstep(a, b, x float64) float64 {
 }
 
 // 0 at night, 1 in full day
-func daylight() float64 { return smoothstep(-0.15, 0.25, sunHeight()) }
+// (it builds up slowly through the morning and fades through the afternoon, so the
+// low sun is never as bright as midday)
+func daylight() float64 { return smoothstep(-0.15, 0.6, sunHeight()) }
 
 // Sky brightness, in fine light steps (0-1023): smooth through dawn and dusk
 func skyFine() float64 { return lightFine * (0.47 + 0.53*daylight()) }
@@ -40,13 +42,13 @@ func sunLight() (direct, ambient int, slope float64) {
 	slope = math.Max(-2.5, math.Min(2.5, -bx/math.Max(by, 0.2)))
 	sky := skyFine()
 	// the low sun at dawn and dusk is weaker, and its light goes further sideways
-	strength := smoothstep(0, 0.35, by)
-	direct = int(sky * (0.72 + 0.28*strength))
+	strength := smoothstep(0, 0.6, by)
+	direct = int(sky * (0.62 + 0.38*strength))
 	ambient = int(sky * 0.55)
 	return
 }
 
-func isNight() bool { return daylight() < 0.3 }
+func isNight() bool { return sunHeight() < 0 }
 
 // ---- Lighting ----
 // Light flows out from the sky, the mote, torches and crystals. It travels easily
