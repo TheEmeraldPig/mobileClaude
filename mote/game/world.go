@@ -350,33 +350,96 @@ func get(buf []uint8, x0, x, y int) uint8 {
 	return EMPTY
 }
 
-// Trees: one may grow in each 11-cell-wide slot of grassland. Canopies cross chunk
-// borders, so slots from the neighbouring chunks are checked too.
+// Trees, in the style of Kyora: a swaying trunk that flares into roots, branches that
+// curve up and out, and big leafy clumps with ragged edges. Big trees spread up to ~65
+// cells either side, so each chunk also grows the trees of its neighbours (set() keeps
+// every write inside this chunk). Trunks and leaves don't block movement.
 func plantTrees(buf []uint8, cx, x0 int) {
-	const slot = 11
-	for sl := floorDiv(x0, slot) - 1; sl <= floorDiv(x0+CW, slot)+1; sl++ {
-		if hash01(sl, 0, 71) > 0.55 {
+	const slot = 34
+	for sl := floorDiv(x0-70, slot); sl <= floorDiv(x0+CW+70, slot); sl++ {
+		if hash01(sl, 0, 71) > 0.72 {
 			continue
 		}
-		x := sl*slot + 2 + int(hash01(sl, 1, 71)*float64(slot-4))
+		x := sl*slot + 4 + int(hash01(sl, 1, 71)*float64(slot-8))
 		s := surfaceAt(x)
-		if isDesert(x) || s >= waterLevel-3 {
+		if isDesert(x) || s >= waterLevel-3 || abs(surfaceAt(x-4)-surfaceAt(x+4)) > 5 {
 			continue
 		}
-		height := 9 + int(hash01(sl, 2, 71)*8)
-		top := s - height
-		for y := top; y < s; y++ {
-			set(buf, x0, x, y, WOOD)
-			if hash01(x, y, 72) < 0.15 && y < s-3 { // a little branch
-				set(buf, x0, x+[]int{-1, 1}[int(hash01(x, y, 73)*2)], y, WOOD)
+		size := 0.6 + hash01(sl, 4, 71)*0.35 // small and medium trees
+		if hash01(sl, 5, 71) < 0.45 {
+			size = 1.2 + hash01(sl, 6, 71)*0.6 // big old trees
+		}
+		growTree(buf, x0, x, s, sl, size)
+	}
+}
+
+func growTree(buf []uint8, x0, x, s, sl int, size float64) {
+	r := func(k int) float64 { return hash01(sl, 10+k, 72) }
+	height := int(size * (34 + r(0)*16))
+	base := 1 + size*2.2 // trunk half-width at the bottom
+	sway := (r(1) - 0.5) * 8 * size
+	wood := func(xx, yy int) {
+		if t := get(buf, x0, xx, yy); t == EMPTY || t == LEAVES || t == FLOWER || t == BUSH {
+			set(buf, x0, xx, yy, WOOD)
+		}
+	}
+	// the centre of the trunk at height h (0 at the ground)
+	trunkX := func(h int) float64 {
+		f := float64(h) / float64(height)
+		return float64(x) + math.Sin(f*math.Pi*0.9)*sway
+	}
+	for h := -1; h <= height; h++ {
+		f := float64(h) / float64(height)
+		hw := base*(1-f*0.75) + 0.4
+		if h < 4 { // roots flare out at the bottom
+			hw += float64(4-h) * 0.8 * size
+		}
+		c := trunkX(h)
+		for xx := int(math.Floor(c - hw)); xx <= int(math.Ceil(c+hw)); xx++ {
+			wood(xx, s-h)
+		}
+	}
+	// branches: curving up and out from the upper trunk, each ending in a clump
+	n := 2 + int(r(2)*2.99*size)
+	for b := 0; b < n; b++ {
+		dir := 1.0
+		if (b+int(r(3)*2))%2 == 0 {
+			dir = -1
+		}
+		h0 := int(float64(height) * (0.45 + 0.4*hash01(sl, 30+b, 72)))
+		bx, by := trunkX(h0), float64(s-h0)
+		ang := -0.35 - 0.5*hash01(sl, 40+b, 72) // radians above horizontal
+		length := size * (10 + 10*hash01(sl, 50+b, 72))
+		thick := 1.2 * size
+		for st := 0.0; st < length; st += 0.6 {
+			bx += math.Cos(ang) * 0.6 * dir
+			by += math.Sin(ang) * 0.6
+			ang -= 0.012 // curves upward
+			t := thick * (1 - st/length*0.6)
+			for dy := -t; dy <= t; dy++ {
+				wood(int(math.Round(bx)), int(math.Round(by+dy)))
 			}
 		}
-		r := 4 + int(hash01(sl, 3, 71)*2)
-		for dy := -r; dy <= r; dy++ {
-			for dx := -r - 1; dx <= r+1; dx++ {
-				if dx*dx+dy*dy*2 <= r*r+2 && get(buf, x0, x+dx, top+dy) == EMPTY {
-					set(buf, x0, x+dx, top+dy, LEAVES)
-				}
+		leafClump(buf, x0, bx, by-2, size*(5+3*hash01(sl, 60+b, 72)), sl*7+b)
+	}
+	// the crown: a big clump on top with smaller ones around it
+	tx, ty := trunkX(height), float64(s-height)
+	cr := size * (8 + 4*r(5))
+	leafClump(buf, x0, tx, ty-cr*0.3, cr, sl*7+5)
+	leafClump(buf, x0, tx-cr*0.8, ty+cr*0.2, cr*0.65, sl*7+6)
+	leafClump(buf, x0, tx+cr*0.8, ty+cr*0.15, cr*0.65, sl*7+7)
+}
+
+// A ragged, roughly round clump of leaves (wider than tall)
+func leafClump(buf []uint8, x0 int, cx, cy, rad float64, salt int) {
+	ri := int(rad*1.5) + 2
+	for dy := -ri; dy <= ri; dy++ {
+		for dx := -ri; dx <= ri; dx++ {
+			xx, yy := int(cx)+dx, int(cy)+dy
+			d := math.Hypot(float64(dx)/1.3, float64(dy))
+			edge := rad * (0.72 + 0.42*noise2(float64(xx), float64(yy), 4, 74+salt%5))
+			if d <= edge && get(buf, x0, xx, yy) == EMPTY {
+				set(buf, x0, xx, yy, LEAVES)
 			}
 		}
 	}
@@ -691,6 +754,14 @@ func placeCrystals(buf []uint8, cx, x0 int) {
 	}
 }
 
+// A block's texture: soft clumps of light and dark with a little fine grain on top,
+// so surfaces look painted rather than noisy
+func texShade(x, y int) int8 {
+	clump := noise2(float64(x), float64(y), 3.2, 98)*16 - 8
+	grain := float64(hash32(x, y, 99)%7) - 3
+	return int8(clump + grain)
+}
+
 func genChunk(cx int) []uint8 {
 	buf := make([]uint8, CW*H)
 	for _, pass := range genPasses {
@@ -781,7 +852,7 @@ func loadSlot(slot int) {
 		row := y*W + slot*CW
 		copy(grid[row:row+CW], buf[y*CW:y*CW+CW])
 		for lx := 0; lx < CW; lx++ {
-			shade[row+lx] = int8(int(hash32(cx*CW+lx, y, 99)%21) - 10)
+			shade[row+lx] = texShade(cx*CW+lx, y)
 		}
 	}
 	if _, ok := savedWalls[cx]; ok {

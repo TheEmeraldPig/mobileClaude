@@ -18,7 +18,7 @@ func TestSeedsAreStable(t *testing.T) {
 		seed string
 		cx   int
 		sum  int32
-	}{{"12345", 0, 171585600}, {"12345", -3, 1198161034}, {"12345", 17, 584427637}, {"hello", 0, -454723134}, {"hello", 5, -248707735}}
+	}{{"12345", 0, 171585600}, {"12345", -3, 1198161034}, {"12345", 17, -456007455}, {"hello", 0, 1704611974}, {"hello", 5, -248707735}}
 	for _, w := range want {
 		seedN = seedFrom(w.seed)
 		a, b := chunkSum(w.cx), chunkSum(w.cx)

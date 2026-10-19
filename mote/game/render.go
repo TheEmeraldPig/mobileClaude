@@ -419,6 +419,15 @@ func drawWorld(screen *ebiten.Image) {
 					sky[y*vw+x] = t == EMPTY
 				default:
 					bg = [3]int{caveWall[0] + sh, caveWall[1] + sh, caveWall[2] + sh}
+					// the back wall is shadowed where it meets rock
+					bg = shadeRGB(bg, caveOcclusion(wx, wy))
+				}
+				// grass blades poke up from the grass
+				if t == EMPTY && wl == 0 {
+					if g, ok := grassBlade(wx, wy); ok {
+						bg = g
+						sky[y*vw+x] = false
+					}
 				}
 				if t == WATER {
 					wc := blockRGB[WATER]
@@ -461,6 +470,7 @@ func drawWorld(screen *ebiten.Image) {
 					c = mix(c, paintRGB[pt], 0.7)
 				}
 				c = [3]int{c[0] + sh, c[1] + sh, c[2] + sh}
+				c = blockTexture(c, t, wx, wy)
 				if t == DOOR {
 					set(o, doorPixel(t, wx, wy, c, 1))
 					continue
@@ -470,12 +480,26 @@ func drawWorld(screen *ebiten.Image) {
 						c = shadeRGB(c, 0.45) // cracks spread as the block wears down
 					}
 				}
-				// a lighter top edge on blocks open to the air above, for depth
-				if wy > 0 && wy < H && wx >= 0 && wx < W && !isSolid(grid[(wy-1)*W+wx]) {
-					if wy-1 < surf[x] { // sunlit rim along the land's top
-						c = mix(c, [3]int{255, 244, 206}, 0.1+0.22*daylight())
-					} else if t != GRASS {
-						c = mix(c, [3]int{255, 255, 255}, 0.12)
+				// bevels: a lit top edge, shaded undersides and sides
+				if isSolid(t) {
+					up, up2 := gridAt(wx, wy-1), gridAt(wx, wy-2)
+					switch {
+					case !isSolid(up):
+						if wy-1 < surf[x] { // sunlit rim along the land's top
+							c = mix(c, [3]int{255, 244, 206}, 0.12+0.22*daylight())
+						} else if t != GRASS {
+							c = mix(c, [3]int{255, 255, 255}, 0.14)
+						}
+					case !isSolid(up2):
+						c = mix(c, [3]int{255, 255, 255}, 0.05)
+					}
+					if !isSolid(gridAt(wx, wy+1)) {
+						c = shadeRGB(c, 0.68)
+					} else if !isSolid(gridAt(wx, wy+2)) {
+						c = shadeRGB(c, 0.86)
+					}
+					if !isSolid(gridAt(wx-1, wy)) || !isSolid(gridAt(wx+1, wy)) {
+						c = shadeRGB(c, 0.84)
 					}
 				}
 				set(o, c)
@@ -532,6 +556,107 @@ func drawWorld(screen *ebiten.Image) {
 }
 
 // A background wall: the block's colour, darker, with a faint pattern so it reads as "behind"
+// The block at a loaded cell (empty above the world, stone beyond its edges)
+func gridAt(wx, wy int) uint8 {
+	if wy < 0 {
+		return EMPTY
+	}
+	if wx < 0 || wx >= W || wy >= H {
+		return STONE
+	}
+	return grid[wy*W+wx]
+}
+
+// Darker close to solid rock, for open cave cells
+func caveOcclusion(wx, wy int) float64 {
+	n := 0
+	for _, d := range [8][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-2, 0}, {2, 0}, {0, -2}, {0, 2}} {
+		if isSolid(gridAt(wx+d[0], wy+d[1])) {
+			n++
+		}
+	}
+	return 1 - 0.06*float64(n)
+}
+
+// Grass blades in the empty cells just above grass: 1-3 cells tall, swaying in the wind
+func grassBlade(wx, wy int) ([3]int, bool) {
+	gx := wx + baseChunk*CW
+	for k := 1; k <= 3; k++ {
+		if gridAt(wx, wy+k) != GRASS {
+			continue
+		}
+		hgt := int(hash32(gx, 0, 131) % 4) // 0 = no blade here
+		if k > hgt {
+			return [3]int{}, false
+		}
+		if k < hgt { // a blade's middle can lean with the wind
+			lean := math.Sin(float64(frame)*0.03+float64(gx)*0.4) > 0.6
+			if lean && hash32(gx, 1, 131)%2 == 0 {
+				return [3]int{}, false
+			}
+		}
+		g := blockRGB[GRASS]
+		return mix(g, [3]int{200, 236, 120}, 0.15*float64(k)), true
+	}
+	return [3]int{}, false
+}
+
+// Per-material detail on top of the clumpy shading
+// Darker pockets inside leaf clumps: a cheap blobby pattern from hashes of 3x3 blocks
+func leafPocket(gx, wy int) bool {
+	bx, by := floorDiv(gx+int(hash32(wy/3, 0, 137)%3), 3), floorDiv(wy, 3)
+	return hash32(bx, by, 136)%4 == 0
+}
+
+func blockTexture(c [3]int, t uint8, wx, wy int) [3]int {
+	gx := wx + baseChunk*CW
+	h := hash32(gx, wy, 133)
+	switch t {
+	case DIRT:
+		if h%29 == 0 {
+			c = shadeRGB(c, 0.72) // pebbles
+		} else if h%37 == 0 {
+			c = mix(c, [3]int{196, 160, 120}, 0.35)
+		}
+		// grass roots reach down into the dirt below
+		if gridAt(wx, wy-1) == GRASS && h%3 != 0 {
+			c = mix(c, blockRGB[GRASS], 0.45)
+		} else if gridAt(wx, wy-2) == GRASS && h%3 == 0 {
+			c = mix(c, blockRGB[GRASS], 0.3)
+		}
+	case STONE:
+		if h%41 == 0 {
+			c = shadeRGB(c, 0.75)
+		}
+	case GRASS:
+		c = mix(c, [3]int{170, 226, 96}, 0.25) // bright, sunny tops
+	case WOOD:
+		// bark: vertical streaks, darker at the trunk's edges
+		if (gx+int(hash32(gx, wy/3, 135)%2))%3 == 0 {
+			c = shadeRGB(c, 0.8)
+		}
+		if gridAt(wx-1, wy) != WOOD || gridAt(wx+1, wy) != WOOD {
+			c = shadeRGB(c, 0.78)
+		}
+	case LEAVES:
+		// lit from the upper left, shadowed below, with darker pockets inside
+		ul, dn := gridAt(wx-1, wy-1), gridAt(wx, wy+1)
+		switch {
+		case ul != LEAVES && gridAt(wx, wy-1) != LEAVES:
+			c = mix(c, [3]int{170, 220, 110}, 0.45)
+		case ul != LEAVES:
+			c = mix(c, [3]int{150, 206, 100}, 0.25)
+		}
+		if dn != LEAVES {
+			c = shadeRGB(c, 0.72)
+		}
+		if leafPocket(gx, wy) {
+			c = shadeRGB(c, 0.78)
+		}
+	}
+	return c
+}
+
 func wallPixel(wl, wpt uint8, wx, wy, sh int) [3]int {
 	c := blockRGB[wl]
 	if wpt != 0 {
