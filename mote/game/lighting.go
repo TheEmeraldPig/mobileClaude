@@ -368,14 +368,15 @@ func drawVignette(screen *ebiten.Image) {
 }
 
 // ---- Performance ----
-// On slow devices the game switches to a lighter mode by itself: the light flood fill
-// runs every other frame (nobody can see the difference), clouds update less often,
-// and the haze and vignette are left out. The Graphics setting can force either way.
+// On slow devices the game switches to a lighter mode by itself: a lighter blur,
+// clouds update less often, and the haze and vignette are left out. The Graphics setting can force either way.
 
 var lowSpec bool // the automatic light mode is on
 
 func simpleFX() bool { return prefs.Simple || (lowSpec && !prefs.Fancy) }
 
+// 2 in the lighter mode (it slows cloud updates and lightens the blur). The light
+// itself is worked out every frame: skipping frames made it lag and stutter.
 func lightEvery() int {
 	if lowSpec && !prefs.Fancy || prefs.Simple {
 		return 2
