@@ -3,6 +3,7 @@ package game
 import (
 	"bytes"
 	_ "embed"
+	"image"
 	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -65,8 +66,20 @@ type drawOp func(dst *ebiten.Image)
 
 var ops []drawOp
 
+// A white pixel, stretched and tinted to fill rectangles: much cheaper than building a
+// vector path, and Ebitengine batches these into a single draw call
+var whitePx = func() *ebiten.Image {
+	img := ebiten.NewImage(3, 3)
+	img.Fill(color.White)
+	return img.SubImage(image.Rect(1, 1, 2, 2)).(*ebiten.Image)
+}()
+
 func fill(dst *ebiten.Image, x, y, w, h float64, c color.Color) {
-	vector.DrawFilledRect(dst, float32(x*uiScale), float32(y*uiScale), float32(w*uiScale), float32(h*uiScale), c, false)
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(w*uiScale, h*uiScale)
+	op.GeoM.Translate(x*uiScale, y*uiScale)
+	op.ColorScale.ScaleWithColor(c)
+	dst.DrawImage(whitePx, op)
 }
 
 // Bevelled box with a notched pixel outline (and an optional drop below it)

@@ -24,7 +24,8 @@ type Prefs struct {
 	Full      bool              `json:"fullscreen"`
 	UISize    int               `json:"uiSize"` // 0 small .. 3 largest, 1 normal
 	Tips      bool              `json:"tips"`
-	Simple    bool              `json:"simpleLight"`  // no haze or vignette, for slow devices
+	Simple    bool              `json:"simpleLight"`  // always the lighter graphics mode
+	Fancy     bool              `json:"fancyLight"`   // never switch to it automatically
 	Used      map[string]bool   `json:"usedStations"` // stations used once: their "how to use" hint stops showing
 }
 

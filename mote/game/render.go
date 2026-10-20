@@ -76,6 +76,7 @@ var (
 	lightCost        []uint8  // 1 for cells where light travels through something solid
 	sunLit           []bool   // cells the sun (or moon) shines on directly
 	sunSlope         float64  // cells sideways per cell down that sunlight travels
+	lightBase        int      // baseChunk when the light was last worked out
 	colTop           []int    // per column of the light window: first block that stops light
 	lightW, lightH   int
 	lightX0, lightY0 int
@@ -107,7 +108,7 @@ func playerLightLevel() int {
 }
 
 func computeLight(ox, oy, vw, vh int) {
-	const m = lightReach // light from beyond the screen edge can still reach in
+	const m = 64 // light from beyond the screen edge can still reach in
 	lightX0, lightY0, lightW, lightH = ox-m, oy-m, vw+2*m, vh+2*m
 	n := lightW * lightH
 	if cap(light) < n {
@@ -244,7 +245,12 @@ func computeLight(ox, oy, vw, vh int) {
 	type step struct{ dc, dr, air, solid int }
 	steps := [8]step{{-1, 0, costAir, costSolid}, {1, 0, costAir, costSolid}, {0, -1, costAir, costSolid}, {0, 1, costAir, costSolid},
 		{-1, -1, costDiag, costSolidDiag}, {1, -1, costDiag, costSolidDiag}, {-1, 1, costDiag, costSolidDiag}, {1, 1, costDiag, costSolidDiag}}
-	for lvl := lightFine; lvl > 0; lvl-- {
+	var offs [8]int
+	for k, d := range steps {
+		offs[k] = d.dr*lightW + d.dc
+	}
+	// (a cell with no more light than one step costs can't light anything)
+	for lvl := lightFine; lvl > costAir; lvl-- {
 		for k := 0; k < len(buckets[lvl]); k++ {
 			idx := int(buckets[lvl][k])
 			if int(light[idx]) != lvl {
@@ -252,6 +258,22 @@ func computeLight(ox, oy, vw, vh int) {
 			}
 			c, r := idx%lightW, idx/lightW
 			src := lightSrc[idx]
+			if c > 0 && r > 0 && c < lightW-1 && r < lightH-1 {
+				// away from the edges: no bounds checks needed
+				for j, d := range steps {
+					ni := idx + offs[j]
+					nl := lvl - d.air
+					if lightCost[ni] != 0 {
+						nl = lvl - d.solid
+					}
+					if nl > int(light[ni]) {
+						light[ni] = uint16(nl)
+						lightSrc[ni] = src
+						buckets[nl] = append(buckets[nl], int32(ni))
+					}
+				}
+				continue
+			}
 			for _, d := range steps {
 				nc, nr := c+d.dc, r+d.dr
 				if nc < 0 || nr < 0 || nc >= lightW || nr >= lightH {
@@ -306,14 +328,32 @@ var (
 )
 
 // Background pixel for an open-sky cell, in view cell coordinates
-func skyPixel(vx, vy, vw, vh int, ox, oy int, avgSurface float64) [3]int {
-	d := daylight()
-	sh := sunHeight()
+// Values the sky needs that only change once a frame
+var skyF struct {
+	d, sh, dusk                float64
+	top, low, cloudHi, cloudLo [3]int
+	sunX, sunY, moonX, moonY   float64
+}
+
+func prepareSky(vw, vh int) {
+	d, sh := daylight(), sunHeight()
+	skyF.d, skyF.sh = d, sh
+	skyF.dusk = math.Exp(-(sh / 0.2) * (sh / 0.2))
+	skyF.top, skyF.low = mix(skyTopNight, skyTopDay, d), mix(skyLowNight, skyLowDay, d)
+	skyF.cloudHi = mix([3]int{70, 74, 110}, [3]int{252, 252, 255}, d)
+	skyF.cloudLo = mix([3]int{30, 32, 60}, [3]int{150, 172, 208}, d)
+	skyF.sunX = float64(vw) * (0.5 + 0.42*math.Cos(2*math.Pi*(worldTime-0.25)+math.Pi))
+	skyF.sunY = float64(vh)*0.62 - sh*float64(vh)*0.48
+	skyF.moonX = float64(vw) - skyF.sunX
+	skyF.moonY = float64(vh)*0.62 + sh*float64(vh)*0.48
+}
+
+func skyPixel(vx, vy, vw, vh int, ox, oy int) [3]int {
+	d, low := skyF.d, skyF.low
 	t := math.Max(0, math.Min(1, float64(vy)/float64(vh)))
-	top, low := mix(skyTopNight, skyTopDay, d), mix(skyLowNight, skyLowDay, d)
-	c := mix(top, low, t)
-	if dusk := math.Exp(-(sh / 0.2) * (sh / 0.2)); dusk > 0.02 {
-		c = mix(c, duskGlow, dusk*t*0.7)
+	c := mix(skyF.top, low, t)
+	if skyF.dusk > 0.02 {
+		c = mix(c, duskGlow, skyF.dusk*t*0.7)
 	}
 	// stars
 	if d < 0.6 {
@@ -324,16 +364,12 @@ func skyPixel(vx, vy, vw, vh int, ox, oy int, avgSurface float64) [3]int {
 		}
 	}
 	// sun and moon
-	sunX := float64(vw) * (0.5 + 0.42*math.Cos(2*math.Pi*(worldTime-0.25)+math.Pi))
-	sunY := float64(vh)*0.62 - sh*float64(vh)*0.48
-	moonX := float64(vw) - sunX
-	moonY := float64(vh)*0.62 + sh*float64(vh)*0.48
-	if dx, dy := float64(vx)-sunX, float64(vy)-sunY; dx*dx+dy*dy < 36 {
+	if dx, dy := float64(vx)-skyF.sunX, float64(vy)-skyF.sunY; dx*dx+dy*dy < 36 {
 		c = [3]int{255, 236, 160}
 	} else if dx*dx+dy*dy < 64 {
 		c = mix(c, [3]int{255, 220, 140}, 0.4)
 	}
-	if dx, dy := float64(vx)-moonX, float64(vy)-moonY; dx*dx+dy*dy < 20 {
+	if dx, dy := float64(vx)-skyF.moonX, float64(vy)-skyF.moonY; dx*dx+dy*dy < 20 {
 		c = [3]int{214, 218, 236}
 		if (vx+vy)%5 == 0 {
 			c = [3]int{180, 184, 206}
@@ -341,26 +377,15 @@ func skyPixel(vx, vy, vw, vh int, ox, oy int, avgSurface float64) [3]int {
 	}
 	// big soft clouds, lit from above
 	if ca, cl := cloudAt(vx, vy, vw, vh); ca > 0 {
-		hi := mix([3]int{70, 74, 110}, [3]int{252, 252, 255}, d)
-		lo := mix([3]int{30, 32, 60}, [3]int{150, 172, 208}, d)
-		cloud := mix(lo, hi, cl)
-		if dusk := math.Exp(-(sh / 0.2) * (sh / 0.2)); dusk > 0.02 {
-			cloud = mix(cloud, [3]int{255, 170, 130}, dusk*cl*0.5)
+		cloud := mix(skyF.cloudLo, skyF.cloudHi, cl)
+		if skyF.dusk > 0.02 {
+			cloud = mix(cloud, [3]int{255, 170, 130}, skyF.dusk*cl*0.5)
 		}
 		c = mix(c, cloud, ca)
 	}
 	// two layers of distant hills, moving slower than the world
-	for _, layer := range []struct {
-		f    float64
-		amp  float64
-		col  [3]int
-		salt int
-	}{{0.2, 34, farHill, 51}, {0.45, 24, nearHill, 52}} {
-		hx := float64(vx) + float64(ox)*layer.f
-		horizon := float64(vh)*0.58 + (avgSurface-float64(oy)-float64(vh)*0.58)*layer.f
-		// rolling hills topped with bumpy treetops
-		hTop := horizon - (noise1(hx, 40, layer.salt)*0.5+0.5)*layer.amp - noise1(hx, 9, layer.salt+5)*4 -
-			math.Abs(noise1(hx, 3.5, layer.salt+9))*3
+	for li, layer := range hillLayers {
+		hTop := hillTop[li][vx]
 		if float64(vy) >= hTop {
 			// far things fade into the sky, and mist gathers lower down
 			mist := 0.3 + 0.35*smoothstep(0, 40, float64(vy)-hTop)
@@ -375,11 +400,38 @@ func skyPixel(vx, vy, vw, vh int, ox, oy int, avgSurface float64) [3]int {
 	return c
 }
 
+// Distant hills: two layers moving slower than the world. Their outline only depends
+// on the column, so it's worked out once per column each frame.
+var hillLayers = []struct {
+	f    float64
+	amp  float64
+	col  [3]int
+	salt int
+}{{0.2, 34, farHill, 51}, {0.45, 24, nearHill, 52}}
+
+var hillTop [2][]float64
+
+func updateHills(vw, vh, ox, oy int, avgSurface float64) {
+	for li, layer := range hillLayers {
+		if len(hillTop[li]) != vw {
+			hillTop[li] = make([]float64, vw)
+		}
+		horizon := float64(vh)*0.58 + (avgSurface-float64(oy)-float64(vh)*0.58)*layer.f
+		for vx := 0; vx < vw; vx++ {
+			hx := float64(vx) + float64(ox)*layer.f
+			// rolling hills topped with bumpy treetops
+			hillTop[li][vx] = horizon - (noise1(hx, 40, layer.salt)*0.5+0.5)*layer.amp - noise1(hx, 9, layer.salt+5)*4 -
+				math.Abs(noise1(hx, 3.5, layer.salt+9))*3
+		}
+	}
+}
+
 // Clouds: fractal noise drifting across the upper sky, shaded so their tops catch the
 // light and their undersides are blue-grey. Worked out every few frames (they move
 // slowly) into a buffer: coverage and light, 0..1.
 var (
 	cloudBuf          []float32
+	cloudN            []float64 // the raw cloud field
 	cloudW, cloudH    int
 	cloudAt0, cloudOX int
 )
@@ -394,11 +446,26 @@ func updateClouds(vw, vh, ox int) {
 		cloudW, cloudH = vw, vh
 		cloudAt0 = -100
 	}
-	if frame-cloudAt0 < 3 && abs(ox-cloudOX) < 2 {
+	if frame-cloudAt0 < 3*lightEvery()*lightEvery() && abs(ox-cloudOX) < 2 {
 		return
 	}
 	cloudAt0, cloudOX = frame, ox
 	drift := float64(ox)*0.12 + float64(frame)*0.015
+	if len(cloudN) != vw*vh {
+		cloudN = make([]float64, vw*vh)
+	}
+	// the cloud field once per cell...
+	for y := 0; y < vh; y++ {
+		band := 1 - smoothstep(0.3, 0.62, float64(y)/float64(vh))
+		for x := 0; x < vw; x++ {
+			if band <= 0 {
+				cloudN[y*vw+x] = 0
+				continue
+			}
+			cloudN[y*vw+x] = cloudField(float64(x)+drift, float64(y)*1.15)*band + 0.08*band
+		}
+	}
+	// ...then coverage and shading from it
 	for y := 0; y < vh; y++ {
 		t := float64(y) / float64(vh)
 		band := 1 - smoothstep(0.3, 0.62, t) // clouds stay in the upper sky
@@ -408,12 +475,15 @@ func updateClouds(vw, vh, ox int) {
 			if band <= 0 {
 				continue
 			}
-			fx, fy := float64(x)+drift, float64(y)*1.15
-			n := cloudField(fx, fy)*band + 0.08*band
+			n := cloudN[y*vw+x]
 			if n < 0.56 {
 				continue
 			}
-			up := cloudField(fx-2, fy-4)*band + 0.08*band // toward the light
+			// the field up and to the left, toward the light (looked up, not recomputed)
+			up := 0.0
+			if ux, uy := x-2, y-3; ux >= 0 && uy >= 0 {
+				up = cloudN[uy*vw+ux]
+			}
 			a := math.Min(1, (n-0.56)*5)
 			cloudBuf[k] = float32(a * a * (3 - 2*a) * 0.95)
 			cloudBuf[k+1] = float32(math.Max(0, math.Min(1, 0.6+(n-up)*6+(n-0.56)*1.5)))
@@ -452,7 +522,13 @@ func drawWorld(screen *ebiten.Image) {
 	}
 	ensureLightBuffers(vw, vh)
 	ox, oy := int(math.Floor(cam.x/CELL)), int(math.Floor(cam.y/CELL))
-	computeLight(ox, oy, vw, vh)
+	// the flood fill works in world cells, so on frames it's skipped the last one is
+	// still right (unless the loaded chunks just slid along)
+	if frame%lightEvery() == 0 || baseChunk != lightBase || lightW == 0 {
+		computeLight(ox, oy, vw, vh)
+		lightBase = baseChunk
+	}
+	checkPerformance()
 	pix := worldPix
 	surf := make([]int, vw)
 	avg := 0.0
@@ -462,6 +538,8 @@ func drawWorld(screen *ebiten.Image) {
 	}
 	avg /= float64(vw)
 	updateClouds(vw, vh, ox+baseChunk*CW)
+	updateHills(vw, vh, ox+baseChunk*CW, oy, avg)
+	prepareSky(vw, vh)
 	set := func(o int, c [3]int) {
 		pix[o], pix[o+1], pix[o+2], pix[o+3] = clamp8(c[0]), clamp8(c[1]), clamp8(c[2]), 255
 	}
@@ -494,7 +572,7 @@ func drawWorld(screen *ebiten.Image) {
 				case wl != 0:
 					bg = wallPixel(wl, wpt, wx, wy, sh)
 				case openSky:
-					bg = skyPixel(x, y, vw, vh, ox+baseChunk*CW, oy, avg)
+					bg = skyPixel(x, y, vw, vh, ox+baseChunk*CW, oy)
 					sky[y*vw+x] = t == EMPTY
 				default:
 					bg = [3]int{caveWall[0] + sh, caveWall[1] + sh, caveWall[2] + sh}
@@ -565,7 +643,7 @@ func drawWorld(screen *ebiten.Image) {
 					switch {
 					case !isSolid(up):
 						if sunLitAt(wx, wy-1) { // the sun catches the top edge
-							c = mix(c, [3]int{255, 244, 206}, 0.12+0.22*daylight())
+							c = mix(c, [3]int{255, 244, 206}, 0.12+0.22*skyF.d)
 						} else if t != GRASS {
 							c = mix(c, [3]int{255, 255, 255}, 0.1)
 						}
@@ -576,7 +654,7 @@ func drawWorld(screen *ebiten.Image) {
 					if s := sunSlope; math.Abs(s) > 0.5 {
 						sx := wx - int(math.Copysign(1, s))
 						if !isSolid(gridAt(sx, wy)) && sunLitAt(sx, wy) {
-							c = mix(c, [3]int{255, 222, 170}, math.Min(0.3, (math.Abs(s)-0.5)*0.2)*daylight())
+							c = mix(c, [3]int{255, 222, 170}, math.Min(0.3, (math.Abs(s)-0.5)*0.2)*skyF.d)
 						}
 					}
 					if !isSolid(gridAt(wx, wy+1)) {

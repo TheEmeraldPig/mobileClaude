@@ -148,10 +148,60 @@ func ensureLightBuffers(vw, vh int) {
 	clear(emitPix)
 }
 
+// The colour of the light map for each kind of light at each level, worked out ahead
+// instead of for every cell. Sun and sky change with the time of day (redone each
+// frame); the rest never change.
+var (
+	lightRGB, hazeRGB [nSrc][lightFine + 1][3]float32
+	lightRGBReady     bool
+)
+
+func lightColour(src uint8, lvl int, sky [3]float64) (l, h [3]float32) {
+	f := lightCurve[lvl]
+	tint := lightTints[src]
+	switch {
+	case src == srcSun:
+		// direct sun is warm, cooling to blue as it fades
+		tint = mixF(shadeCool, sunWarm(sky), math.Pow(f, 0.7))
+	case src == srcSky:
+		// shade under open sky is cooler, lit by the blue sky rather than the sun
+		tint = mixF(shadeCool, sky, math.Pow(f, 0.7)*0.75)
+	case src != srcNone:
+		// firelight reddens toward the edge of its glow
+		tint = mixF(warmEdge(tint), tint, math.Pow(f, 0.5))
+	}
+	for c := 0; c < 3; c++ {
+		// never fully black: darkness is a deep violet-blue
+		l[c] = float32(math.Max(f*tint[c], ambientDark[c]))
+	}
+	// haze: only from point lights, and stronger close to them
+	if src != srcSky && src != srcSun && src != srcNone {
+		hh := float32(math.Max(0, f-0.5) / 0.5)
+		hh *= hh
+		for c := 0; c < 3; c++ {
+			h[c] = hh * float32(tint[c])
+		}
+	}
+	return
+}
+
+func prepareLightColours() {
+	sky := skyTint()
+	for src := uint8(0); src < nSrc; src++ {
+		if lightRGBReady && src != srcSun && src != srcSky {
+			continue
+		}
+		for lvl := 0; lvl <= lightFine; lvl++ {
+			lightRGB[src][lvl], hazeRGB[src][lvl] = lightColour(src, lvl, sky)
+		}
+	}
+	lightRGBReady = true
+}
+
 // Fill the light map for the view. skyCell reports cells that show the open sky
 // (they are never darkened: the sky already has its own day and night colours).
 func buildLightMap(ox, oy, vw, vh int, skyCell func(x, y int) bool) {
-	sky := skyTint()
+	prepareLightColours()
 	for y := 0; y < vh; y++ {
 		for x := 0; x < vw; x++ {
 			k := (y*vw + x) * 3
@@ -165,67 +215,73 @@ func buildLightMap(ox, oy, vw, vh int, skyCell func(x, y int) bool) {
 			if lx >= 0 && ly >= 0 && lx < lightW && ly < lightH {
 				lvl, src = int(light[ly*lightW+lx]), lightSrc[ly*lightW+lx]
 			}
-			f := lightCurve[lvl]
-			tint := lightTints[src]
-			switch {
-			case src == srcSun:
-				// direct sun is warm, cooling to blue as it fades
-				tint = mixF(shadeCool, sunWarm(sky), math.Pow(f, 0.7))
-			case src == srcSky:
-				// shade under open sky is cooler, lit by the blue sky rather than the sun
-				tint = mixF(shadeCool, sky, math.Pow(f, 0.7)*0.75)
-			case src != srcNone:
-				// firelight reddens toward the edge of its glow
-				tint = mixF(warmEdge(tint), tint, math.Pow(f, 0.5))
-			}
-			for c := 0; c < 3; c++ {
-				// never fully black: darkness is a deep violet-blue
-				lightBuf[k+c] = float32(math.Max(f*tint[c], ambientDark[c]))
-			}
-			// haze: only from point lights, and stronger close to them
-			if src != srcSky && src != srcSun && src != srcNone {
-				h := float32(math.Max(0, f-0.5) / 0.5)
-				h *= h
-				for c := 0; c < 3; c++ {
-					hazeBuf[k+c] = h * float32(tint[c])
-				}
-			} else {
-				hazeBuf[k], hazeBuf[k+1], hazeBuf[k+2] = 0, 0, 0
-			}
+			lc, hc := &lightRGB[src][lvl], &hazeRGB[src][lvl]
+			lightBuf[k], lightBuf[k+1], lightBuf[k+2] = lc[0], lc[1], lc[2]
+			hazeBuf[k], hazeBuf[k+1], hazeBuf[k+2] = hc[0], hc[1], hc[2]
 		}
 	}
-	blur3(lightBuf, vw, vh, 3)
-	blur3(hazeBuf, vw, vh, 5) // a wide, soft bloom
+	blur3(lightBuf, vw, vh, 4-lightEvery())
 	for i, j := 0, 0; i < vw*vh*3; i, j = i+3, j+4 {
 		lightPix[j], lightPix[j+1], lightPix[j+2], lightPix[j+3] = toByte(lightBuf[i]), toByte(lightBuf[i+1]), toByte(lightBuf[i+2]), 255
-		hazePix[j], hazePix[j+1], hazePix[j+2], hazePix[j+3] = toByte(hazeBuf[i]*0.24), toByte(hazeBuf[i+1]*0.24), toByte(hazeBuf[i+2]*0.24), 255
 	}
 	lightImg.WritePixels(lightPix)
+	if simpleFX() {
+		return // no haze in the lighter mode
+	}
+	blur3(hazeBuf, vw, vh, 3) // a wide, soft bloom (drawn scaled up with smoothing)
+	for i, j := 0, 0; i < vw*vh*3; i, j = i+3, j+4 {
+		hazePix[j], hazePix[j+1], hazePix[j+2], hazePix[j+3] = toByte(hazeBuf[i]*0.24), toByte(hazeBuf[i+1]*0.24), toByte(hazeBuf[i+2]*0.24), 255
+	}
 	hazeImg.WritePixels(hazePix)
 }
 
-// A small separable [1 2 1] blur on interleaved RGB, repeated
+// A separable binomial blur on interleaved RGB: the same as running a [1 2 1] blur
+// `passes` times (1-3), done as one wider pass across and one down
+var binom = [4][]float32{
+	nil,
+	{1. / 4, 2. / 4, 1. / 4},
+	{1. / 16, 4. / 16, 6. / 16, 4. / 16, 1. / 16},
+	{1. / 64, 6. / 64, 15. / 64, 20. / 64, 15. / 64, 6. / 64, 1. / 64},
+}
+
 func blur3(b []float32, w, h, passes int) {
+	k := binom[min(passes, 3)]
+	r := len(k) / 2
 	t := tmpBuf
 	row := w * 3
-	for p := 0; p < passes; p++ {
-		for y := 0; y < h; y++ {
-			r := b[y*row : y*row+row]
-			o := t[y*row : y*row+row]
-			o[0], o[1], o[2] = (3*r[0]+r[3])*0.25, (3*r[1]+r[4])*0.25, (3*r[2]+r[5])*0.25
-			for i := 3; i < row-3; i++ {
-				o[i] = (r[i-3] + 2*r[i] + r[i+3]) * 0.25
+	// across: b -> t
+	for y := 0; y < h; y++ {
+		src := b[y*row : (y+1)*row]
+		dst := t[y*row : (y+1)*row]
+		for x := 0; x < w; x++ {
+			var s0, s1, s2 float32
+			if x >= r && x < w-r {
+				o := (x - r) * 3
+				for i, kv := range k {
+					s0 += src[o+i*3] * kv
+					s1 += src[o+i*3+1] * kv
+					s2 += src[o+i*3+2] * kv
+				}
+			} else {
+				for i, kv := range k {
+					xx := min(max(x+i-r, 0), w-1) * 3
+					s0 += src[xx] * kv
+					s1 += src[xx+1] * kv
+					s2 += src[xx+2] * kv
+				}
 			}
-			n := row - 3
-			o[n], o[n+1], o[n+2] = (r[n-3]+3*r[n])*0.25, (r[n-2]+3*r[n+1])*0.25, (r[n-1]+3*r[n+2])*0.25
+			dst[x*3], dst[x*3+1], dst[x*3+2] = s0, s1, s2
 		}
-		copy(b[:row], t[:row])
-		copy(b[(h-1)*row:], t[(h-1)*row:])
-		for y := 1; y < h-1; y++ {
-			u, c, d := t[(y-1)*row:y*row], t[y*row:(y+1)*row], t[(y+1)*row:(y+2)*row]
-			o := b[y*row : (y+1)*row]
-			for i := range o {
-				o[i] = (u[i] + 2*c[i] + d[i]) * 0.25
+	}
+	// down: t -> b, a whole row at a time
+	for y := 0; y < h; y++ {
+		dst := b[y*row : (y+1)*row]
+		clear(dst)
+		for i, kv := range k {
+			yy := min(max(y+i-r, 0), h-1)
+			src := t[yy*row : (yy+1)*row]
+			for j := range dst {
+				dst[j] += src[j] * kv
 			}
 		}
 	}
@@ -274,7 +330,7 @@ func composeLight(screen *ebiten.Image, geo ebiten.GeoM) {
 	op = &ebiten.DrawImageOptions{}
 	op.GeoM = geo
 	screen.DrawImage(emitImg, op)
-	if prefs.Simple {
+	if simpleFX() {
 		return
 	}
 	// coloured haze around lights
@@ -287,7 +343,7 @@ func composeLight(screen *ebiten.Image, geo ebiten.GeoM) {
 var vignetteImg *ebiten.Image
 
 func drawVignette(screen *ebiten.Image) {
-	if prefs.Simple {
+	if simpleFX() {
 		return
 	}
 	const n = 64
@@ -309,4 +365,38 @@ func drawVignette(screen *ebiten.Image) {
 	op.GeoM.Scale(float64(b.Dx())/n, float64(b.Dy())/n)
 	op.ColorScale.ScaleWithColor(color.NRGBA{8, 6, 18, 255})
 	screen.DrawImage(vignetteImg, op)
+}
+
+// ---- Performance ----
+// On slow devices the game switches to a lighter mode by itself: the light flood fill
+// runs every other frame (nobody can see the difference), clouds update less often,
+// and the haze and vignette are left out. The Graphics setting can force either way.
+
+var lowSpec bool // the automatic light mode is on
+
+func simpleFX() bool { return prefs.Simple || (lowSpec && !prefs.Fancy) }
+
+func lightEvery() int {
+	if lowSpec && !prefs.Fancy || prefs.Simple {
+		return 2
+	}
+	return 1
+}
+
+var slowChecks int
+
+// Called once a frame: after a few seconds of play, a frame rate well under 60
+// turns the lighter mode on for the rest of the session
+func checkPerformance() {
+	if lowSpec || prefs.Fancy || cur != scPlaying || frame < 120 || frame%30 != 0 {
+		return
+	}
+	if ebiten.ActualFPS() < 42 {
+		slowChecks++
+	} else {
+		slowChecks = 0
+	}
+	if slowChecks >= 2 {
+		lowSpec = true
+	}
 }

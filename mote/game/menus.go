@@ -124,7 +124,7 @@ var heartRows = []string{".XX.XX.", "XXXXXXX", "XXXXXXX", ".XXXXX.", "..XXX..", 
 
 func drawHearts(dst *ebiten.Image, x, y float64) {
 	const px = 3.0
-	for h := 0; h < (player.maxHP+1)/2; h++ {
+	for h := 0; h < min(15, (player.maxHP+1)/2); h++ {
 		hx := x + float64(h)*(8*px)
 		fullness := player.hp - h*2 // 2 full, 1 half, <=0 empty
 		for r, row := range heartRows {
@@ -1007,9 +1007,15 @@ func settingsMenu() {
 			prefs.UISize = c
 			savePrefs()
 		}
-		Label("LIGHTING", x+380, y)
-		if c := seg(x+380, y+14, []string{"Fancy", "Simple"}, b2i(prefs.Simple)); c >= 0 {
-			prefs.Simple = c == 1
+		Label("GRAPHICS", x+380, y)
+		gq := 0 // Auto: lighter when the game runs slowly
+		if prefs.Fancy {
+			gq = 1
+		} else if prefs.Simple {
+			gq = 2
+		}
+		if c := seg(x+380, y+14, []string{"Auto", "Fancy", "Fast"}, gq); c >= 0 {
+			prefs.Fancy, prefs.Simple = c == 1, c == 2
 			savePrefs()
 		}
 		y += 70
