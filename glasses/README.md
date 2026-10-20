@@ -68,7 +68,7 @@ To try it on a computer without Pages: `npx serve glasses` (or `python3 -m http.
 ### Pocket hub (Raspberry Pi)
 
 1. Flash **Raspberry Pi OS (64-bit)** with Raspberry Pi Imager. In its settings, add your phone's hotspot as the Wi-Fi network.
-2. On the Pi: `git clone https://github.com/TheEmeraldPig/mobileClaude ~/mobileClaude && bash ~/mobileClaude/glasses/pi/setup.sh`
+2. On the Pi: `git clone -b ccr-ce1e995c-dmjvgi https://github.com/TheEmeraldPig/mobileClaude ~/mobileClaude && bash ~/mobileClaude/glasses/pi/setup.sh`
 3. Run `claude` once and log in with your Claude account.
 4. Pair your earbuds (Bluetooth icon on the desktop, or `bluetoothctl`).
 5. `python3 lens.py --selftest --deep`, then `systemctl --user start lens`.
@@ -89,7 +89,7 @@ An old Android phone (tested design: Galaxy A26) makes a cheaper and smaller hub
 
 **Setup:**
 1. Install **F-Droid** (f-droid.org), then from it **Termux**, **Termux:API** and **Termux:Boot**. Open each once. (The Termux on the Play Store is outdated; use F-Droid's.)
-2. In Termux: `pkg install git && git clone https://github.com/TheEmeraldPig/mobileClaude ~/mobileClaude && bash ~/mobileClaude/glasses/pi/android/setup.sh`
+2. In Termux: `pkg install git && git clone -b ccr-ce1e995c-dmjvgi https://github.com/TheEmeraldPig/mobileClaude ~/mobileClaude && bash ~/mobileClaude/glasses/pi/android/setup.sh`
 3. Log Claude Code into your account: `claude-proot`, open the link, sign in, paste the code back, then `/exit`. (Claude Code has no Android build, so it runs inside a small Ubuntu that setup installs; `claude-proot` is the shortcut into it.)
 4. In `~/mobileClaude/glasses/pi/config.toml`, set `token`.
 5. Android settings:

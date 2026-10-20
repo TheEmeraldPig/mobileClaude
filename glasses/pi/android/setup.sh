@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Sets up an Android phone (in Termux) as the Lens hub.
-#   pkg install git && git clone https://github.com/TheEmeraldPig/mobileClaude ~/mobileClaude
+#   pkg install git && git clone -b ccr-ce1e995c-dmjvgi https://github.com/TheEmeraldPig/mobileClaude ~/mobileClaude
 #   bash ~/mobileClaude/glasses/pi/android/setup.sh
 # Safe to run again; it skips what's already done.
 set -euo pipefail
