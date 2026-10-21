@@ -1,0 +1,38 @@
+name: Build Magicite Mod
+
+# Builds MagiciteMod.dll (a BepInEx plugin for the game Magicite) on every push that
+# changes it, then publishes it as a GitHub release named magicite-mod-<number>.
+# The release is not marked latest, so Mote's updater keeps finding Mote's releases.
+on:
+  push:
+    paths:
+      - 'magicite/**'
+      - '.github/workflows/magicite.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: magicite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Download libraries
+        run: ./fetch-libs.sh
+      - name: Build
+        run: dotnet build -c Release
+      - name: Publish release magicite-mod-${{ github.run_number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "magicite-mod-${{ github.run_number }}" bin/Release/net35/MagiciteMod.dll \
+            --repo "${{ github.repository }}" --target "${{ github.sha }}" --latest=false \
+            --title "Magicite Mod build ${{ github.run_number }}" \
+            --notes "Put MagiciteMod.dll in Magicite/BepInEx/plugins/ (install BepInEx 5 first), start the game and press F1. See magicite/README.md."

@@ -19,3 +19,10 @@
 - Building tools (shapes, walls, paint, rotate/flip, holograms) are in `build.go`; keep the build bar usable on phones.
 - Every push to `mote/` builds and releases `Mote.exe`, `Mote-steam.exe` and `Mote.apk` through `.github/workflows/mote.yml`.
 - Check layouts by running under Xvfb with the test hooks in `game/testhooks.go` (`MOTE_SCRIPT`, `MOTE_TOUCH=1`, `MOTE_NOAUDIO=1`).
+
+## magicite/ (a mod for the game Magicite)
+
+- A BepInEx 5 plugin (C#, .NET 3.5) for SmashGames' Magicite, not part of Mote. See `magicite/README.md`.
+- Build with `./fetch-libs.sh` then `dotnet build -c Release`; the BepInEx and UnityEngine DLLs are downloaded, not committed.
+- It finds game objects by reflection because the game's code isn't in this repo; stick to Unity APIs that exist in old Unity 4/5.
+- Every push to `magicite/` releases `MagiciteMod.dll` through `.github/workflows/magicite.yml` as a non-latest release, so Mote's updater (which reads the latest release) isn't affected.
