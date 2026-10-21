@@ -1,0 +1,16 @@
+# Render blueprint for the Mote multiplayer relay (see mote/relay/README.md).
+# On render.com: New > Blueprint, pick this repository, and apply.
+services:
+  - type: web
+    name: mote-relay
+    runtime: docker
+    plan: free
+    dockerfilePath: ./mote/relay/Dockerfile
+    dockerContext: ./mote
+    healthCheckPath: /
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - mote/relay/**
+        - mote/go.mod
+        - mote/go.sum

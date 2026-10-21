@@ -714,7 +714,16 @@ func drawWorld(screen *ebiten.Image) {
 	drawStationHologram(blend, ox, oy)
 	drawDoorHologram(blend, ox, oy)
 	drawBuildHologram(blend, ox, oy)
-	drawPlayer(put, ox, oy)
+	drawPeers(put, ox, oy)
+	if netRole != netOff && netMyID > 0 { // guests are drawn in their own colour
+		t := tintFor(netMyID)
+		sb, sl := pcol['B'], pcol['L']
+		pcol['B'], pcol['L'] = t[0], t[1]
+		drawPlayer(put, ox, oy)
+		pcol['B'], pcol['L'] = sb, sl
+	} else {
+		drawPlayer(put, ox, oy)
+	}
 	drawHeld(put, ox, oy)
 	for _, q := range parts {
 		put(int(math.Floor(q.x))-ox, int(math.Floor(q.y))-oy, q.c, 0)

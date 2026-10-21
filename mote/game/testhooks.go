@@ -23,6 +23,7 @@ type scriptStep struct {
 var (
 	script   []scriptStep
 	shotPath string
+	codeFile string // test hook: where to write the hosting code
 )
 
 func init() {
@@ -164,6 +165,65 @@ func runScript() {
 			}
 		case "worlds":
 			openScreen(scWorlds)
+		case "hitall": // hit every creature within 80 cells (ours and other players')
+			hitCreatures(int((player.x+player.w/2)/CELL), int((player.y+player.h/2)/CELL), 400, 99)
+		case "leave":
+			leaveMultiplayer()
+		case "topeer": // stand next to the first other player
+			for _, p := range peers {
+				teleportTo(int(p.st.X/CELL) + 6)
+				player.x = p.st.X + 6*CELL - float64(baseChunk*CW*CELL)
+				player.y = p.st.Y - 4*CELL
+				break
+			}
+		case "mp": // the Multiplayer screen
+			openMultiplayer()
+		case "code": // code=ABCDE typed into the Multiplayer screen
+			codeEntry = arg
+		case "host": // open this world to friends
+			startHosting()
+		case "codefile": // codefile=PATH: write the hosting code there once known
+			codeFile = arg
+		case "joinfile": // joinfile=PATH: join with the code written in that file
+			if b, err := os.ReadFile(arg); err == nil {
+				joinWorld(strings.TrimSpace(string(b)))
+			}
+		case "pvp":
+			world.PvP = arg == "1"
+		case "net": // print the multiplayer state
+			fmt.Printf("frame %d net role=%d me=%d code=%q status=%q peers=%d remoteEnts=%d ents=%d pos=%.0f,%.0f\n", frame, netRole, netMyID, netCode, netStatus, len(peers), len(allEnts())-len(ents), len(ents), player.x/CELL+float64(baseChunk*CW), player.y/CELL)
+			for id, p := range peers {
+				fmt.Printf("  peer %d %q at %.0f,%.0f hp %d held %q\n", id, p.st.Name, p.st.X/CELL, p.st.Y/CELL, p.st.HP, p.st.Held)
+			}
+			for _, e := range allEnts() {
+				fmt.Printf("  ent kind=%d nid=%d remote=%v owner=%d hp=%d item=%q at %.0f,%.0f\n", e.kind, e.nid, e.remote, e.owner, e.hp, e.item, e.x/CELL+float64(baseChunk*CW), e.y/CELL)
+			}
+		case "cell": // cell=WX:Y prints the block at a world cell
+			a, b, _ := strings.Cut(arg, ":")
+			wx, _ := strconv.Atoi(a)
+			y, _ := strconv.Atoi(b)
+			lx := wx - baseChunk*CW
+			v := -1
+			if lx >= 0 && lx < W && y >= 0 && y < H {
+				v = int(grid[y*W+lx])
+			}
+			fmt.Printf("frame %d cell %d,%d = %d\n", frame, wx, y, v)
+		case "cellrel": // cellrel=DX:DY prints the block relative to the mote's centre
+			a, b, _ := strings.Cut(arg, ":")
+			dx, _ := strconv.Atoi(a)
+			dy, _ := strconv.Atoi(b)
+			cx, cy := int((player.x+player.w/2)/CELL)+dx, int((player.y+player.h/2)/CELL)+dy
+			fmt.Printf("frame %d cellrel %d,%d (world %d,%d) = %d\n", frame, dx, dy, cx+baseChunk*CW, cy, grid[cy*W+cx])
+		case "setcell": // setcell=DX:DY:T sets a cell relative to the mote's centre (as if the player did it)
+			p := strings.Split(arg, ":")
+			if len(p) == 3 {
+				dx, _ := strconv.Atoi(p[0])
+				dy, _ := strconv.Atoi(p[1])
+				t, _ := strconv.Atoi(p[2])
+				cx, cy := int((player.x+player.w/2)/CELL)+dx, int((player.y+player.h/2)/CELL)+dy
+				grid[cy*W+cx] = uint8(t)
+				fmt.Printf("frame %d set %d,%d = %d\n", frame, cx+baseChunk*CW, cy, t)
+			}
 		case "openlast": // open the most recently played world
 			loadWorldList()
 			if len(worldList) > 0 {
@@ -179,6 +239,9 @@ func runScript() {
 		case "station": // station=KIND placed where the mote stands
 			lx := int((player.x+player.w)/CELL) + 4
 			ty := int((player.y+player.h)/CELL) - len(stations[arg].sprite)
+			if x, y, ok := settleStation(arg, lx, ty, false); ok {
+				lx, ty = x, y
+			}
 			objs = append(objs, &Obj{kind: arg, wx: lx + baseChunk*CW, y: ty})
 		case "shape": // shape=N
 			buildShape, _ = strconv.Atoi(arg)

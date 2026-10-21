@@ -29,6 +29,7 @@ const (
 	scChest
 	scShop
 	scBook
+	scMultiplayer
 )
 
 var (
@@ -51,7 +52,13 @@ var (
 	lastTapFrame int
 )
 
-func paused() bool { return cur != scPlaying }
+// In multiplayer the world keeps going while you're in a menu (others are still playing)
+func paused() bool {
+	if netRole != netOff && cur != scDead && cur != scMain {
+		return false
+	}
+	return cur != scPlaying
+}
 
 func openScreen(s screen) {
 	if s == scInv {
@@ -157,6 +164,12 @@ func hud() {
 	}
 	if world.Mode != modeNormal {
 		dtxt += "  -  " + modeNames[world.Mode]
+	}
+	switch {
+	case netRole == netHost && netCode != "":
+		dtxt += fmt.Sprintf("  -  Code %s (%d/%d)", netCode, len(peers)+1, maxPlayers)
+	case netRole == netGuest:
+		dtxt += fmt.Sprintf("  -  %d players", len(peers)+1)
 	}
 	ShadowText(dtxt, 14, 42, 12, colMuted)
 	// the mouse over a station shows its name
@@ -373,7 +386,7 @@ func mainMenu() {
 		bh = 40
 	}
 	last := lastWorld()
-	n := 3
+	n := 4
 	if last != nil {
 		n++
 	}
@@ -407,6 +420,10 @@ func mainMenu() {
 		startNewWorldScreen()
 	}
 	y += bh + 18
+	if Button(Rect{cx, y, colW, bh}, "Multiplayer", styleSlate, true, icoWorld) {
+		openMultiplayer()
+	}
+	y += bh + 18
 	if Button(Rect{cx, y, colW, bh}, "Settings", styleSlate, true, icoGear) {
 		settingsFrom = scMain
 		openScreen(scSettings)
@@ -438,9 +455,14 @@ var (
 
 func worldsMenu() {
 	r := sheet(700, 430)
-	back, cl := head(r, "WORLDS", true)
+	title := "WORLDS"
+	if hostAfterOpen {
+		title = "PICK A WORLD TO OPEN TO FRIENDS"
+	}
+	back, cl := head(r, title, true)
 	if back || cl {
 		confirmDelete = ""
+		hostAfterOpen = false
 		openScreen(scMain)
 		return
 	}
@@ -680,7 +702,7 @@ func seedMenu() {
 // ---- Pause ----
 
 func pauseMenu() {
-	r := sheet(780, 380)
+	r := sheet(780, 420)
 	if _, cl := head(r, "PAUSED", false); cl {
 		play()
 		return
@@ -705,8 +727,34 @@ func pauseMenu() {
 		return
 	}
 	y += bh + gap
-	if Button(Rect{x, y, lw, bh}, "Save and quit", styleSlate, true, icoHome) {
+	switch netRole {
+	case netOff:
+		if Button(Rect{x, y, lw, bh}, "Open to friends", styleViolet, world.ID != "", icoWorld) {
+			ensureIdentity()
+			startHosting()
+		}
+	case netHost:
+		if Button(Rect{x, y, lw, bh}, "Close to friends", styleSlate, true, icoX) {
+			netClose()
+			toast("Your world is closed to friends")
+		}
+	}
+	if netRole != netGuest {
+		y += bh + gap
+	}
+	quit := "Save and quit"
+	if netRole == netGuest {
+		quit = "Leave world"
+	}
+	if Button(Rect{x, y, lw, bh}, quit, styleSlate, true, icoHome) {
+		if netRole == netGuest {
+			leaveMultiplayer()
+			return
+		}
 		saveGame()
+		if netRole == netHost {
+			netClose()
+		}
 		openScreen(scMain)
 		return
 	}
@@ -731,8 +779,12 @@ func pauseMenu() {
 	}
 	Text(fmt.Sprintf("%s  -  %02d:%02d", day, int(worldTime*24), int(math.Mod(worldTime*24*60, 60))), x, y+6, 13, colMuted, text.AlignStart)
 
-	// controls for this device
+	// controls for this device (or who's playing, in multiplayer)
 	kr := Rect{x + lw + 22, r.Y + 66, r.W - lw - 58, r.H - 88}
+	if netRole != netOff {
+		pauseMultiplayer(kr)
+		return
+	}
 	Inset(kr, colPanelLo)
 	var rows [][2]string
 	b := prefs.Binds

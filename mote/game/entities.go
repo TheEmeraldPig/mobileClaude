@@ -57,6 +57,11 @@ type Entity struct {
 	aware       int     // frames left chasing after losing track of the mote
 	stuck       int     // frames spent barely moving while trying to
 	mood        float64 // per-creature random offset so they don't all move alike
+	// multiplayer
+	nid    int     // id shared with other players
+	owner  int     // the player whose game runs it (for remote ones)
+	remote bool    // someone else's, shown here
+	wx     float64 // remote ones: x in world px
 }
 
 var ents []*Entity
@@ -245,8 +250,9 @@ func updateEntities() {
 		}
 	}
 	pcx, pcy := player.x+player.w/2, player.y+player.h/2
+	n0 := len(ents) // loot dropped by creatures dying below is added after this
 	out := ents[:0]
-	for _, e := range ents {
+	for _, e := range ents[:n0] {
 		e.t++
 		if e.hurt > 0 {
 			e.hurt--
@@ -282,9 +288,12 @@ func updateEntities() {
 				}
 			}
 		}
-		// creatures hurt the mote on contact
+		// creatures hurt the mote on contact (and other players' motes)
 		if e.kind != entItem && e.hp > 0 && overlap(e) {
 			hurtPlayer(kinds[e.kind].dmg, sign(dx))
+		}
+		if e.kind != entItem && e.hp > 0 && len(peers) > 0 {
+			hurtPeersOnContact(e)
 		}
 		if e.hp <= 0 {
 			killEntity(e)
@@ -297,7 +306,7 @@ func updateEntities() {
 		}
 		out = append(out, e)
 	}
-	ents = out
+	ents = append(out, ents[n0:]...) // keep the loot that was dropped
 }
 
 // Creature behaviour: follow the path to the mote when they've noticed it, each in its own way
@@ -492,8 +501,16 @@ func killEntity(e *Entity) {
 // Damage creatures within r cells of a world cell; returns whether anything was hit
 func hitCreatures(cx, cy, r, dmg int) bool {
 	hit := false
-	for _, e := range ents {
+	for _, e := range allEnts() {
 		if e.kind == entItem || e.hurt > 0 {
+			continue
+		}
+		if e.remote {
+			ex, ey := (e.x+e.w/2)/CELL, (e.y+e.h/2)/CELL
+			if math.Hypot(ex-float64(cx), ey-float64(cy)) <= float64(r)+3 {
+				hitRemote(e, dmg, sign(ex-(player.x+player.w/2)/CELL))
+				hit = true
+			}
 			continue
 		}
 		ex, ey := (e.x+e.w/2)/CELL, (e.y+e.h/2)/CELL
@@ -518,7 +535,8 @@ func hitAlong(x0, y0, x1, y1, r float64, dmg int) bool {
 	hit := false
 	sx, sy := x1-x0, y1-y0
 	l2 := sx*sx + sy*sy
-	for _, e := range ents {
+	hitPeersAlong(x0, y0, x1, y1, r, dmg)
+	for _, e := range allEnts() {
 		if e.kind == entItem || e.hurt > 0 {
 			continue
 		}
@@ -528,6 +546,11 @@ func hitAlong(x0, y0, x1, y1, r float64, dmg int) bool {
 			t = math.Max(0, math.Min(1, ((ex-x0)*sx+(ey-y0)*sy)/l2))
 		}
 		if math.Hypot(ex-(x0+sx*t), ey-(y0+sy*t)) <= r+math.Max(e.w, e.h)/CELL/2 {
+			if e.remote {
+				hitRemote(e, dmg, sign(ex-x0))
+				hit = true
+				continue
+			}
 			e.hp -= dmg
 			e.hurt = 12
 			popDamage(dmg, e.x+e.w/2, e.y, false)
@@ -643,7 +666,7 @@ var wardenSprite = []string{
 }
 
 func drawEntities(lit, put func(x, y int, c [3]int, s int), ox, oy int) {
-	for _, e := range ents {
+	for _, e := range allEnts() {
 		bx, by := int(math.Round(e.x/CELL))-ox, int(math.Round(e.y/CELL))-oy
 		switch e.kind {
 		case entItem:

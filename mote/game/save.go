@@ -26,6 +26,9 @@ type Prefs struct {
 	Tips      bool              `json:"tips"`
 	Simple    bool              `json:"simpleLight"`  // always the lighter graphics mode
 	Fancy     bool              `json:"fancyLight"`   // never switch to it automatically
+	Name      string            `json:"name"`         // your name in multiplayer
+	PlayerID  string            `json:"playerID"`     // tells your guest characters apart in friends' worlds
+	Relay     string            `json:"relay"`        // multiplayer server, if not the built-in one
 	Used      map[string]bool   `json:"usedStations"` // stations used once: their "how to use" hint stops showing
 }
 
@@ -76,32 +79,33 @@ func savePrefs() {
 // ---- Save game ----
 
 type SaveState struct {
-	V         int              `json:"v"`
-	Seed      string           `json:"seed"`
-	BaseChunk int              `json:"baseChunk"`
-	Chunks    map[int][]uint16 `json:"chunks"`
-	Started   bool             `json:"started"`
-	PlayerWX  float64          `json:"playerWX"`
-	PlayerY   float64          `json:"playerY"`
-	Energy    float64          `json:"energy"`
-	Face      int              `json:"face"`
-	Inv       []*Stack         `json:"inv"`
-	Selected  int              `json:"selected"`
-	Time      float64          `json:"time"`
-	HP        int              `json:"hp"`
-	SpawnWX   int              `json:"spawnWX"`
-	SpawnY    int              `json:"spawnY"`
-	Guide     int              `json:"guide"`
-	Drops     []SavedDrop      `json:"drops"`
-	MaxHP     int              `json:"maxHP"`
-	World     WorldInfo        `json:"world"`
-	BossDown  bool             `json:"bossDown"`
-	Objs      []SavedObj       `json:"objs"`
-	Walls     map[int][]uint16 `json:"walls,omitempty"`
-	Paint     map[int][]uint16 `json:"paint,omitempty"`
-	WPaint    map[int][]uint16 `json:"wpaint,omitempty"`
-	Height    int              `json:"height,omitempty"` // world height the chunks were saved at (0 = the old 600)
-	Run       struct {         // older saves kept the boss here
+	V         int                  `json:"v"`
+	Seed      string               `json:"seed"`
+	BaseChunk int                  `json:"baseChunk"`
+	Chunks    map[int][]uint16     `json:"chunks"`
+	Started   bool                 `json:"started"`
+	PlayerWX  float64              `json:"playerWX"`
+	PlayerY   float64              `json:"playerY"`
+	Energy    float64              `json:"energy"`
+	Face      int                  `json:"face"`
+	Inv       []*Stack             `json:"inv"`
+	Selected  int                  `json:"selected"`
+	Time      float64              `json:"time"`
+	HP        int                  `json:"hp"`
+	SpawnWX   int                  `json:"spawnWX"`
+	SpawnY    int                  `json:"spawnY"`
+	Guide     int                  `json:"guide"`
+	Drops     []SavedDrop          `json:"drops"`
+	MaxHP     int                  `json:"maxHP"`
+	World     WorldInfo            `json:"world"`
+	BossDown  bool                 `json:"bossDown"`
+	Objs      []SavedObj           `json:"objs"`
+	Walls     map[int][]uint16     `json:"walls,omitempty"`
+	Paint     map[int][]uint16     `json:"paint,omitempty"`
+	WPaint    map[int][]uint16     `json:"wpaint,omitempty"`
+	Height    int                  `json:"height,omitempty"` // world height the chunks were saved at (0 = the old 600)
+	Guests    map[string]GuestChar `json:"guests,omitempty"` // friends' characters in this world, by player ID
+	Run       struct {             // older saves kept the boss here
 		BossDown bool `json:"bossDown"`
 	} `json:"run"`
 }
@@ -136,7 +140,7 @@ func serializeState() SaveState {
 		PlayerWX: player.x + float64(baseChunk*CW*CELL), PlayerY: player.y, Energy: player.energy, Face: player.face,
 		Inv: append([]*Stack(nil), inv...), Selected: selected, Time: worldTime, HP: player.hp, SpawnWX: spawnWX, SpawnY: spawnY, Guide: guideStepAt, Drops: drops,
 		MaxHP: player.maxHP, World: world, BossDown: bossDown, Objs: saveObjs(),
-		Walls: savedWalls, Paint: savedPaint, WPaint: savedWPaint, Height: H}
+		Walls: savedWalls, Paint: savedPaint, WPaint: savedWPaint, Height: H, Guests: guests}
 }
 
 func restoreState(st *SaveState) bool {
@@ -165,6 +169,10 @@ func restoreState(st *SaveState) bool {
 	}
 	baseChunk = st.BaseChunk
 	ents = ents[:0]
+	guests = map[string]GuestChar{}
+	for k, v := range st.Guests {
+		guests[k] = v
+	}
 	for i := 0; i < NCH; i++ {
 		loadSlot(i)
 	}

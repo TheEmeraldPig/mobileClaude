@@ -40,6 +40,8 @@ func (g *Game) Update() error {
 	}
 	frame++
 	ops = ops[:0]
+	netUpdate()     // other players' changes first...
+	netWatchBegin() // ...then remember the area around the mote before it acts
 	runScript()
 	readPointers(cur != scPlaying)
 
@@ -61,7 +63,8 @@ func (g *Game) Update() error {
 			} else {
 				openScreen(scPause)
 			}
-		case scSeed, scWorlds:
+		case scSeed, scWorlds, scMultiplayer:
+			hostAfterOpen = false
 			openScreen(scMain)
 		case scBook:
 			openScreen(bookFrom)
@@ -172,6 +175,7 @@ func (g *Game) Update() error {
 		updatePlayer()
 		followPlayer()
 		useHeld()
+		netWatchEnd() // whatever the mote changed goes to the other players
 		updateEntities()
 		updateTraders()
 		checkObjects()
@@ -195,6 +199,7 @@ func (g *Game) Update() error {
 		seedMenu()
 	case scPlaying:
 		traderLabels()
+		peerLabels()
 		drawPopups()
 		hud()
 	case scPause:
@@ -222,6 +227,9 @@ func (g *Game) Update() error {
 			mainMenuArt()
 		}
 		bookMenu()
+	case scMultiplayer:
+		mainMenuArt()
+		multiplayerMenu()
 	}
 	shake *= 0.86
 	drawToast()
@@ -278,6 +286,7 @@ func (g *Game) Layout(outW, outH int) (int, int) {
 // NewGame sets everything up; shared by the desktop main() and the Android wrapper.
 func NewGame() *Game {
 	loadPrefs()
+	ensureIdentity()
 	ebiten.SetWindowClosingHandled(true)
 	initFonts()
 	initItems()

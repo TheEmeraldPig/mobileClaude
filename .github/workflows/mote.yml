@@ -27,14 +27,14 @@ jobs:
       - name: Install libraries for tests
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxxf86vm-dev libasound2-dev xvfb
       - name: Test (world generation must match the web version)
-        run: xvfb-run -a go test ./game
+        run: xvfb-run -a go test ./game && go build -o /dev/null ./relay
       - name: Build Mote.exe
         run: |
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
-            -ldflags "-s -w -H windowsgui -X github.com/TheEmeraldPig/mobileClaude/mote/game.Version=${{ github.run_number }}" \
+            -ldflags "-s -w -H windowsgui -X github.com/TheEmeraldPig/mobileClaude/mote/game.Version=${{ github.run_number }} -X github.com/TheEmeraldPig/mobileClaude/mote/game.RelayURL=${{ vars.MOTE_RELAY_URL }}" \
             -o Mote.exe ./cmd/mote
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -tags steam \
-            -ldflags "-s -w -H windowsgui -X github.com/TheEmeraldPig/mobileClaude/mote/game.Version=${{ github.run_number }}" \
+            -ldflags "-s -w -H windowsgui -X github.com/TheEmeraldPig/mobileClaude/mote/game.Version=${{ github.run_number }} -X github.com/TheEmeraldPig/mobileClaude/mote/game.RelayURL=${{ vars.MOTE_RELAY_URL }}" \
             -o Mote-steam.exe ./cmd/mote
       - uses: actions/upload-artifact@v4
         with:
@@ -67,7 +67,7 @@ jobs:
           mkdir -p android/app/libs
           go install github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@v2.8.8
           ebitenmobile bind -target android -androidapi 23 -javapkg com.theemeraldpig.mote \
-            -ldflags "-X github.com/TheEmeraldPig/mobileClaude/mote/game.Version=${{ github.run_number }}" \
+            -ldflags "-X github.com/TheEmeraldPig/mobileClaude/mote/game.Version=${{ github.run_number }} -X github.com/TheEmeraldPig/mobileClaude/mote/game.RelayURL=${{ vars.MOTE_RELAY_URL }}" \
             -o android/app/libs/mote.aar ./mobile
       - uses: gradle/actions/setup-gradle@v4
         with:

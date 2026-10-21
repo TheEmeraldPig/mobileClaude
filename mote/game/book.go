@@ -55,6 +55,10 @@ var book = []chapter{
 		"Pip the Merchant, Flint the Smith and Fern the Farmer live in village houses. Tap them (right-click on PC) to buy and sell.",
 		"Coins come from selling ore, bars, food and gear, from creatures, and from chests. Traders sell things that are hard to find, like healing potions, heart crystals and better tools.",
 	}},
+	{"Playing with friends", "gem", []string{
+		"Up to four motes can share a world. To host, open one of your worlds from Multiplayer (or choose Open to friends in the pause menu) and share the 5-letter code it shows. To join, type a friend's code under Multiplayer.",
+		"Joining gives you a new character in that world; it's kept in your friend's save, so next time you join you carry on where you left off. The host can let players hurt each other from the pause menu.",
+	}},
 	{"Game modes", "heart", []string{
 		"Easy: you take less damage and keep everything when you faint. Normal: you drop your blocks and materials but keep tools and gear.",
 		"Hard: more damage, you drop everything and wake up with a temporary kit that fades once you pick up another tool. Hardcore: like Hard, but fainting deletes the world.",

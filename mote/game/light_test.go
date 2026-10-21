@@ -64,3 +64,25 @@ func TestSunMovesSmoothly(t *testing.T) {
 		t.Errorf("a tiny step of the sun changed a cell's light by %d of %d", worst, lightFine)
 	}
 }
+
+// A creature that dies leaves its loot behind (it used to vanish with it)
+func TestCreaturesDropLoot(t *testing.T) {
+	loadTestWorld("12345")
+	cx := W / 2
+	cy := surfaceAt(baseChunk*CW+cx) - 20
+	player.x, player.y = float64((cx+40)*CELL), float64(cy*CELL)
+	e := newFoe(entGloom, cx, cy)
+	e.hp = 0
+	ents = []*Entity{e}
+	updateEntities()
+	coins := 0
+	for _, it := range ents {
+		if it.kind == entItem && it.item == "coin" {
+			coins += it.n
+		}
+	}
+	if coins == 0 {
+		t.Errorf("a gloomling died and dropped no coins (ents: %d)", len(ents))
+	}
+	ents = nil
+}

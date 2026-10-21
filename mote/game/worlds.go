@@ -47,6 +47,7 @@ type WorldInfo struct {
 	Mode   int    `json:"mode"`
 	Played int64  `json:"played"` // unix seconds
 	Deaths int    `json:"deaths"`
+	PvP    bool   `json:"pvp,omitempty"` // players can hurt each other (multiplayer)
 }
 
 var (
@@ -159,6 +160,9 @@ func createNewWorld(name, seed string, mode int) {
 		name = randomWorldName()
 	}
 	saveGame() // keep the world we're leaving
+	if netRole != netOff {
+		leaveMultiplayer()
+	}
 	createWorld(seed)
 	world = WorldInfo{ID: newWorldID(), Name: name, Seed: seedText, Mode: mode}
 	bossDown = false
@@ -181,6 +185,9 @@ func openWorld(info WorldInfo) bool {
 	if world.ID != "" && world.ID != info.ID {
 		saveGame() // keep the world we're leaving
 	}
+	if netRole != netOff {
+		leaveMultiplayer() // a world can only be open to friends while you're in it
+	}
 	b, err := os.ReadFile(worldFile(info.ID))
 	if err != nil {
 		toast("That world could not be opened")
@@ -192,12 +199,16 @@ func openWorld(info WorldInfo) bool {
 		return false
 	}
 	world = info
-	world.Mode = st.World.Mode
+	world.Mode, world.PvP = st.World.Mode, st.World.PvP
 	if st.World.Name != "" {
 		world.Name = st.World.Name
 	}
 	play()
 	touchWorld()
+	if hostAfterOpen {
+		hostAfterOpen = false
+		startHosting()
+	}
 	return true
 }
 
@@ -269,8 +280,15 @@ func die() {
 	sfx("die")
 	deathLost = world.Mode == modeHardcore
 	switch {
+	case deathLost && netRole == netGuest:
+		// in a friend's Hardcore world, your character there is lost (their world isn't)
+		deathLines = []string{"Hardcore: your character in " + world.Name + " is gone for good."}
+		sendChar()
 	case deathLost:
 		deathLines = []string{"Hardcore: " + world.Name + " is gone for good."}
+		if netRole == netHost {
+			netClose() // the world is gone, so friends in it have to leave
+		}
 		deleteWorld(world.ID)
 	case world.Mode == modeEasy:
 		deathLines = []string{"You keep all your items on Easy."}
@@ -437,6 +455,9 @@ func deathMenu() {
 	by := r.Y + r.H - 58
 	if deathLost {
 		if Button(Rect{r.X + 18, by, r.W - 36, 40}, "Main menu", styleGold, true, icoHome) {
+			if netRole == netGuest {
+				leaveMultiplayer()
+			}
 			openScreen(scMain)
 		}
 		return
@@ -447,6 +468,9 @@ func deathMenu() {
 	if Button(Rect{r.X + 32 + bw, by, bw, 40}, "Main menu", styleSlate, true, icoHome) {
 		respawn()
 		saveGame()
+		if netRole != netOff {
+			leaveMultiplayer()
+		}
 		openScreen(scMain)
 	}
 }
