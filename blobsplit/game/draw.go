@@ -13,7 +13,7 @@ import (
 // layout holds where everything is this frame, in device pixels. Positions are worked
 // out in units (the screen is 360 units tall) so phones, tablets and PCs look the same.
 type layout struct {
-	money, gems, chip    rect
+	money, gems          rect
 	buy, music, sound    rect
 	shop, index, rebirth rect
 	cards                [4]rect
@@ -44,7 +44,6 @@ func (g *Game) lay() layout {
 	for i, r := range []*rect{&L.shop, &L.index, &L.rebirth} {
 		*r = R(10, 74+float64(i)*66, leftW-6, 60)
 	}
-	L.chip = R(82, 42, 60, 22)
 	L.sound = R(wu-38, 8, 28, 28)
 	L.music = R(wu-72, 8, 28, 28)
 	L.buy = R(rightX, 8, rightW-72, 28)
@@ -56,7 +55,7 @@ func (g *Game) lay() layout {
 	bx := (cx0+cx1)/2 - bw - 6
 	L.split = R(bx, 360-72, bw, 60)
 	L.sell = R(bx+bw+12, 360-72, bw, 60)
-	L.auto = R(bx-4, 360-72-16, 54, 20)
+	L.auto = R(bx-4, 360-72-16, 46, 20)
 	L.grid = R(cx0, 46, cx1-cx0, 360-72-34-46)
 
 	// Blobs are sized to fit how many are on the board, so they only change size when
@@ -391,7 +390,13 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 			sk = skGold
 		}
 		bevel(dst, b.r, sk, p)
-		icon(dst, b.ic, b.r.cx(), b.r.y+24*u, 26*u)
+		if b.ic == "rebirth" {
+			// with the current rebirth multiplier next to the icon
+			icon(dst, b.ic, b.r.cx()-13*u, b.r.y+24*u, 24*u)
+			say(dst, "x"+fmtNum(rebirthMult(g.st.Rebirths)), face(fBig, 16*u), b.r.cx()+1*u, b.r.y+24*u, alLeft, rgb(0x8ef06a), math.Round(1.5*u))
+		} else {
+			icon(dst, b.ic, b.r.cx(), b.r.y+24*u, 26*u)
+		}
 		say(dst, b.label, face(fSmall, 8*u), b.r.cx(), b.r.y+b.r.h-12*u, alCenter, colW, math.Round(u))
 	}
 	if canRebirth {
@@ -402,8 +407,6 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	}
 
 	// rebirth multiplier, next to the gems
-	icon(dst, "rebirth", L.chip.x+8*u, L.chip.cy(), 14*u)
-	say(dst, "x"+fmtNum(rebirthMult(g.st.Rebirths)), face(fBig, 16*u), L.chip.x+19*u, L.chip.cy(), alLeft, rgb(0x8ef06a), math.Round(1.5*u))
 
 	// top right: buy amount, music and sound
 	bevel(dst, L.buy, skGreen, p)
@@ -464,7 +467,7 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	}
 	say(dst, lbl, face(fBig, 26*u), L.split.cx(), L.split.cy()-6*u, alCenter, colW, math.Round(2*u))
 	say(dst, sub, face(fSmall, 8*u), L.split.cx(), L.split.y+L.split.h-15*u, alCenter, subc, math.Round(u))
-	say(dst, fmt.Sprintf("x%d/%d", n, c), face(fBig, 18*u), L.split.cx()+14*u, L.split.y-6*u, alCenter, colW, math.Round(1.5*u))
+	say(dst, fmt.Sprintf("x%d/%d", n, c), face(fBig, 15*u), L.split.x+L.split.w-2*u, L.split.y-8*u, alRight, colW, math.Round(1.5*u))
 
 	ask := skGrey
 	if g.gem("auto") > 0 && g.st.Auto {
@@ -472,8 +475,8 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	}
 	bevel(dst, L.auto, ask, p)
 	if g.gem("auto") == 0 {
-		icon(dst, "lock", L.auto.x+11*u, L.auto.cy(), 9*u)
-		say(dst, "AUTO", face(fSmall, 7*u), L.auto.x+32*u, L.auto.cy(), alCenter, colW, math.Round(u))
+		icon(dst, "lock", L.auto.x+9*u, L.auto.cy(), 9*u)
+		say(dst, "AUTO", face(fSmall, 7*u), L.auto.x+28*u, L.auto.cy(), alCenter, colW, math.Round(u))
 	} else {
 		say(dst, "AUTO", face(fSmall, 8*u), L.auto.cx(), L.auto.cy(), alCenter, colW, math.Round(u))
 	}

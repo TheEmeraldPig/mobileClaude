@@ -11,14 +11,14 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
-// Titan One: a chunky, rounded font that stays readable small on phones.
+// Jersey 15: a bold, chunky pixel font that stays readable small on phones.
 //
-//go:embed assets/TitanOne-Regular.ttf
-var titanTTF []byte
+//go:embed assets/Jersey15-Regular.ttf
+var jerseyTTF []byte
 
 var (
-	titanSrc *text.GoTextFaceSource
-	faces    = map[[2]int]*text.GoTextFace{}
+	fontSrc *text.GoTextFaceSource
+	faces   = map[int]*text.GoTextFace{}
 )
 
 // Palette, the same as Mote's UI: dark outline, violet body, light top-left edge,
@@ -47,25 +47,30 @@ var (
 
 func initFonts() {
 	var err error
-	if titanSrc, err = text.NewGoTextFaceSource(bytes.NewReader(titanTTF)); err != nil {
+	if fontSrc, err = text.NewGoTextFaceSource(bytes.NewReader(jerseyTTF)); err != nil {
 		panic(err)
 	}
 }
 
 const (
 	fBig   = 0 // headings and numbers
-	fSmall = 1 // labels: the same font, sized up a little so small text stays readable
+	fSmall = 1 // labels: the same font, sized up more so small text stays readable
 )
 
+// fontPx is the font size at which one of Jersey 15's pixels is one screen pixel.
+// Sizes are snapped to whole multiples of it so the letters stay sharp.
+const fontPx = 13.5
+
 func face(kind int, size float64) *text.GoTextFace {
+	size *= 1.2
 	if kind == fSmall {
 		size *= 1.3
 	}
-	k := [2]int{kind, int(math.Round(size))}
+	k := max(1, int(size/fontPx+0.65)) // round, leaning towards bigger
 	if f, ok := faces[k]; ok {
 		return f
 	}
-	f := &text.GoTextFace{Source: titanSrc, Size: float64(k[1])}
+	f := &text.GoTextFace{Source: fontSrc, Size: float64(k) * fontPx}
 	faces[k] = f
 	return f
 }
@@ -105,6 +110,12 @@ const (
 
 // say draws text with a dark outline, vertically centred on y.
 func say(dst *ebiten.Image, s string, f *text.GoTextFace, x, y float64, al int, c color.Color, o float64) {
+	// whole pixels, so the pixel font stays sharp
+	px := f.Size / fontPx
+	x, y = math.Round(x), math.Round(y)
+	if o > 0 {
+		o = math.Max(1, math.Round(o/px)) * px // the outline is whole font pixels too
+	}
 	op := &text.DrawOptions{}
 	op.LayoutOptions.PrimaryAlign = text.Align(al)
 	op.LayoutOptions.SecondaryAlign = text.AlignCenter

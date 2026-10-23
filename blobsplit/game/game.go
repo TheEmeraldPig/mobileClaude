@@ -168,19 +168,26 @@ func (g *Game) trySplit(manual bool) {
 		g.blobs[i].fx, g.blobs[i].fy, _ = g.blobPos(L, i)
 		g.blobs[i].mt = g.t
 	}
+	// each new blob goes right after the one it split from, so they sit side by side
 	best := 0
-	for i := 0; i < add; i++ {
-		r := g.roll(g.blobs[i].r)
-		g.blobs[i].squash = g.t
-		g.blobs = append(g.blobs, blob{r: r, born: g.t, squash: -10, phase: rand.Float64() * 7, fx: g.blobs[i].fx, fy: g.blobs[i].fy, mt: g.t})
+	next := make([]blob, 0, n+add)
+	for i, p := range g.blobs {
+		next = append(next, p)
+		if i >= add {
+			continue
+		}
+		next[len(next)-1].squash = g.t
+		r := g.roll(p.r)
+		next = append(next, blob{r: r, born: g.t, squash: -10, phase: rand.Float64() * 7, fx: p.fx, fy: p.fy, mt: g.t})
 		g.st.Found[r]++
 		if r > 0 && g.st.Found[r] == 1 && r > g.banner.r {
 			g.banner.r, g.banner.t = r, g.t
 		}
-		if r > g.blobs[i].r {
+		if r > p.r {
 			best = max(best, r) // only a new, rarer roll is celebrated
 		}
 	}
+	g.blobs = next
 	g.play("split")
 	if best > 0 {
 		g.play("rare")
@@ -410,7 +417,7 @@ func (g *Game) tap(L layout, x, y float64) {
 	case L.index.in(x, y):
 		g.panel = "index"
 		g.play("tap")
-	case L.rebirth.in(x, y), L.chip.in(x, y):
+	case L.rebirth.in(x, y):
 		g.panel = "rebirth"
 		g.play("tap")
 	case L.sound.in(x, y):

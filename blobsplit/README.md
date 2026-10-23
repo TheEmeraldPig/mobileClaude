@@ -14,7 +14,7 @@ An idle mobile game made with Go and [Ebitengine](https://ebitengine.org), built
 - **Upgrades** (reset on rebirth): blob value, split speed (3s down to 2s), capacity (4 up to 64 blobs) and luck. Costs follow `growCost` in `econ.go`: cheap, small steps at low levels that get steeper later.
 - **Rare blobs** (mutations): Gold 1/25 (x3), Shadow 1/60 (x6), Frost 1/150 (x15), Heart 1/400 (x40), Toxic 1/1K (x100), Rainbow 1/3K (x300), Cosmic 1/10K (x1000). Together, without luck, a new blob mutates 1 time in 15 (`mutationOdds`). Luck multiplies the chances. The Index shows which ones you've found.
 - A blob always splits into at least a copy of itself (a Gold makes another Gold), with the same chance of rolling something rarer, so rare blobs multiply on the board until you sell.
-- Blobs are sized to fit how many are on the board, so they only shrink when a split makes more of them. They line up in a full rectangle, or form a circle when that lets them be bigger.
+- Blobs are sized to fit how many are on the board, so they only shrink when a split makes more of them. They line up in a full rectangle, or form a circle when that lets them be bigger. A new blob appears right next to the one it split from.
 - The BUY button (top right) sets how many levels a tap buys: x1, x5, x25 or MAX (as many as you can afford).
 - Music: a chiptune loop written in code (`makeMusic` in `audio.go`); the note button turns it off.
 - **Rebirth**: costs $25K, then 10x more each time. It resets money, blobs and upgrades, doubles blob value for good and pays gems.
@@ -29,7 +29,7 @@ The save is `save.json` in the app's private storage on Android, or in the user 
   - `game.go`: game state, rules (split, sell, rebirth, buying) and input.
   - `draw.go`: the screen layout (`lay()`, in units where the screen is 360 tall) and all drawing.
   - `sprites.go`: pixel-art blobs (generated in code, one per rarity) and UI icons.
-  - `ui.go`: the font (Titan One), colours and the bevelled pixel boxes (same style as Mote).
+  - `ui.go`: the pixel font (Jersey 15, sizes snapped to whole pixels), colours and the bevelled pixel boxes (same style as Mote).
   - `audio.go`: synthesised chiptune sounds and the music loop. `save.go`: the save file. `icon.go`: the app icon and store art.
   - `testhooks.go`: screenshots and scripted actions for testing (see below).
 - `cmd/blobsplit/`: desktop version, for playing and testing on a PC.
