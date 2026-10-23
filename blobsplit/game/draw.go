@@ -72,7 +72,12 @@ func (g *Game) lay() layout {
 			rectBest, L.cols, L.grows = s, c, r
 		}
 	}
-	L.cell = math.Min(rectBest, 70*u)
+	if L.cols == 0 {
+		// no room at all (before the screen size is known, e.g. Android's first
+		// frame): one row, so positions still work out
+		L.cols, L.grows = n, 1
+	}
+	L.cell = math.Max(0, math.Min(rectBest, 70*u))
 	if pts, cell := circleSlots(n, L.grid, 70*u); rectBest < anyBest*0.75 || cell > L.cell {
 		L.circle, L.cell = pts, cell
 	}
@@ -155,11 +160,12 @@ func spriteScale(s float64) float64 {
 // blobPos is the centre and cell size of blob i, including its pop-in animation.
 func (g *Game) blobPos(L layout, i int) (x, y, s float64) {
 	slot := func(i int) (float64, float64) {
-		if L.circle != nil {
+		if i < len(L.circle) {
 			return L.circle[i][0], L.circle[i][1]
 		}
-		c, r := i%L.cols, i/L.cols
-		ox := L.grid.x + (L.grid.w-float64(L.cols)*L.cell)/2
+		cols := max(1, L.cols)
+		c, r := i%cols, i/cols
+		ox := L.grid.x + (L.grid.w-float64(cols)*L.cell)/2
 		oy := L.grid.y + (L.grid.h-float64(L.grows)*L.cell)/2
 		return ox + (float64(c)+0.5)*L.cell, oy + (float64(r)+0.5)*L.cell
 	}
