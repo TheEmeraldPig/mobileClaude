@@ -19,3 +19,10 @@
 - Building tools (shapes, walls, paint, rotate/flip, holograms) are in `build.go`; keep the build bar usable on phones.
 - Every push to `mote/` builds and releases `Mote.exe`, `Mote-steam.exe` and `Mote.apk` through `.github/workflows/mote.yml`.
 - Check layouts by running under Xvfb with the test hooks in `game/testhooks.go` (`MOTE_SCRIPT`, `MOTE_TOUCH=1`, `MOTE_NOAUDIO=1`).
+
+## blobsplit/ (the game "Blob Split": Android / Google Play)
+
+- An idle split-and-sell game in Go + Ebitengine, landscape, made for phones. See `blobsplit/README.md`.
+- Balance (rarities, costs, rebirth) is in `game/econ.go`; new saved state goes in `State` in `game/save.go`.
+- UI reuses Mote's pixel style: `bevel()` boxes with skins in `game/ui.go`, Pixelify Sans and Silkscreen. Layout is in units where the screen is 360 tall (`lay()` in `game/draw.go`); check it at phone (800x360), tablet (1024x768) and PC sizes with the test hooks in `game/testhooks.go` under Xvfb.
+- Every push to `blobsplit/` builds `BlobSplit.apk` and `BlobSplit.aab` through `.github/workflows/blobsplit.yml` and releases them as `blobsplit-<n>` (never marked latest, because Mote's updaters read the latest release).

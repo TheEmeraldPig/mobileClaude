@@ -1,0 +1,6 @@
+/android/app/libs/
+/android/app/build/
+/android/build/
+/android/.gradle/
+/BlobSplit.apk
+/BlobSplit.aab

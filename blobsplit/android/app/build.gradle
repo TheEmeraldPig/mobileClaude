@@ -1,0 +1,58 @@
+plugins {
+    id 'com.android.application'
+}
+
+// CI passes the build number; Google Play needs it to go up with every upload
+def appVersion = (project.findProperty('appVersion') ?: '1').toString()
+
+// The Play upload key comes from environment variables (GitHub secrets in CI). Without
+// them, builds are signed with the sideload key in this folder, which is fine for
+// installing the APK on your own phone but must not be used for Google Play.
+def uploadStore = System.getenv('UPLOAD_KEYSTORE_FILE')
+
+android {
+    namespace 'com.theemeraldpig.blobsplit'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.theemeraldpig.blobsplit'
+        minSdk 23
+        targetSdk 36
+        versionCode appVersion.toInteger()
+        versionName "1." + appVersion
+    }
+
+    signingConfigs {
+        sideload {
+            storeFile rootProject.file('blobsplit-sideload.keystore')
+            storePassword 'android'
+            keyAlias 'blobsplit'
+            keyPassword 'android'
+        }
+        if (uploadStore) {
+            upload {
+                storeFile file(uploadStore)
+                storePassword System.getenv('UPLOAD_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('UPLOAD_KEY_ALIAS')
+                keyPassword System.getenv('UPLOAD_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig uploadStore ? signingConfigs.upload : signingConfigs.sideload
+        }
+        debug {
+            signingConfig signingConfigs.sideload
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.aar'])
+}
