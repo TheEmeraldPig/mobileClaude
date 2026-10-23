@@ -109,7 +109,9 @@ jobs:
             adb shell am start -n com.theemeraldpig.blobsplit/.MainActivity
             sleep 30
             adb exec-out screencap -p > shot-start.png
-            adb logcat -d | grep -E "BlobSplit|GoLog|FATAL" | tail -50 || true
+            adb logcat -d > logcat.txt
+            grep -E "BlobSplit|GoLog|FATAL" logcat.txt | tail -50 || true
+            if grep -qE "panic:|crashed:" logcat.txt; then echo "::error::The game crashed on the emulator"; exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

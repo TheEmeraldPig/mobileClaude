@@ -109,6 +109,14 @@ func (g *Game) blobPos(L layout, i int) (x, y, s float64) {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	// On Android the first frame can come before Layout has told us the screen size
+	if b := screen.Bounds(); g.W != float64(b.Dx()) || g.H != float64(b.Dy()) {
+		g.W, g.H = float64(b.Dx()), float64(b.Dy())
+		g.u = g.H / 360
+	}
+	if g.W < 1 || g.H < 1 {
+		return
+	}
 	L := g.lay()
 	g.drawBackground(screen)
 	g.drawBoard(screen, L)

@@ -14,7 +14,11 @@ import (
 // The game is created on its first frame, after the activity has passed in the data folder.
 type lazy struct{ g *game.Game }
 
-func (l *lazy) Update() error {
+func (l *lazy) Update() (err error) {
+	if game.Crashed() {
+		return nil
+	}
+	defer game.CatchCrash()
 	if l.g == nil {
 		l.g = game.NewGame()
 	}
@@ -22,13 +26,18 @@ func (l *lazy) Update() error {
 }
 
 func (l *lazy) Draw(screen *ebiten.Image) {
+	if game.Crashed() {
+		game.DrawCrash(screen)
+		return
+	}
+	defer game.CatchCrash()
 	if l.g != nil {
 		l.g.Draw(screen)
 	}
 }
 
 func (l *lazy) Layout(w, h int) (int, int) {
-	if l.g == nil {
+	if l.g == nil || game.Crashed() {
 		return w, h
 	}
 	return l.g.Layout(w, h)
