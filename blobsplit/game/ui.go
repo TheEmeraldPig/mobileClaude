@@ -113,12 +113,14 @@ func say(dst *ebiten.Image, s string, f *text.GoTextFace, x, y float64, al int, 
 	op := &text.DrawOptions{}
 	op.LayoutOptions.PrimaryAlign = text.Align(al)
 	op.LayoutOptions.SecondaryAlign = text.AlignCenter
-	if o > 0 {
+	_, _, _, ca := c.RGBA()
+	if o > 0 && ca > 0 {
 		for _, d := range [][2]float64{{-o, 0}, {o, 0}, {0, -o}, {0, o}, {o, o}, {-o, o}, {o, -o}, {-o, -o}, {o * 0.5, o * 2}} {
 			op.GeoM.Reset()
 			op.GeoM.Translate(x+d[0], y+d[1])
 			op.ColorScale.Reset()
 			op.ColorScale.ScaleWithColor(colO)
+			op.ColorScale.ScaleAlpha(float32(math.Pow(float64(ca)/0xffff, 4))) // the 9 overlapping copies fade with the text
 			text.Draw(dst, s, f, op)
 		}
 	}

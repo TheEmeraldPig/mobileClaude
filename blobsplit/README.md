@@ -11,8 +11,10 @@ An idle mobile game made with Go and [Ebitengine](https://ebitengine.org), built
 | Buy an upgrade | Tap a card on the right (hold to keep buying) | Click (hold to keep buying) |
 | Close a menu | X, or tap outside it | Esc |
 
-- **Upgrades** (reset on rebirth): blob value, split speed (3s down to 2s), capacity (4 up to 64 blobs) and luck.
+- **Upgrades** (reset on rebirth): blob value, split speed (3s down to 2s), capacity (4 up to 64 blobs) and luck. Costs follow `growCost` in `econ.go`: cheap, small steps at low levels that get steeper later.
 - **Rare blobs**: Gold 1/100 (x5), Shadow 1/250 (x12), Frost 1/600 (x30), Heart 1/1.5K (x75), Toxic 1/4K (x200), Rainbow 1/12K (x700), Cosmic 1/50K (x3000). Luck divides the odds. The Index shows which ones you've found.
+- A blob always splits into at least a copy of itself (a Gold makes another Gold), with the same chance of rolling something rarer, so rare blobs multiply on the board until you sell.
+- Blobs are sized to fit how many are on the board, so they only shrink when a split makes more of them.
 - **Rebirth**: costs $25K, then 10x more each time. It resets money, blobs and upgrades, doubles blob value for good and pays gems.
 - **Gem shop** (permanent): Auto Split, Auto Sell, Golden Touch (+50% value per level), Lucky Charm (+50% luck per level) and Quick Hands (-10% split time per level).
 

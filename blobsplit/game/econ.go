@@ -34,13 +34,21 @@ const (
 	maxLuckLv  = 20 // luck x1.0 up to x3.0
 )
 
-func capOf(l int) int            { return 4 << l }
-func capCost(l int) float64      { return 25 * math.Pow(13, float64(l)) }
-func speedCost(l int) float64    { return 40 * math.Pow(7, float64(l)) }
-func valueOf(l int) float64      { return (1 + float64(l)) * math.Pow(1.07, float64(l)) }
-func valueCost(l int) float64    { return 10 * math.Pow(1.16, float64(l)) }
-func luckOf(l int) float64       { return 1 + 0.1*float64(l) }
-func luckCost(l int) float64     { return 200 * math.Pow(2.2, float64(l)) }
+func capOf(l int) int         { return 4 << l }
+func capCost(l int) float64   { return growCost(10, 1.2, 0.25, l) }
+func speedCost(l int) float64 { return growCost(15, 1.0, 0.15, l) }
+func valueOf(l int) float64   { return (1 + float64(l)) * math.Pow(1.07, float64(l)) }
+func valueCost(l int) float64 { return growCost(3, 0.07, 0.0015, l) }
+func luckOf(l int) float64    { return 1 + 0.1*float64(l) }
+func luckCost(l int) float64  { return growCost(50, 0.25, 0.02, l) }
+
+// growCost is base * e^(a*l + b*l*l) + l: each level costs only a little more than
+// the last while levels are low (e^a times, and always at least $1 more), and the
+// steps get steeper as levels go up.
+func growCost(base, a, b float64, l int) float64 {
+	x := float64(l)
+	return math.Round(base*math.Exp(a*x+b*x*x) + x)
+}
 func baseCooldown(l int) float64 { return 3.0 - 0.2*float64(l) }
 
 // Rebirth: needs money, resets the run and doubles all blob value; pays gems.

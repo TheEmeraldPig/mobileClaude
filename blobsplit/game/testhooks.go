@@ -63,7 +63,7 @@ func (g *Game) hookInit() {
 		case 40:
 			r = 4
 		}
-		g.blobs = append(g.blobs, blob{r: r, born: -10, from: -1, squash: -10, phase: float64(i) * 1.7})
+		g.blobs = append(g.blobs, blob{r: r, born: -10, mt: -10, squash: -10, phase: float64(i) * 1.7})
 	}
 	g.shown = s.Money
 }

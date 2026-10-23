@@ -25,9 +25,10 @@ const dt = 1.0 / 60
 type blob struct {
 	r      int     // rarity
 	born   float64 // game time it appeared
-	from   int     // slot it split from, -1 for none
 	squash float64 // last time it split (it wobbles)
 	phase  float64
+	// when the board grows, each blob glides from (fx, fy) to its new slot from time mt
+	fx, fy, mt float64
 }
 
 type particle struct {
@@ -35,8 +36,9 @@ type particle struct {
 	age, life    float64
 	size         float64
 	c            color.RGBA
-	r            int // >= 0: a sold blob of this rarity flying from (x,y) to (tx,ty)
+	r            int // >= 0: a sold blob of this rarity flying from (x,y) to (tx,ty); -2: a ring
 	tx, ty       float64
+	s0           float64 // a sold blob's sprite scale when it was sold
 }
 
 type floater struct {
@@ -44,6 +46,7 @@ type floater struct {
 	x, y float64
 	t    float64
 	c    color.RGBA
+	size float64 // font size in units (0 = 20)
 }
 
 type Game struct {
@@ -64,6 +67,9 @@ type Game struct {
 		t float64
 	}
 	shown   float64 // money as displayed, counting up to the real amount
+	cellA   float64 // blob size before the last split, which it grows or shrinks from
+	cellT   float64 // time of the last split
+	soldT   float64 // time of the last sell (the money counter bounces)
 	holdOn  int     // upgrade card held down (-1 none)
 	holdT   float64
 	repeatT float64
@@ -83,7 +89,7 @@ func NewGame() *Game {
 		t float64
 	}{-1, -10}}
 	for _, r := range g.st.Blobs {
-		g.blobs = append(g.blobs, blob{r: r, born: -10, from: -1, squash: -10, phase: rand.Float64() * 7})
+		g.blobs = append(g.blobs, blob{r: r, born: -10, mt: -10, squash: -10, phase: rand.Float64() * 7})
 	}
 	g.shown = g.st.Money
 	g.cool = 99
@@ -124,14 +130,16 @@ func (g *Game) boardValue() float64 {
 	return v * g.blobValueAt(g.st.ValueLv)
 }
 
-func (g *Game) roll() int {
+// roll picks the rarity of a new blob split from a parent of rarity min: it is a
+// copy of the parent, or with luck something rarer.
+func (g *Game) roll(min int) int {
 	l := g.luck()
-	for r := len(rarities) - 1; r >= 1; r-- {
+	for r := len(rarities) - 1; r > min; r-- {
 		if rand.Float64() < l/rarities[r].Odds {
 			return r
 		}
 	}
-	return 0
+	return min
 }
 
 func (g *Game) trySplit(manual bool) {
@@ -151,16 +159,25 @@ func (g *Game) trySplit(manual bool) {
 	if n+add > c {
 		add = c - n
 	}
+	// remember where everything is now, so blobs glide to their new slots
+	L := g.lay()
+	g.cellA, g.cellT = g.cellNow(L), g.t
+	for i := range g.blobs {
+		g.blobs[i].fx, g.blobs[i].fy, _ = g.blobPos(L, i)
+		g.blobs[i].mt = g.t
+	}
 	best := 0
 	for i := 0; i < add; i++ {
-		r := g.roll()
+		r := g.roll(g.blobs[i].r)
 		g.blobs[i].squash = g.t
-		g.blobs = append(g.blobs, blob{r: r, born: g.t, from: i, squash: -10, phase: rand.Float64() * 7})
+		g.blobs = append(g.blobs, blob{r: r, born: g.t, squash: -10, phase: rand.Float64() * 7, fx: g.blobs[i].fx, fy: g.blobs[i].fy, mt: g.t})
 		g.st.Found[r]++
 		if r > 0 && g.st.Found[r] == 1 && r > g.banner.r {
 			g.banner.r, g.banner.t = r, g.t
 		}
-		best = max(best, r)
+		if r > g.blobs[i].r {
+			best = max(best, r) // only a new, rarer roll is celebrated
+		}
 	}
 	g.play("split")
 	if best > 0 {
@@ -181,13 +198,22 @@ func (g *Game) sell() {
 	v := g.boardValue()
 	g.st.Money += v
 	g.st.Earned += v
+	// Every blob pops (a ring and a burst of coins), hops up, then flies in an arc to
+	// the money counter, in a wave across the board.
 	tx, ty := L.money.x+20*g.u, L.money.cy()
 	for i, b := range g.blobs {
-		x, y, _ := g.blobPos(L, i)
-		g.parts = append(g.parts, particle{x: x, y: y, r: b.r, tx: tx, ty: ty, age: -float64(i) * 0.008, life: 0.55})
+		x, y, s := g.blobPos(L, i)
+		wait := 0.18 + float64(i%L.cols)*0.025 + float64(i/L.cols)*0.04
+		g.parts = append(g.parts, particle{x: x, y: y, r: b.r, tx: tx, ty: ty, age: -wait, life: 0.6, s0: spriteScale(s)})
+		g.parts = append(g.parts, particle{x: x, y: y, r: -2, life: 0.4, size: s * 0.45, c: rgb(rarities[b.r].Label)})
+		for k := 0; k < 3; k++ {
+			a := rand.Float64() * 2 * math.Pi
+			sp := (1.5 + rand.Float64()*2.5) * g.u
+			g.parts = append(g.parts, particle{x: x, y: y, vx: math.Cos(a) * sp, vy: math.Sin(a)*sp - 2*g.u, life: 0.5 + rand.Float64()*0.3, size: math.Max(2, 2.5*g.u), c: []color.RGBA{colG, colT}[k%2], r: -1})
+		}
 	}
-	g.float("+$"+fmtNum(v), L.sell, colG)
-	g.blobs = []blob{{r: 0, born: g.t, from: -1, squash: -10, phase: rand.Float64() * 7}}
+	g.floats = append(g.floats, floater{s: "+$" + fmtNum(v), x: L.grid.cx(), y: L.grid.cy(), c: colT, size: 34})
+	g.blobs = []blob{{r: 0, born: g.t, mt: -10, squash: -10, phase: rand.Float64() * 7}}
 	g.cool = 99
 	g.full = 0
 	g.play("sell")
@@ -202,7 +228,7 @@ func (g *Game) rebirth() {
 	g.st.Rebirths++
 	g.st.Money, g.shown = 0, 0
 	g.st.ValueLv, g.st.SpeedLv, g.st.CapLv, g.st.LuckLv = 0, 0, 0, 0
-	g.blobs = []blob{{r: 0, born: g.t, from: -1, squash: -10}}
+	g.blobs = []blob{{r: 0, born: g.t, mt: -10, squash: -10}}
 	g.cool = 99
 	g.panel = ""
 	for i := 0; i < 80; i++ {
@@ -444,7 +470,7 @@ func (g *Game) Update() error {
 	live := g.parts[:0]
 	for _, p := range g.parts {
 		p.age += dt
-		if p.r < 0 {
+		if p.r == -1 {
 			p.x += p.vx
 			p.y += p.vy
 			p.vy += 0.05 * g.u
@@ -454,6 +480,7 @@ func (g *Game) Update() error {
 			live = append(live, p)
 		} else if p.r >= 0 {
 			// a sold blob reached the money counter
+			g.soldT = g.t
 			for k := 0; k < 2; k++ {
 				spawn = append(spawn, particle{x: p.tx, y: p.ty, vx: (rand.Float64() - 0.5) * 3 * g.u, vy: -rand.Float64() * 3 * g.u, life: 0.4, size: 2 * g.u, c: colG, r: -1})
 			}
@@ -462,7 +489,7 @@ func (g *Game) Update() error {
 	g.parts = append(live, spawn...)
 	fl := g.floats[:0]
 	for _, f := range g.floats {
-		if f.t += dt; f.t < 1.1 {
+		if f.t += dt; f.t < 1.3 {
 			fl = append(fl, f)
 		}
 	}

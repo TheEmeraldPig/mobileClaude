@@ -55,8 +55,9 @@ func (g *Game) lay() layout {
 	L.auto = R(bx-4, 360-72-16, 54, 20)
 	L.grid = R(cx0, 46, cx1-cx0, 360-72-34-46)
 
-	// fit the board's capacity into the grid area with the biggest cells
-	n := g.capacity()
+	// fit the blobs on the board into the grid area with the biggest cells, so they
+	// only change size when a split makes more of them
+	n := max(1, len(g.blobs))
 	best := 0.0
 	for c := 1; c <= n; c++ {
 		r := (n + c - 1) / c
@@ -87,6 +88,19 @@ func (g *Game) lay() layout {
 	return L
 }
 
+// spriteScale is how much a blob sprite is scaled up to fill a cell of size s: whole
+// pixels where it can, so the pixel art stays crisp.
+func spriteScale(s float64) float64 {
+	scale := s * 0.86 / blobPx
+	if scale >= 2 {
+		scale = math.Round(scale)
+		if scale*blobPx > s*0.98 {
+			scale--
+		}
+	}
+	return scale
+}
+
 // blobPos is the centre and cell size of blob i, including its pop-in animation.
 func (g *Game) blobPos(L layout, i int) (x, y, s float64) {
 	slot := func(i int) (float64, float64) {
@@ -98,14 +112,22 @@ func (g *Game) blobPos(L layout, i int) (x, y, s float64) {
 	x, y = slot(i)
 	if i < len(g.blobs) {
 		b := g.blobs[i]
-		if a := g.t - b.born; b.from >= 0 && a < 0.3 {
-			fx, fy := slot(b.from)
+		if a := g.t - b.mt; a < 0.3 {
 			k := 1 - math.Pow(1-a/0.3, 3)
-			x, y = fx+(x-fx)*k, fy+(y-fy)*k
+			x, y = b.fx+(x-b.fx)*k, b.fy+(y-b.fy)*k
 		}
 		y += math.Sin(g.t*2.2+b.phase) * L.cell * 0.025
 	}
-	return x, y, L.cell
+	return x, y, g.cellNow(L)
+}
+
+// cellNow is the blob size, easing from its old size for a moment after a split.
+func (g *Game) cellNow(L layout) float64 {
+	if a := g.t - g.cellT; a < 0.3 && g.cellA > 0 {
+		k := 1 - math.Pow(1-a/0.3, 3)
+		return g.cellA + (L.cell-g.cellA)*k
+	}
+	return L.cell
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
@@ -124,9 +146,15 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.drawHUD(screen, L)
 	g.drawParticles(screen, true)
 	for _, f := range g.floats {
-		a := 1 - f.t/1.1
+		a := math.Min(1, 1.6*(1-f.t/1.3))
 		c := f.c
-		say(screen, f.s, face(fBig, 20*g.u), f.x, f.y-f.t*34*g.u, alCenter, color.RGBA{uint8(float64(c.R) * a), uint8(float64(c.G) * a), uint8(float64(c.B) * a), uint8(255 * a)}, math.Round(1.5*g.u*a))
+		sz := f.size
+		if sz == 0 {
+			sz = 20
+		}
+		// big ones pop in, then all drift up and fade
+		sz *= 1 + 0.4*math.Max(0, 1-f.t/0.15)
+		say(screen, f.s, face(fBig, sz*g.u), f.x, f.y-f.t*34*g.u, alCenter, color.RGBA{uint8(float64(c.R) * a), uint8(float64(c.G) * a), uint8(float64(c.B) * a), uint8(255 * a)}, math.Round(sz/10*g.u*a))
 	}
 	g.drawBanner(screen)
 	if g.panel != "" {
@@ -200,12 +228,9 @@ func (g *Game) drawBoard(dst *ebiten.Image, L layout) {
 	for i, b := range g.blobs {
 		x, y, s := g.blobPos(L, i)
 		size := s * 0.86
-		scale := size / blobPx
-		if scale >= 2 {
-			scale = math.Round(scale)
-			if scale*blobPx > s*0.98 {
-				scale--
-			}
+		scale := spriteScale(s)
+		if g.t-g.cellT < 0.3 {
+			scale = s * 0.86 / blobPx // smooth while growing or shrinking
 		}
 		sx, sy := scale, scale
 		if a := g.t - b.born; a < 0.3 {
@@ -246,7 +271,19 @@ func (g *Game) drawBoard(dst *ebiten.Image, L layout) {
 
 func (g *Game) drawParticles(dst *ebiten.Image, blobs bool) {
 	for _, p := range g.parts {
-		if (p.r >= 0) != blobs || p.age < 0 {
+		if (p.r >= 0) != blobs {
+			continue
+		}
+		if p.age < 0 {
+			// a sold blob waiting its turn: it squashes down, ready to jump
+			if p.r >= 0 {
+				w := 0.25 * math.Max(0, 1+p.age/0.15) // squashes over the last 0.15s
+				op := &ebiten.DrawImageOptions{}
+				op.GeoM.Translate(-blobPx/2, -blobPx)
+				op.GeoM.Scale(p.s0*(1+w*0.5), p.s0*(1-w*0.6))
+				op.GeoM.Translate(p.x, p.y+blobPx/2*p.s0)
+				dst.DrawImage(blobImgs[p.r][0], op)
+			}
 			continue
 		}
 		if p.r >= 0 {
@@ -254,12 +291,19 @@ func (g *Game) drawParticles(dst *ebiten.Image, blobs bool) {
 			e := k * k
 			x := p.x + (p.tx-p.x)*e
 			y := p.y + (p.ty-p.y)*e - math.Sin(k*math.Pi)*40*g.u
-			s := math.Max(1, (g.u*2.2)*(1-0.6*k))
+			end := g.u * 1.6
+			s := math.Max(1, p.s0+(end-p.s0)*math.Sqrt(k))
 			op := &ebiten.DrawImageOptions{}
 			op.GeoM.Translate(-blobPx/2, -blobPx/2)
 			op.GeoM.Scale(s, s)
+			op.GeoM.Rotate(k * 6)
 			op.GeoM.Translate(x, y)
 			dst.DrawImage(blobImgs[p.r][0], op)
+			continue
+		}
+		if p.r == -2 {
+			k := p.age / p.life
+			vector.StrokeCircle(dst, float32(p.x), float32(p.y), float32(p.size*(0.6+1.2*k)), float32(math.Max(1, 3*g.u*(1-k))), color.NRGBA{p.c.R, p.c.G, p.c.B, uint8(220 * (1 - k))}, true)
 			continue
 		}
 		a := 1 - p.age/p.life
@@ -270,8 +314,13 @@ func (g *Game) drawParticles(dst *ebiten.Image, blobs bool) {
 func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	u, p := g.u, L.p
 	// money and gems
-	say(dst, "$", face(fBig, 34*u), L.money.x+2*u, L.money.cy(), alLeft, colG, math.Round(2*u))
-	say(dst, fmtNum(g.shown), face(fBig, 32*u), L.money.x+24*u, L.money.cy(), alLeft, colW, math.Round(2*u))
+	bump := 1 + 0.2*math.Max(0, 1-(g.t-g.soldT)/0.2)
+	say(dst, "$", face(fBig, 34*u*bump), L.money.x+2*u, L.money.cy(), alLeft, colG, math.Round(2*u))
+	mc := colW
+	if bump > 1 {
+		mc = mix(colW, colG, (bump-1)*4)
+	}
+	say(dst, fmtNum(g.shown), face(fBig, 32*u*bump), L.money.x+24*u*bump, L.money.cy(), alLeft, mc, math.Round(2*u))
 	icon(dst, "gem", L.gems.x+10*u, L.gems.cy(), 14*u)
 	say(dst, fmtNum(float64(g.st.Gems)), face(fBig, 20*u), L.gems.x+24*u, L.gems.cy(), alLeft, rgb(0x9ff0ff), math.Round(1.5*u))
 
@@ -343,11 +392,14 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 			fill(dst, L.split.x+2*p, L.split.y+2*p, L.split.w-4*p, L.split.h-4*p, color.NRGBA{255, 255, 255, uint8(25 + 20*math.Sin(g.t*6))})
 		}
 	}
-	lbl := "SPLIT"
+	lbl, sub, subc := "SPLIT", "READY!", colT
 	if full {
-		lbl = "FULL"
+		lbl, sub, subc = "FULL", "SELL TO SPLIT", rgb(0xd8ccff)
+	} else if left := g.cooldown() - g.cool; left > 0 {
+		sub, subc = fmt.Sprintf("%.1fs", left), colW
 	}
-	say(dst, lbl, face(fBig, 26*u), L.split.cx(), L.split.cy()-3*u, alCenter, colW, math.Round(2*u))
+	say(dst, lbl, face(fBig, 26*u), L.split.cx(), L.split.cy()-6*u, alCenter, colW, math.Round(2*u))
+	say(dst, sub, face(fSmall, 8*u), L.split.cx(), L.split.y+L.split.h-15*u, alCenter, subc, math.Round(u))
 	say(dst, fmt.Sprintf("x%d/%d", n, c), face(fBig, 18*u), L.split.cx()+14*u, L.split.y-6*u, alCenter, colW, math.Round(1.5*u))
 
 	ask := skGrey
