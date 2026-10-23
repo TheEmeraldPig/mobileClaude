@@ -14,7 +14,7 @@ import (
 //	BLOB_SHOT=out.png   save a screenshot after BLOB_SHOT_AT frames (default 90) and quit
 //	BLOB_DEMO=1         start with a late-game board: money, gems, upgrades and rare blobs
 //	BLOB_PANEL=shop     open a panel: shop, index or rebirth
-//	BLOB_DO=split,sell  actions run one every 20 frames: split, sell, buy0-3, rebirth
+//	BLOB_DO=split,sell  actions run one every 20 frames: split, sell, buy0-3, rebirth, mode
 //	BLOB_SIZE=1280x720  window size;  BLOB_FRESH=1 ignores the save;  BLOB_NOAUDIO=1
 var (
 	shotPath = os.Getenv("BLOB_SHOT")
@@ -80,6 +80,8 @@ func (g *Game) hookUpdate() {
 			g.sell()
 		case a == "rebirth":
 			g.rebirth()
+		case a == "mode":
+			g.st.BuyMode = (g.st.BuyMode + 1) % len(buyModes)
 		case strings.HasPrefix(a, "buy"):
 			i, _ := strconv.Atoi(a[3:])
 			g.buyCard(i, false)

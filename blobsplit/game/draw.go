@@ -13,16 +13,18 @@ import (
 // layout holds where everything is this frame, in device pixels. Positions are worked
 // out in units (the screen is 360 units tall) so phones, tablets and PCs look the same.
 type layout struct {
-	money, gems, chip, sound rect
-	shop, index, rebirth     rect
-	cards                    [4]rect
-	split, sell, auto        rect
-	grid                     rect
-	cols, grows              int
-	cell                     float64
-	panel, close, action     rect
-	rows                     []rect // shop rows or index cells
-	p                        float64
+	money, gems, chip    rect
+	buy, music, sound    rect
+	shop, index, rebirth rect
+	cards                [4]rect
+	split, sell, auto    rect
+	grid                 rect
+	cols, grows          int
+	cell                 float64
+	circle               [][2]float64 // blob centres when they form a circle instead
+	panel, close, action rect
+	rows                 []rect // shop rows or index cells
+	p                    float64
 }
 
 func (g *Game) lay() layout {
@@ -42,8 +44,10 @@ func (g *Game) lay() layout {
 	for i, r := range []*rect{&L.shop, &L.index, &L.rebirth} {
 		*r = R(10, 74+float64(i)*66, leftW-6, 60)
 	}
+	L.chip = R(82, 42, 60, 22)
 	L.sound = R(wu-38, 8, 28, 28)
-	L.chip = R(rightX, 8, rightW-34, 28)
+	L.music = R(wu-72, 8, 28, 28)
+	L.buy = R(rightX, 8, rightW-72, 28)
 	for i := range L.cards {
 		L.cards[i] = R(rightX, 44+float64(i)*68, rightW, 62)
 	}
@@ -55,18 +59,24 @@ func (g *Game) lay() layout {
 	L.auto = R(bx-4, 360-72-16, 54, 20)
 	L.grid = R(cx0, 46, cx1-cx0, 360-72-34-46)
 
-	// fit the blobs on the board into the grid area with the biggest cells, so they
-	// only change size when a split makes more of them
+	// Blobs are sized to fit how many are on the board, so they only change size when
+	// a split makes more of them. They line up in a full rectangle (never a half-empty
+	// last row) when one fits the space well, and otherwise form a circle, whichever
+	// lets them be bigger.
 	n := max(1, len(g.blobs))
-	best := 0.0
+	anyBest, rectBest := 0.0, 0.0
 	for c := 1; c <= n; c++ {
 		r := (n + c - 1) / c
 		s := math.Min(L.grid.w/float64(c), L.grid.h/float64(r))
-		if s > best {
-			best, L.cols, L.grows = s, c, r
+		anyBest = math.Max(anyBest, s)
+		if n%c == 0 && s > rectBest {
+			rectBest, L.cols, L.grows = s, c, r
 		}
 	}
-	L.cell = math.Min(best, 70*u)
+	L.cell = math.Min(rectBest, 70*u)
+	if pts, cell := circleSlots(n, L.grid, 70*u); rectBest < anyBest*0.75 || cell > L.cell {
+		L.circle, L.cell = pts, cell
+	}
 
 	pw, ph := math.Min(wu-40, 470), 320.0
 	L.panel = R(wu/2-pw/2, 20, pw, ph)
@@ -88,6 +98,48 @@ func (g *Game) lay() layout {
 	return L
 }
 
+// circleSlots packs n blobs into a circle in the middle of area: a ring when there are
+// a few, a sunflower spiral when there are more. It returns their centres and the
+// blob size.
+func circleSlots(n int, area rect, maxCell float64) ([][2]float64, float64) {
+	pts := make([][2]float64, n)
+	switch {
+	case n == 1:
+	case n <= 7:
+		for i := range pts {
+			a := 2*math.Pi*float64(i)/float64(n) - math.Pi/2
+			pts[i] = [2]float64{math.Cos(a), math.Sin(a)}
+		}
+	default:
+		golden := math.Pi * (3 - math.Sqrt(5))
+		for i := range pts {
+			r, a := math.Sqrt(float64(i)+0.5), float64(i)*golden
+			pts[i] = [2]float64{r * math.Cos(a), r * math.Sin(a)}
+		}
+	}
+	// scale so the closest two blobs just touch and the outer ones stay inside
+	near, far := math.Inf(1), 0.0
+	for i := range pts {
+		far = math.Max(far, math.Hypot(pts[i][0], pts[i][1]))
+		for j := i + 1; j < n; j++ {
+			near = math.Min(near, math.Hypot(pts[i][0]-pts[j][0], pts[i][1]-pts[j][1]))
+		}
+	}
+	R := math.Min(area.w, area.h) / 2
+	cell := math.Min(R*2, maxCell)
+	if n > 1 {
+		cell = math.Min(maxCell, near*R/(far+near/2))
+	}
+	s := 0.0
+	if n > 1 {
+		s = cell / near
+	}
+	for i := range pts {
+		pts[i] = [2]float64{area.cx() + pts[i][0]*s, area.cy() + pts[i][1]*s}
+	}
+	return pts, cell
+}
+
 // spriteScale is how much a blob sprite is scaled up to fill a cell of size s: whole
 // pixels where it can, so the pixel art stays crisp.
 func spriteScale(s float64) float64 {
@@ -104,6 +156,9 @@ func spriteScale(s float64) float64 {
 // blobPos is the centre and cell size of blob i, including its pop-in animation.
 func (g *Game) blobPos(L layout, i int) (x, y, s float64) {
 	slot := func(i int) (float64, float64) {
+		if L.circle != nil {
+			return L.circle[i][0], L.circle[i][1]
+		}
 		c, r := i%L.cols, i/L.cols
 		ox := L.grid.x + (L.grid.w-float64(L.cols)*L.cell)/2
 		oy := L.grid.y + (L.grid.h-float64(L.grows)*L.cell)/2
@@ -346,12 +401,21 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 		badge(dst, L.shop.x+L.shop.w-6*u, L.shop.y+4*u, u, g.t)
 	}
 
-	// top right: rebirth multiplier and sound
-	bevel(dst, L.chip, skDark, p)
-	icon(dst, "rebirth", L.chip.x+14*u, L.chip.cy(), 14*u)
-	say(dst, "x"+fmtNum(rebirthMult(g.st.Rebirths))+" REBIRTH", face(fSmall, 8*u), L.chip.x+26*u, L.chip.cy(), alLeft, colT, math.Round(u))
+	// rebirth multiplier, next to the gems
+	icon(dst, "rebirth", L.chip.x+8*u, L.chip.cy(), 14*u)
+	say(dst, "x"+fmtNum(rebirthMult(g.st.Rebirths)), face(fBig, 16*u), L.chip.x+19*u, L.chip.cy(), alLeft, rgb(0x8ef06a), math.Round(1.5*u))
+
+	// top right: buy amount, music and sound
+	bevel(dst, L.buy, skGreen, p)
+	say(dst, "BUY "+buyModes[g.st.BuyMode], face(fBig, 14*u), L.buy.cx(), L.buy.cy()-u, alCenter, colW, math.Round(1.5*u))
+	bevel(dst, L.music, skDark, p)
+	ic := "note"
+	if g.st.NoMusic {
+		ic = "nonote"
+	}
+	icon(dst, ic, L.music.cx(), L.music.cy(), 14*u)
 	bevel(dst, L.sound, skDark, p)
-	ic := "sound"
+	ic = "sound"
 	if !g.st.Sound {
 		ic = "mute"
 	}

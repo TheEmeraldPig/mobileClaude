@@ -11,15 +11,14 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
-//go:embed assets/PixelifySans.ttf
-var pixelifyTTF []byte
-
-//go:embed assets/Silkscreen-Regular.ttf
-var silkTTF []byte
+// Titan One: a chunky, rounded font that stays readable small on phones.
+//
+//go:embed assets/TitanOne-Regular.ttf
+var titanTTF []byte
 
 var (
-	pixelifySrc, silkSrc *text.GoTextFaceSource
-	faces                = map[[2]int]*text.GoTextFace{}
+	titanSrc *text.GoTextFaceSource
+	faces    = map[[2]int]*text.GoTextFace{}
 )
 
 // Palette, the same as Mote's UI: dark outline, violet body, light top-left edge,
@@ -48,29 +47,25 @@ var (
 
 func initFonts() {
 	var err error
-	if pixelifySrc, err = text.NewGoTextFaceSource(bytes.NewReader(pixelifyTTF)); err != nil {
-		panic(err)
-	}
-	if silkSrc, err = text.NewGoTextFaceSource(bytes.NewReader(silkTTF)); err != nil {
+	if titanSrc, err = text.NewGoTextFaceSource(bytes.NewReader(titanTTF)); err != nil {
 		panic(err)
 	}
 }
 
 const (
-	fBig   = 0 // Pixelify Sans
-	fSmall = 1 // Silkscreen
+	fBig   = 0 // headings and numbers
+	fSmall = 1 // labels: the same font, sized up a little so small text stays readable
 )
 
 func face(kind int, size float64) *text.GoTextFace {
+	if kind == fSmall {
+		size *= 1.3
+	}
 	k := [2]int{kind, int(math.Round(size))}
 	if f, ok := faces[k]; ok {
 		return f
 	}
-	src := pixelifySrc
-	if kind == fSmall {
-		src = silkSrc
-	}
-	f := &text.GoTextFace{Source: src, Size: float64(k[1])}
+	f := &text.GoTextFace{Source: titanSrc, Size: float64(k[1])}
 	faces[k] = f
 	return f
 }

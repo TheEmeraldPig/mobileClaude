@@ -30,3 +30,14 @@ func TestUpgradeCurves(t *testing.T) {
 		}
 	}
 }
+
+// Without luck, a plain blob mutates into something 1 time in 15.
+func TestMutationChance(t *testing.T) {
+	sum := 0.0
+	for r := 1; r < len(rarities); r++ {
+		sum += mutationChance(r)
+	}
+	if sum < 1.0/15-1e-9 || sum > 1.0/15+1e-9 {
+		t.Fatalf("chance of any mutation is 1/%.2f, want 1/15", 1/sum)
+	}
+}

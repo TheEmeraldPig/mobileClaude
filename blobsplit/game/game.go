@@ -97,6 +97,7 @@ func NewGame() *Game {
 		g.stars = append(g.stars, [3]float64{rand.Float64(), rand.Float64() * 0.55, rand.Float64() * 7})
 	}
 	g.hookInit()
+	g.updateMusic()
 	current = g
 	return g
 }
@@ -134,8 +135,9 @@ func (g *Game) boardValue() float64 {
 // copy of the parent, or with luck something rarer.
 func (g *Game) roll(min int) int {
 	l := g.luck()
+	x := rand.Float64()
 	for r := len(rarities) - 1; r > min; r-- {
-		if rand.Float64() < l/rarities[r].Odds {
+		if x -= l * mutationChance(r); x < 0 {
 			return r
 		}
 	}
@@ -240,47 +242,84 @@ func (g *Game) rebirth() {
 	g.save()
 }
 
-// card i: 0 blob value, 1 split speed, 2 capacity, 3 luck
+// Upgrade cards: 0 blob value, 1 split speed, 2 capacity, 3 luck.
+
+// upLv points at an upgrade's level in the save.
+func (g *Game) upLv(i int) *int {
+	return []*int{&g.st.ValueLv, &g.st.SpeedLv, &g.st.CapLv, &g.st.LuckLv}[i]
+}
+
+func upCost(i, l int) float64 {
+	return []func(int) float64{valueCost, speedCost, capCost, luckCost}[i](l)
+}
+
+func upMax(i int) int { return []int{1 << 30, maxSpeedLv, maxCapLv, maxLuckLv}[i] }
+
+// The buy amount button: x1, x5, x25 or as many as you can afford.
+var buyModes = []string{"x1", "x5", "x25", "MAX"}
+
+// buyPlan is how many levels of upgrade i the buy amount would buy now, and their
+// total cost. With MAX and nothing affordable it shows the price of one level.
+func (g *Game) buyPlan(i int) (n int, cost float64) {
+	lv, left := *g.upLv(i), upMax(i)-*g.upLv(i)
+	if g.st.BuyMode < 3 {
+		n = min([]int{1, 5, 25}[g.st.BuyMode], left)
+		for k := 0; k < n; k++ {
+			cost += upCost(i, lv+k)
+		}
+		return n, cost
+	}
+	for n < left && n < 1000 && cost+upCost(i, lv+n) <= g.st.Money {
+		cost += upCost(i, lv+n)
+		n++
+	}
+	if n == 0 && left > 0 {
+		return 1, upCost(i, lv)
+	}
+	return n, cost
+}
+
 func (g *Game) cardInfo(i int) (title, from, to string, cost float64, maxed bool) {
-	s := &g.st
+	lv := *g.upLv(i)
+	n, cost := g.buyPlan(i)
+	maxed = lv >= upMax(i)
+	var f func(l int) string
 	switch i {
 	case 0:
-		return "BLOB VALUE", "$" + fmtNum(g.blobValueAt(s.ValueLv)), "$" + fmtNum(g.blobValueAt(s.ValueLv+1)), valueCost(s.ValueLv), false
+		title = "BLOB VALUE"
+		f = func(l int) string { return "$" + fmtNum(g.blobValueAt(l)) }
 	case 1:
+		title = "SPLIT SPEED"
 		q := math.Pow(0.9, float64(g.gem("quick")))
-		f := func(l int) string { return trimZeros(sprintf1(baseCooldown(l)*q)) + " SEC" }
-		return "SPLIT SPEED", f(s.SpeedLv), f(s.SpeedLv + 1), speedCost(s.SpeedLv), s.SpeedLv >= maxSpeedLv
+		f = func(l int) string { return trimZeros(sprintf1(baseCooldown(l)*q)) + "s" }
 	case 2:
-		return "CAPACITY", fmtNum(float64(capOf(s.CapLv))) + " BLOBS", fmtNum(float64(capOf(s.CapLv + 1))), capCost(s.CapLv), s.CapLv >= maxCapLv
+		title = "CAPACITY"
+		f = func(l int) string { return fmtNum(float64(capOf(l))) }
 	default:
+		title = "LUCK"
 		m := 1 + 0.5*float64(g.gem("lucky"))
-		f := func(l int) string { return "x" + trimZeros(sprintf1(luckOf(l)*m)) }
-		return "LUCK", f(s.LuckLv), f(s.LuckLv + 1), luckCost(s.LuckLv), s.LuckLv >= maxLuckLv
+		f = func(l int) string { return "x" + trimZeros(sprintf1(luckOf(l)*m)) }
 	}
+	from, to = f(lv), f(lv+n)
+	if i == 2 {
+		from += " BLOBS"
+	}
+	return title, from, to, cost, maxed
 }
 
 func (g *Game) buyCard(i int, repeat bool) bool {
-	_, _, _, cost, maxed := g.cardInfo(i)
-	if maxed || g.st.Money < cost {
+	n, cost := g.buyPlan(i)
+	if *g.upLv(i) >= upMax(i) || n == 0 || g.st.Money < cost {
 		if !repeat {
 			g.play("deny")
 		}
 		return false
 	}
 	g.st.Money -= cost
-	switch i {
-	case 0:
-		g.st.ValueLv++
-	case 1:
-		g.st.SpeedLv++
-	case 2:
-		g.st.CapLv++
-	case 3:
-		g.st.LuckLv++
-	}
+	*g.upLv(i) += n
 	g.play("buy")
 	r := g.lay().cards[i]
-	for k := 0; k < 8; k++ {
+	for k := 0; k < 8+min(n, 25); k++ {
 		g.parts = append(g.parts, particle{x: r.x + rand.Float64()*r.w, y: r.y + r.h, vx: (rand.Float64() - 0.5) * 2 * g.u, vy: -(1 + rand.Float64()*2) * g.u, life: 0.5, size: 2 * g.u, c: colT, r: -1})
 	}
 	return true
@@ -318,7 +357,7 @@ func (g *Game) buyGem(i int) {
 }
 
 func (g *Game) float(s string, r rect, c color.RGBA) {
-	g.floats = append(g.floats, floater{s: s, x: r.cx(), y: r.y - 4*g.u, t: 0, c: c})
+	g.floats = append(g.floats, floater{s: s, x: r.cx(), y: r.y - 26*g.u, t: 0, c: c})
 }
 
 // ---- input ----
@@ -376,6 +415,13 @@ func (g *Game) tap(L layout, x, y float64) {
 		g.play("tap")
 	case L.sound.in(x, y):
 		g.st.Sound = !g.st.Sound
+		g.play("tap")
+	case L.music.in(x, y):
+		g.st.NoMusic = !g.st.NoMusic
+		g.updateMusic()
+		g.play("tap")
+	case L.buy.in(x, y):
+		g.st.BuyMode = (g.st.BuyMode + 1) % len(buyModes)
 		g.play("tap")
 	default:
 		for i, c := range L.cards {

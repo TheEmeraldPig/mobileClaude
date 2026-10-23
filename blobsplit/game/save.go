@@ -19,8 +19,10 @@ type State struct {
 	Auto     bool           `json:"auto"`
 	AutoSell bool           `json:"autoSell"`
 	Sound    bool           `json:"sound"`
-	Found    []int          `json:"found"` // blobs of each rarity ever made
-	Blobs    []int          `json:"blobs"` // rarities of the blobs on the board
+	NoMusic  bool           `json:"noMusic"`
+	BuyMode  int            `json:"buyMode"` // index into buyModes
+	Found    []int          `json:"found"`   // blobs of each rarity ever made
+	Blobs    []int          `json:"blobs"`   // rarities of the blobs on the board
 	Earned   float64        `json:"earned"`
 }
 

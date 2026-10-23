@@ -24,5 +24,5 @@
 
 - An idle split-and-sell game in Go + Ebitengine, landscape, made for phones. See `blobsplit/README.md`.
 - Balance (rarities, costs, rebirth) is in `game/econ.go`; new saved state goes in `State` in `game/save.go`.
-- UI reuses Mote's pixel style: `bevel()` boxes with skins in `game/ui.go`, Pixelify Sans and Silkscreen. Layout is in units where the screen is 360 tall (`lay()` in `game/draw.go`); check it at phone (800x360), tablet (1024x768) and PC sizes with the test hooks in `game/testhooks.go` under Xvfb.
+- UI reuses Mote's pixel style: `bevel()` boxes with skins in `game/ui.go`; all text is Titan One (the user disliked Pixelify Sans/Silkscreen here). Layout is in units where the screen is 360 tall (`lay()` in `game/draw.go`); check it at phone (800x360), tablet (1024x768) and PC sizes with the test hooks in `game/testhooks.go` under Xvfb.
 - Every push to `blobsplit/` builds `BlobSplit.apk` and `BlobSplit.aab` through `.github/workflows/blobsplit.yml` and releases them as `blobsplit-<n>` (never marked latest, because Mote's updaters read the latest release).

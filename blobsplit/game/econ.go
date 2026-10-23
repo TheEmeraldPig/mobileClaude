@@ -6,8 +6,9 @@ import (
 	"strings"
 )
 
-// Rarity is a kind of blob. Every new blob made by a split rolls one: the rarest kind
-// whose chance (luck / Odds) comes up wins, otherwise it is a plain blob.
+// Rarity is a kind of blob. Every new blob made by a split rolls one. Without luck the
+// chance of any mutation at all is 1 in mutationOdds; which one it is follows the
+// shown odds (they add up to about 1/15, and roll() scales them to exactly that).
 type Rarity struct {
 	Name  string
 	Odds  float64 // 1 in Odds
@@ -18,13 +19,24 @@ type Rarity struct {
 
 var rarities = []Rarity{
 	{"Blob", 1, 1, 0xe8414f, 0xffffff},
-	{"Gold", 100, 5, 0xf5c02c, 0xffd95a},
-	{"Shadow", 250, 12, 0x3b3550, 0xb9a8ff},
-	{"Frost", 600, 30, 0x6fd6f2, 0x9ff0ff},
-	{"Heart", 1500, 75, 0xff6fb5, 0xff9fd0},
-	{"Toxic", 4000, 200, 0x7be04a, 0xb6ff7a},
-	{"Rainbow", 12000, 700, 0xffffff, 0xffffff},
-	{"Cosmic", 50000, 3000, 0x1d1240, 0xd9c6ff},
+	{"Gold", 25, 3, 0xf5c02c, 0xffd95a},
+	{"Shadow", 60, 6, 0x3b3550, 0xb9a8ff},
+	{"Frost", 150, 15, 0x6fd6f2, 0x9ff0ff},
+	{"Heart", 400, 40, 0xff6fb5, 0xff9fd0},
+	{"Toxic", 1000, 100, 0x7be04a, 0xb6ff7a},
+	{"Rainbow", 3000, 300, 0xffffff, 0xffffff},
+	{"Cosmic", 10000, 1000, 0x1d1240, 0xd9c6ff},
+}
+
+const mutationOdds = 15
+
+// mutationChance is the real chance of rarity r (r >= 1) at luck x1.
+func mutationChance(r int) float64 {
+	sum := 0.0
+	for _, x := range rarities[1:] {
+		sum += 1 / x.Odds
+	}
+	return (1 / rarities[r].Odds) / sum / mutationOdds
 }
 
 // Upgrades bought with money. They reset on rebirth.
