@@ -84,8 +84,8 @@ BLOB_NOAUDIO=1 BLOB_DEMO=1 BLOB_SHOT=shot.png BLOB_SIZE=800x360 xvfb-run -a ./bs
 
 - `BLOB_SHOT=file.png` saves a screenshot after `BLOB_SHOT_AT` frames (default 90) and quits; screenshot runs never touch the save.
 - `BLOB_DEMO=1` starts with a late-game board; `BLOB_FRESH=1` starts a new game.
-- `BLOB_PANEL=tree|index|rebirth|market|blob|card|world|round` opens a menu (`BLOB_SEL=n` picks the biote or card); `BLOB_DO=split,split,sell,buy0,win` runs actions, one every 20 frames.
+- `BLOB_PANEL=tree|challenge|index|rebirth|blob|world` opens a screen (`BLOB_SEL=n` picks the biote or card); `BLOB_DO=split,split,sell,buy0,win` runs actions, one every 20 frames.
 - `BLOB_CLOCK=0.75` sets the time of day (0.25 midday, 0.75 midnight); `BLOB_EVENT=meteor` starts an event.
 - `BLOB_SIZE=WxH` sets the window size (800x360 is a phone in landscape).
 
-`go test ./...` (under `xvfb-run -a` on a headless Linux) checks number formatting, upgrade curves, the 1/15 mutation chance, stacking and inheriting, rounds, the market, the skill tree, rebirth, day/night and events, loading Blob Split saves, and updating before the screen size is known.
+`go test ./...` (under `xvfb-run -a` on a headless Linux) checks number formatting, upgrade curves, the 1/15 mutation chance, stacking and inheriting, floors and rooms, cards, the skill tree, rebirth, day/night and events, loading Blob Split saves, and updating before the screen size is known.
