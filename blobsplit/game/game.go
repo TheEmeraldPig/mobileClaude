@@ -9,6 +9,7 @@ import (
 	"image/color"
 	"math"
 	"math/rand"
+	"slices"
 	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -318,8 +319,12 @@ func (g *Game) winRound() {
 
 func (g *Game) rollOffers() {
 	g.st.Offers = nil
-	for len(g.st.Offers) < 3 {
-		g.st.Offers = append(g.st.Offers, g.randomCard())
+	for tries := 0; len(g.st.Offers) < 3; tries++ {
+		id := g.randomCard()
+		if tries < 50 && slices.Contains(g.st.Offers, id) {
+			continue // three different cards
+		}
+		g.st.Offers = append(g.st.Offers, id)
 	}
 }
 

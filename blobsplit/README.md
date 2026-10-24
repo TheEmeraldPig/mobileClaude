@@ -41,6 +41,10 @@ The save is `save.json` in the app's private storage on Android, or in the user 
 - `mobile/`: the Android entry point, bound into an .aar by `ebitenmobile`.
 - `android/`: the Android app project that wraps the .aar (package `com.theemeraldpig.blobsplit`, landscape, targets API 36).
 
+## Web version
+
+Biote also runs in a browser (Ebitengine compiles to WebAssembly), which is how it is published as a Claude artifact. `sh web/build.sh [out-dir]` (from `blobsplit/`) writes `index.html` (the loading page, `web/page.html`, with Go's `wasm_exec.js` inlined) and `biote-wasm.txt` (the game, gzipped and base64-encoded, so it fits the artifact's file size limit; the page unpacks it with `DecompressionStream`). Publish `index.html` with `biote-wasm.txt` beside it. In a browser the save goes to `localStorage` (`store_web.go`) instead of a file (`store_file.go`).
+
 ## Builds
 
 Every push that changes `blobsplit/` runs `.github/workflows/blobsplit.yml`, which publishes a GitHub release `biote-<number>` with:

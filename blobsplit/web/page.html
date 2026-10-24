@@ -1,0 +1,173 @@
+<title>Biote</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jersey+15&display=swap">
+<style>
+  /* One screen: the game canvas fills it; a pixel loading card sits on top until it starts.
+     A single dark look, like the game's night sky. */
+  :root {
+    --sky: #1b1036;
+    --deep: #0c0820;
+    --violet: #6b4fc8;
+    --light: #a58bff;
+    --shade: #3e2a85;
+    --gold: #ffc94a;
+    --ink: #1a0f2e;
+    --text: #f4efff;
+    --soft: #d8ccff;
+    --pixel: "Jersey 15", "Courier New", monospace;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--deep);
+    background-image: linear-gradient(var(--deep), var(--sky) 60%, #4a2160);
+    color: var(--text);
+    font-family: var(--pixel);
+    overflow: hidden;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  canvas { display: block; }
+  #cover {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 16px;
+    z-index: 5;
+  }
+  .card {
+    display: grid;
+    gap: 14px;
+    justify-items: center;
+    text-align: center;
+    width: min(420px, 100%);
+    padding: 22px 20px 20px;
+    background: var(--violet);
+    border: 3px solid var(--ink);
+    box-shadow: inset 3px 3px 0 var(--light), inset -3px -3px 0 var(--shade), 0 6px 0 var(--ink);
+  }
+  h1 {
+    margin: 0;
+    font-size: 64px;
+    line-height: 0.9;
+    font-weight: 400;
+    color: var(--text);
+    text-shadow: 3px 0 var(--ink), -3px 0 var(--ink), 0 3px var(--ink), 0 -3px var(--ink), 3px 5px var(--ink);
+    letter-spacing: 2px;
+  }
+  .tag { margin: 0; font-size: 22px; color: var(--soft); text-wrap: balance; }
+  .bar {
+    width: 100%;
+    height: 16px;
+    background: var(--ink);
+    border: 3px solid var(--ink);
+  }
+  .bar i { display: block; height: 100%; width: 0%; background: var(--gold); transition: width 0.2s; }
+  #status { margin: 0; font-size: 20px; color: var(--text); min-height: 1.2em; }
+  button {
+    font: inherit;
+    font-size: 30px;
+    padding: 8px 28px 10px;
+    color: var(--text);
+    background: #f0862a;
+    border: 3px solid var(--ink);
+    box-shadow: inset 3px 3px 0 #ffc56b, inset -3px -3px 0 #a8501a;
+    cursor: pointer;
+    text-shadow: 2px 0 var(--ink), -2px 0 var(--ink), 0 2px var(--ink), 0 -2px var(--ink);
+  }
+  button:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+  button:active { transform: translateY(2px); }
+  .hint { margin: 0; font-size: 18px; color: var(--soft); }
+  #rotate { display: none; }
+  @media (orientation: portrait) and (max-width: 700px) { #rotate { display: block; } }
+  @media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+
+<div id="cover">
+  <div class="card">
+    <h1>BIOTE</h1>
+    <p class="tag">Split your biotes, sell them, chase stacking mutations.</p>
+    <div class="bar" aria-hidden="true"><i id="fill"></i></div>
+    <p id="status" role="status">Loading the game...</p>
+    <button id="play" type="button" hidden>PLAY</button>
+    <p class="hint" id="rotate">Best played with your phone turned sideways.</p>
+    <p class="hint">Tap SPLIT, then SELL. Tap a biote to see its mutations.</p>
+  </div>
+</div>
+
+<script>
+/*WASM_EXEC*/
+</script>
+<script>
+(() => {
+  const fill = document.getElementById("fill");
+  const status = document.getElementById("status");
+  const play = document.getElementById("play");
+  const cover = document.getElementById("cover");
+  const say = (t) => { status.textContent = t; };
+  const progress = (k) => { fill.style.width = Math.round(k * 100) + "%"; };
+
+  // The game is Go compiled to WebAssembly, gzipped and base64-encoded in biote-wasm.txt.
+  async function gunzip(bytes) {
+    if (typeof DecompressionStream === "undefined") {
+      throw new Error("This browser can't unpack the game. Try a recent Chrome, Safari or Firefox.");
+    }
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  async function download() {
+    const res = await fetch("biote-wasm.txt");
+    if (!res.ok) throw new Error("Couldn't download the game (" + res.status + ").");
+    const total = Number(res.headers.get("content-length")) || 5498612;
+    const reader = res.body.getReader();
+    const parts = [];
+    let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value);
+      got += value.length;
+      progress(Math.min(0.9, (got / total) * 0.9));
+    }
+    const text = new TextDecoder().decode(await new Blob(parts).arrayBuffer());
+    const bin = atob(text.trim());
+    const gz = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) gz[i] = bin.charCodeAt(i);
+    say("Unpacking...");
+    return gunzip(gz);
+  }
+
+  let wasm = null;
+  download().then((w) => {
+    wasm = w;
+    progress(1);
+    say("Ready.");
+    play.hidden = false;
+    play.focus();
+  }).catch((e) => {
+    say(e.message || String(e));
+  });
+
+  // Starting from the button lets the browser play the game's sound.
+  play.addEventListener("click", async () => {
+    play.hidden = true;
+    say("Starting...");
+    try {
+      const go = new Go();
+      const { instance } = await WebAssembly.instantiate(wasm, go.importObject);
+      wasm = null;
+      cover.remove();
+      go.run(instance);
+    } catch (e) {
+      play.hidden = false;
+      say("The game couldn't start: " + (e.message || e));
+    }
+  });
+})();
+</script>

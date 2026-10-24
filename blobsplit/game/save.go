@@ -79,7 +79,7 @@ func loadState() State {
 	if os.Getenv("BLOB_FRESH") != "" {
 		return st
 	}
-	b, err := os.ReadFile(savePath())
+	b, err := readSave()
 	if err != nil {
 		return st
 	}
@@ -130,11 +130,7 @@ func (g *Game) save() {
 	if err != nil {
 		return
 	}
-	_ = os.MkdirAll(dataDir(), 0o755)
-	tmp := savePath() + ".tmp"
-	if os.WriteFile(tmp, b, 0o644) == nil {
-		_ = os.Rename(tmp, savePath())
-	}
+	writeSave(b)
 }
 
 var current *Game
