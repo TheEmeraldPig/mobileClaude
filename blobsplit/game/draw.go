@@ -17,9 +17,8 @@ type layout struct {
 	buy, music, sound    rect
 	shop, index, rebirth rect
 	world                rect
-	cards                [4]rect // three upgrades, then the round
-	round                rect
-	hand                 []rect // ability card slots
+	cards                [4]rect // three upgrades, then the challenge button
+	challenge            rect
 	split, sell          rect
 	auto, autosell       rect
 	grid                 rect
@@ -56,15 +55,7 @@ func (g *Game) lay() layout {
 	for i := range L.cards {
 		L.cards[i] = R(rightX, 44+float64(i)*68, rightW, 62)
 	}
-	L.round = L.cards[3]
-	// ability cards along the top
-	slots := g.cardSlots()
-	hx0, hx1 := 150.0, rightX-10
-	cw := math.Min(28, (hx1-hx0)/float64(slots)-4)
-	hx := (hx0+hx1)/2 - (float64(slots)*(cw+4)-4)/2
-	for i := 0; i < slots; i++ {
-		L.hand = append(L.hand, R(hx+float64(i)*(cw+4), 4, cw, 36))
-	}
+	L.challenge = L.cards[3]
 	cx0, cx1 := 10+leftW+8, rightX-8
 	bw := math.Min(170, (cx1-cx0-12)/2)
 	bx := (cx0+cx1)/2 - bw - 6
@@ -198,8 +189,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if g.W < 1 || g.H < 1 {
 		return
 	}
-	if g.panel == "tree" {
-		g.drawTree(screen) // its own full screen
+	if g.panel == "tree" || g.panel == "challenge" {
+		if g.panel == "tree" { // their own full screens
+			g.drawTree(screen)
+		} else {
+			g.drawChallenge(screen)
+		}
+		g.drawBanner(screen)
+		for _, f := range g.floats {
+			a := math.Min(1, 1.6*(1-f.t/1.3))
+			say(screen, f.s, face(fBig, 22*g.u), f.x, f.y-f.t*34*g.u, alCenter, color.RGBA{uint8(float64(f.c.R) * a), uint8(float64(f.c.G) * a), uint8(float64(f.c.B) * a), uint8(255 * a)}, math.Round(2*g.u*a))
+		}
 		g.hookDraw(screen)
 		return
 	}
@@ -402,18 +402,6 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	}
 	g.drawWorldChip(dst, L.world, p)
 
-	// ability cards
-	for i, r := range L.hand {
-		if i < len(g.st.Cards) {
-			if c := cardByID(g.st.Cards[i]); c != nil {
-				g.drawCardFace(dst, r, c, math.Max(1, p-1), false)
-				continue
-			}
-		}
-		fill(dst, r.x, r.y, r.w, r.h, color.NRGBA{10, 5, 25, 90})
-		vector.StrokeRect(dst, float32(r.x+u), float32(r.y+u), float32(r.w-2*u), float32(r.h-2*u), float32(math.Max(1, u)), color.NRGBA{200, 180, 255, 70}, false)
-	}
-
 	// top right: buy amount, music and sound
 	bevel(dst, L.buy, skGreen, p)
 	say(dst, "BUY "+buyModes[g.st.BuyMode], face(fBig, 14*u), L.buy.cx(), L.buy.cy()-u, alCenter, colW, math.Round(1.5*u))
@@ -452,7 +440,7 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 			say(dst, from+" > "+to, face(fSmall, 9*u), r.x+9*u, r.y+40*u, alLeft, colW, math.Round(u))
 		}
 	}
-	g.drawRoundCard(dst, L.round, p)
+	g.drawChallengeButton(dst, L.challenge, p)
 
 	// split, auto and sell
 	n, c := len(g.blobs), g.capacity()
@@ -503,37 +491,40 @@ func (g *Game) drawToggle(dst *ebiten.Image, r rect, label string, owned, on boo
 	}
 }
 
-// drawRoundCard shows the current round: its name, the target, sells left.
-func (g *Game) drawRoundCard(dst *ebiten.Image, r rect, p float64) {
+// drawChallengeButton opens the CHALLENGE screen. It shows the floor and the rooms
+// done, but not the requirement: that's in the screen.
+func (g *Game) drawChallengeButton(dst *ebiten.Image, r rect, p float64) {
 	u, s := g.u, &g.st
+	boss := s.Room == roomsPerFloor-1
 	sk := skin{rgb(0x3a2a6a), rgb(0x6a4fc8), rgb(0x1f1440)}
-	if s.Round == 2 {
-		sk = skin{rgb(0x6a1f3a), rgb(0xc84f6a), rgb(0x3a1020)}
+	if boss {
+		glow := 0.5 + 0.5*math.Sin(g.t*4)
+		sk = skin{mix(rgb(0x6a1f3a), rgb(0x9a2f4a), glow), rgb(0xc84f6a), rgb(0x3a1020)}
 	}
 	bevel(dst, r, sk, p)
-	title := roundNames[s.Round]
-	say(dst, title, face(fSmall, 8*u), r.x+9*u, r.y+13*u, alLeft, colT, math.Round(u))
-	say(dst, "ANTE "+itoa(s.Ante), face(fSmall, 8*u), r.x+r.w-9*u, r.y+13*u, alRight, colW, math.Round(u))
-	target := roundTarget(s.Ante, s.Round)
-	if !s.Active {
-		// waiting for you to start it
-		say(dst, "EARN $"+fmtNum(target)+" IN "+itoa(g.sellsAllowedFor(s.Round))+" SELLS", face(fSmall, 7*u), r.x+9*u, r.y+29*u, alLeft, colW, math.Round(u))
-		btn := rect{r.x + 9*u, r.y + 38*u, r.w - 18*u, 18 * u}
-		glow := 0.5 + 0.5*math.Sin(g.t*4)
-		bevel(dst, btn, skin{mix(skGreen.b, skGreen.l, glow*0.4), skGreen.l, skGreen.s}, math.Max(1, p-1))
-		say(dst, "TAP TO START", face(fSmall, 7*u), btn.cx(), btn.cy(), alCenter, colW, math.Round(u))
-		return
+	say(dst, "CHALLENGE", face(fSmall, 8*u), r.x+9*u, r.y+13*u, alLeft, colT, math.Round(u))
+	say(dst, "FLOOR "+itoa(s.Floor), face(fSmall, 8*u), r.x+r.w-9*u, r.y+13*u, alRight, colW, math.Round(u))
+	pw := (r.w - 18*u - 4*4*u) / roomsPerFloor
+	for i := 0; i < roomsPerFloor; i++ {
+		c := color.RGBA{60, 50, 100, 255}
+		switch {
+		case i < s.Room:
+			c = colG
+		case i == s.Room:
+			c = colT
+		}
+		if i == roomsPerFloor-1 && i != s.Room {
+			c = rgb(0xc84f6a)
+		}
+		x := r.x + 9*u + float64(i)*(pw+4*u)
+		fill(dst, x, r.y+26*u, pw, 12*u, colO)
+		fill(dst, x+u, r.y+27*u, pw-2*u, 10*u, c)
 	}
-	say(dst, "$"+fmtNum(s.RoundEarned)+" / $"+fmtNum(target), face(fSmall, 8*u), r.x+9*u, r.y+30*u, alLeft, colW, math.Round(u))
-	bar := rect{r.x + 9*u, r.y + 40*u, r.w - 18*u, 6 * u}
-	fill(dst, bar.x, bar.y, bar.w, bar.h, colO)
-	fill(dst, bar.x+u, bar.y+u, (bar.w-2*u)*math.Min(1, s.RoundEarned/target), bar.h-2*u, colG)
-	left := g.sellsAllowed() - s.RoundSells
-	sub := fmt.Sprintf("%d SELLS LEFT", left)
-	if b := g.boss(); b != nil {
-		sub = b.name + " - " + sub
+	sub := fmt.Sprintf("ROOM %d/%d  -  TAP TO SEE", s.Room+1, roomsPerFloor)
+	if boss {
+		sub = "BOSS ROOM  -  TAP TO SEE"
 	}
-	say(dst, sub, face(fSmall, 6*u), r.x+9*u, r.y+53*u, alLeft, rgb(0xd8ccff), math.Round(u))
+	say(dst, sub, face(fSmall, 6*u), r.x+9*u, r.y+51*u, alLeft, rgb(0xd8ccff), math.Round(u))
 }
 
 // drawWorldChip shows day or night, and the current event.

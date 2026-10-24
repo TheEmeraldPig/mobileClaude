@@ -21,11 +21,13 @@ type mods struct {
 	inherit bool          // children copy their parent's mutations
 	genes   float64       // multiplies every mutation's value multiplier
 	plain   float64       // multiplies the value of biotes with no mutations
+	target  float64       // multiplies room money targets
+	dnaMul  int           // multiplies DNA from rooms
 	notes   []string      // what is in effect, for the world panel
 }
 
 func newMods() mods {
-	m := mods{luck: 1, value: 1, cool: 1, hybrid: 1, rolls: 1, inherit: true, genes: 1, plain: 1}
+	m := mods{luck: 1, value: 1, cool: 1, hybrid: 1, rolls: 1, inherit: true, genes: 1, plain: 1, target: 1, dnaMul: 1}
 	for i := range m.chance {
 		m.chance[i], m.worth[i] = 1, 1
 	}
@@ -57,7 +59,7 @@ var cards = []cardDef{
 	{"clover", "Clover", "+30% luck", 0, 0, func(g *Game, m *mods) { m.luck *= 1.3 }},
 	{"fert", "Fertilizer", "-10% split time", 0, 0, func(g *Game, m *mods) { m.cool *= 0.9 }},
 	{"purse", "Coin Purse", "+25% sale value", 0, mGold, func(g *Game, m *mods) { m.value *= 1.25 }},
-	{"harvest", "Extra Harvest", "+1 sell each round", 0, 0, func(g *Game, m *mods) { m.sells++ }},
+	{"harvest", "Extra Harvest", "+1 sell in every room", 0, 0, func(g *Game, m *mods) { m.sells++ }},
 	{"tooth", "Gold Tooth", "Gold x2 chance", 0, mGold, func(g *Game, m *mods) { m.chance[mGold] *= 2 }},
 	{"sunscreen", "Sunscreen", "+50% value by day", 0, 0, func(g *Game, m *mods) {
 		if !g.night() {
@@ -115,46 +117,6 @@ func (g *Game) hasCard(id string) bool {
 	return false
 }
 
-// randomCard picks a card: first a rarity by weight (the Better Market node shifts
-// the odds to rarer), then a card of that rarity.
-func (g *Game) randomCard() string {
-	w := make([]float64, len(cardRarities))
-	total := 0.0
-	for i, r := range cardRarities {
-		w[i] = r.odds
-		if g.has("market") && i > 0 {
-			w[i] *= 2
-		}
-		total += w[i]
-	}
-	x := rand.Float64() * total
-	rar := 0
-	for i := range w {
-		if x -= w[i]; x < 0 {
-			rar = i
-			break
-		}
-	}
-	var pool []string
-	for _, c := range cards {
-		if c.rar == rar {
-			pool = append(pool, c.id)
-		}
-	}
-	return pool[rand.Intn(len(pool))]
-}
-
-func (g *Game) cardSlots() int {
-	n := 3
-	if g.has("slot1") {
-		n++
-	}
-	if g.has("slot2") {
-		n++
-	}
-	return n
-}
-
 // ---- skill tree: bought with points from rebirths, kept forever ----
 
 // Skills sit on a hexagon grid (axial coordinates q, r) in a flower around Origin:
@@ -172,7 +134,7 @@ var branches = []struct {
 	col  uint32
 }{
 	{"LUCK", 0x5fd86a}, {"NATURE", 0xb07cff}, {"SPEED", 0x5fd0ff},
-	{"GENES", 0xff7ab8}, {"CARDS", 0x6a8cff}, {"WEALTH", 0xffc94a},
+	{"GENES", 0xff7ab8}, {"CHALLENGE", 0x6a8cff}, {"WEALTH", 0xffc94a},
 }
 
 var tree = []node{
@@ -194,18 +156,18 @@ var tree = []node{
 	{"autosell", "Auto Sell", "Sells when full (AUTO on SELL)", 3, "quick2", -4, 0, 2},
 	// genes: down and left
 	{"genes1", "Strong Genes", "Mutation multipliers x1.25", 1, "origin", -1, 1, 3},
-	{"bank", "DNA Bank", "+1 DNA for every round cleared", 2, "genes1", -2, 2, 3},
+	{"bank", "DNA Bank", "+1 DNA for every room cleared", 2, "genes1", -2, 2, 3},
 	{"pure", "Purebred", "Plain biotes worth x3", 2, "bank", -3, 2, 3},
 	{"genes2", "Dominant Genes", "Mutation multipliers x1.5", 4, "pure", -4, 2, 3},
 	// cards: down and right
-	{"slot1", "Card Slot", "+1 card slot", 1, "origin", 0, 1, 4},
-	{"market", "Better Market", "Rarer cards in the market", 2, "slot1", 0, 2, 4},
-	{"slot2", "Card Slot II", "+1 card slot", 3, "market", 1, 2, 4},
-	{"reroll", "Free Reroll", "First market reroll is free", 2, "slot2", 2, 2, 4},
+	{"slot1", "Climber", "Room money targets -15%", 1, "origin", 0, 1, 4},
+	{"market", "Lucky Draw", "Rarer cards from floors", 2, "slot1", 0, 2, 4},
+	{"slot2", "Endurance", "+1 sell in every room", 3, "market", 1, 2, 4},
+	{"reroll", "Bounty", "x2 DNA from rooms", 2, "slot2", 2, 2, 4},
 	// wealth: right
 	{"value1", "Value I", "x1.5 biote value", 1, "origin", 1, 0, 5},
 	{"value2", "Value II", "x2 biote value", 2, "value1", 2, 0, 5},
-	{"harvest", "Harvest", "+1 sell each round", 2, "value2", 3, 0, 5},
+	{"harvest", "Harvest", "+1 sell in every room", 2, "value2", 3, 0, 5},
 	{"value3", "Value III", "x3 biote value", 4, "harvest", 4, 0, 5},
 }
 
@@ -331,9 +293,9 @@ var bosses = []bossDef{
 	{"mirror", "The Mirror", "Children don't inherit mutations"},
 }
 
-// boss is the twist in play now (nil outside an Outbreak round).
+// boss is the twist in play now: only in a floor's last room.
 func (g *Game) boss() *bossDef {
-	if !g.st.Active || g.st.Round != 2 {
+	if g.st.Room != roomsPerFloor-1 {
 		return nil
 	}
 	return &bosses[g.st.Boss%len(bosses)]
@@ -382,6 +344,15 @@ func (g *Game) computeMods() mods {
 	}
 	if g.has("pure") {
 		m.plain *= 3
+	}
+	if g.has("slot1") {
+		m.target *= 0.85
+	}
+	if g.has("slot2") {
+		m.sells++
+	}
+	if g.has("reroll") {
+		m.dnaMul = 2
 	}
 	// cards
 	for _, id := range g.st.Cards {

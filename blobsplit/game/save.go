@@ -27,20 +27,17 @@ type State struct {
 	Earned   float64 `json:"earned"`
 
 	Tree  map[string]bool `json:"tree"`  // skill tree nodes unlocked
-	Cards []string        `json:"cards"` // ability cards held
+	Cards []string        `json:"cards"` // ability cards unlocked (all active)
 
-	// rounds
-	Ante        int      `json:"ante"`
-	Round       int      `json:"round"`  // 0 Petri, 1 Colony, 2 Outbreak
-	Active      bool     `json:"active"` // a round is running (they start when you choose)
-	RoundEarned float64  `json:"roundEarned"`
-	RoundSells  int      `json:"roundSells"`
-	Boss        int      `json:"boss"`
-	RunBosses   int      `json:"runBosses"` // Outbreaks beaten since the last rebirth
-	Offers      []string `json:"offers"`    // cards in the market
-	Market      bool     `json:"market"`    // the market is open
-	MarketMsg   string   `json:"marketMsg"`
-	Rerolled    bool     `json:"rerolled"`
+	// the challenge: floors of five rooms
+	Floor      int     `json:"floor"`
+	Room       int     `json:"room"` // 0-4; 4 is the boss
+	Boss       int     `json:"boss"`
+	RoomEarned float64 `json:"roomEarned"`
+	RoomBest   float64 `json:"roomBest"` // best single sale, or most mutated biotes sold
+	RoomSells  int     `json:"roomSells"`
+	RunFloors  int     `json:"runFloors"` // floors cleared since the last rebirth
+	BestFloor  int     `json:"bestFloor"` // most floors cleared ever
 
 	// day, night and events
 	Clock     float64 `json:"clock"`
@@ -53,12 +50,12 @@ type State struct {
 	OldGemLv map[string]int `json:"gemLv,omitempty"`
 }
 
-const stateVer = 2
+const stateVer = 3
 
 func newState() State {
 	return State{
 		Ver: stateVer, Sound: true, Found: make([]int, nMut), Board: []int{0},
-		Tree: map[string]bool{}, Ante: 1, Boss: rand.Intn(len(bosses)),
+		Tree: map[string]bool{}, Floor: 1, Boss: rand.Intn(len(bosses)),
 		Clock: dayLen * 0.05, NextEvent: 90,
 	}
 }
@@ -113,8 +110,13 @@ func loadState() State {
 	if len(st.Board) == 0 {
 		st.Board = []int{0}
 	}
-	if st.Ante < 1 {
-		st.Ante = 1
+	if st.Ver < 3 {
+		// rounds and the card market became floors: cards you had stay unlocked
+		st.Floor, st.Room = 1, 0
+		st.Ver = stateVer
+	}
+	if st.Floor < 1 {
+		st.Floor = 1
 	}
 	return st
 }

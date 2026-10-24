@@ -45,7 +45,7 @@ func TestChildInherits(t *testing.T) {
 			t.Fatalf("child %b lost parent %b's mutations", c, p)
 		}
 	}
-	g.st.Round, g.st.Boss, g.st.Active = 2, 4, true // The Mirror
+	g.st.Room, g.st.Boss = roomsPerFloor-1, 4 // the boss room, The Mirror
 	g.m = g.computeMods()
 	lost := false
 	for i := 0; i < 200; i++ {
@@ -58,53 +58,56 @@ func TestChildInherits(t *testing.T) {
 	}
 }
 
-func TestRounds(t *testing.T) {
+// The challenge: rooms clear and move on; failing goes back to room 1; the boss
+// room ends the floor; every 10th floor past your best unlocks a card.
+func TestFloors(t *testing.T) {
 	g := testGame(t)
 	s := &g.st
-	// between rounds, sales don't count
-	g.roundSale(roundTarget(1, 0) * 10)
-	if s.Round != 0 || s.Market {
-		t.Fatal("a sale with no round running should not clear it")
+	clear := func() {
+		r := g.roomReq()
+		switch r.kind {
+		case reqEarn, reqSingle:
+			g.roomSale(r.target, 0)
+		case reqMutants:
+			g.roomSale(0, r.count)
+		case reqGain:
+			g.gained(r.mut)
+		}
 	}
-	// failing: run out of sells
-	g.startRound()
-	for i := 0; i < g.sellsAllowed(); i++ {
-		g.roundSale(1)
+	// clear rooms 1 and 2, then fail room 3: back to room 1, DNA kept
+	clear()
+	clear()
+	if s.Room != 2 || s.Gems == 0 {
+		t.Fatalf("after two rooms: room %d DNA %d", s.Room, s.Gems)
 	}
-	if s.RoundSells != 0 || s.RoundEarned != 0 || s.Round != 0 || s.Active {
-		t.Fatalf("a failed round should start over: %+v", s.RoundSells)
+	dna := s.Gems
+	r := g.roomReq()
+	for i := 0; i < r.sells; i++ {
+		g.roomSale(0, 0)
 	}
-	// winning Petri opens the market and pays DNA
-	g.startRound()
-	g.roundSale(roundTarget(1, 0))
-	if s.Round != 1 || !s.Market || s.Gems != roundReward(0) || len(s.Offers) != 3 {
-		t.Fatalf("after Petri: round %d market %v gems %d", s.Round, s.Market, s.Gems)
+	if s.Room != 0 || s.Floor != 1 || s.Gems != dna || s.RoomSells != 0 {
+		t.Fatalf("a failed room should go back to room 1 of the floor: room %d floor %d", s.Room, s.Floor)
 	}
-	g.closeMarket()
-	if s.Active {
-		t.Fatal("the next round should wait to be started")
+	// clear ten whole floors: the tenth unlocks a card
+	for f := 0; f < 10; f++ {
+		for room := 0; room < roomsPerFloor; room++ {
+			g.m = g.computeMods()
+			clear()
+		}
 	}
-	g.startRound()
-	g.roundSale(roundTarget(1, 1))
-	g.closeMarket()
-	// the Outbreak gives a card and moves to the next ante
-	g.startRound()
-	g.m = g.computeMods()
-	g.roundSale(roundTarget(1, 2))
-	if s.Ante != 2 || s.Round != 0 || len(s.Cards) != 1 || s.RunBosses != 1 {
-		t.Fatalf("after the Outbreak: ante %d round %d cards %v", s.Ante, s.Round, s.Cards)
+	if s.Floor != 11 || s.BestFloor != 10 || s.RunFloors != 10 || len(s.Cards) != 1 {
+		t.Fatalf("after ten floors: floor %d best %d cards %v", s.Floor, s.BestFloor, s.Cards)
+	}
+	// the requirement for a room doesn't change between looks
+	if g.reqFor(5, 2) != g.reqFor(5, 2) {
+		t.Fatal("room requirements should be fixed")
 	}
 }
 
-func TestMarketAndTree(t *testing.T) {
+func TestCardsAndTree(t *testing.T) {
 	g := testGame(t)
 	s := &g.st
-	s.Gems = 100
-	s.Offers = []string{"clover", "midas", "harvest"}
-	g.buyOffer(0)
-	if len(s.Cards) != 1 || s.Gems != 100-cardRarities[0].price || s.Offers[0] != "" {
-		t.Fatalf("buying: %v %d", s.Cards, s.Gems)
-	}
+	s.Cards = []string{"clover"}
 	g.m = g.computeMods()
 	if g.m.luck != 1.3 {
 		t.Fatalf("clover luck %v", g.m.luck)
@@ -132,15 +135,15 @@ func TestMarketAndTree(t *testing.T) {
 	}
 }
 
-// Rebirth pays a point plus one per Outbreak beaten, and keeps cards and skills.
+// Rebirth pays a point plus one per floor cleared, and keeps cards and skills.
 func TestRebirth(t *testing.T) {
 	g := testGame(t)
 	s := &g.st
-	s.Money, s.RunBosses, s.Cards, s.Ante = rebirthReq(0), 2, []string{"midas"}, 3
+	s.Money, s.RunFloors, s.Cards, s.Floor = rebirthReq(0), 2, []string{"midas"}, 3
 	s.Tree["origin"] = true
 	g.rebirth()
-	if s.Points != 3 || s.Rebirths != 1 || s.Ante != 1 || len(s.Cards) != 1 || !g.has("origin") {
-		t.Fatalf("rebirth: points %d ante %d cards %v", s.Points, s.Ante, s.Cards)
+	if s.Points != 3 || s.Rebirths != 1 || s.Floor != 1 || len(s.Cards) != 1 || !g.has("origin") {
+		t.Fatalf("rebirth: points %d floor %d cards %v", s.Points, s.Floor, s.Cards)
 	}
 }
 

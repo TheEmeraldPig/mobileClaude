@@ -13,7 +13,7 @@ import (
 //
 //	BLOB_SHOT=out.png   save a screenshot after BLOB_SHOT_AT frames (default 90) and quit
 //	BLOB_DEMO=1         start with a late-game board: money, gems, upgrades and rare blobs
-//	BLOB_PANEL=tree     open a panel: tree, index, rebirth, market, blob, card, world, round
+//	BLOB_PANEL=tree     open a screen: tree, challenge, index, rebirth, blob, world
 //	BLOB_CLOCK=0.75     time of day (0.25 midday, 0.75 midnight); BLOB_EVENT=meteor starts an event
 //	BLOB_DO=split,sell  actions run one every 20 frames: split, sell, buy0-2, rebirth, mode, win
 //	BLOB_SIZE=1280x720  window size;  BLOB_FRESH=1 ignores the save;  BLOB_NOAUDIO=1
@@ -59,10 +59,8 @@ func (g *Game) hookInit() {
 	s.ValueLv, s.SpeedLv, s.CapLv = 60, maxSpeedLv, maxCapLv
 	s.Tree = map[string]bool{"origin": true, "quick1": true, "auto": true, "luck1": true, "slot1": true}
 	s.Cards = []string{"clover", "shade", "jackpot", "prism"}
-	s.Ante, s.Round, s.RoundEarned, s.RoundSells = 3, 1, 2.1e4, 2
+	s.Floor, s.Room, s.BestFloor, s.RunFloors, s.RoomEarned, s.RoomSells = 13, 1, 12, 2, 2.1e4, 1
 	s.Found = []int{900, 12, 4, 2, 1, 0, 0, 0}
-	s.Offers = []string{"midas", "frostbite", "harvest"}
-	s.MarketMsg = "COLONY CLEARED!  +3 DNA"
 	g.blobs = nil
 	for i := 0; i < 64; i++ {
 		m := 0
@@ -95,7 +93,7 @@ func (g *Game) hookUpdate() {
 		case a == "rebirth":
 			g.rebirth()
 		case a == "win":
-			g.winRound()
+			g.clearRoom()
 		case a == "mode":
 			g.st.BuyMode = (g.st.BuyMode + 1) % len(buyModes)
 		case strings.HasPrefix(a, "buy"):

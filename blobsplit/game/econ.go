@@ -106,22 +106,13 @@ func growCost(base, a, b float64, l int) float64 {
 	return math.Round(base*math.Exp(a*x+b*x*x) + x)
 }
 
-// Rebirth: needs money, resets the run (money, upgrades, rounds) and doubles biote
-// value for good. It pays skill points: one, plus one for every Outbreak beaten.
+// Rebirth: needs money, resets the run (money, upgrades, floor) and doubles biote
+// value for good. It pays skill points: one, plus one for every floor cleared.
 func rebirthReq(r int) float64     { return 25000 * math.Pow(10, float64(r)) }
 func rebirthMult(r int) float64    { return math.Pow(2, float64(r)) }
-func rebirthPoints(bosses int) int { return 1 + bosses }
+func rebirthPoints(floors int) int { return 1 + floors }
 
-// Rounds, three per ante, like Balatro's blinds: earn the target in a limited
-// number of sells. The third is a boss with a twist.
-var roundNames = []string{"PETRI", "COLONY", "OUTBREAK"}
-
-func roundTarget(ante, round int) float64 {
-	return 30 * math.Pow(6, float64(ante-1)) * []float64{1, 2, 3.5}[round]
-}
-
-func roundReward(round int) int { return []int{2, 3, 5}[round] }
-
+// Sells you get in most rooms (see floors.go).
 const baseSells = 4
 
 var suffixes = []string{"", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"}
