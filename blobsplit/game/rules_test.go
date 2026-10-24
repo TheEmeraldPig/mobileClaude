@@ -45,7 +45,7 @@ func TestChildInherits(t *testing.T) {
 			t.Fatalf("child %b lost parent %b's mutations", c, p)
 		}
 	}
-	g.st.Round, g.st.Boss = 2, 4 // The Mirror
+	g.st.Round, g.st.Boss, g.st.Active = 2, 4, true // The Mirror
 	g.m = g.computeMods()
 	lost := false
 	for i := 0; i < 200; i++ {
@@ -61,22 +61,34 @@ func TestChildInherits(t *testing.T) {
 func TestRounds(t *testing.T) {
 	g := testGame(t)
 	s := &g.st
+	// between rounds, sales don't count
+	g.roundSale(roundTarget(1, 0) * 10)
+	if s.Round != 0 || s.Market {
+		t.Fatal("a sale with no round running should not clear it")
+	}
 	// failing: run out of sells
+	g.startRound()
 	for i := 0; i < g.sellsAllowed(); i++ {
 		g.roundSale(1)
 	}
-	if s.RoundSells != 0 || s.RoundEarned != 0 || s.Round != 0 {
+	if s.RoundSells != 0 || s.RoundEarned != 0 || s.Round != 0 || s.Active {
 		t.Fatalf("a failed round should start over: %+v", s.RoundSells)
 	}
 	// winning Petri opens the market and pays DNA
+	g.startRound()
 	g.roundSale(roundTarget(1, 0))
 	if s.Round != 1 || !s.Market || s.Gems != roundReward(0) || len(s.Offers) != 3 {
 		t.Fatalf("after Petri: round %d market %v gems %d", s.Round, s.Market, s.Gems)
 	}
 	g.closeMarket()
+	if s.Active {
+		t.Fatal("the next round should wait to be started")
+	}
+	g.startRound()
 	g.roundSale(roundTarget(1, 1))
 	g.closeMarket()
 	// the Outbreak gives a card and moves to the next ante
+	g.startRound()
 	g.m = g.computeMods()
 	g.roundSale(roundTarget(1, 2))
 	if s.Ante != 2 || s.Round != 0 || len(s.Cards) != 1 || s.RunBosses != 1 {
@@ -167,5 +179,25 @@ func TestWorldMods(t *testing.T) {
 	g.m = g.computeMods()
 	if g.gainChance(mFrost) != 0 {
 		t.Fatal("heatwave should stop frost")
+	}
+}
+
+// Every skill sits on its own hexagon, right next to the skill it needs.
+func TestTreeHexes(t *testing.T) {
+	seen := map[[2]int]string{}
+	for _, n := range tree {
+		k := [2]int{n.q, n.r}
+		if o, ok := seen[k]; ok {
+			t.Fatalf("%s and %s share a hexagon", n.id, o)
+		}
+		seen[k] = n.id
+		if n.req == "" {
+			continue
+		}
+		p := nodeByID(n.req)
+		dq, dr := n.q-p.q, n.r-p.r
+		if !((dq == 1 && dr == 0) || (dq == -1 && dr == 0) || (dq == 0 && dr == 1) || (dq == 0 && dr == -1) || (dq == 1 && dr == -1) || (dq == -1 && dr == 1)) {
+			t.Fatalf("%s is not next to %s", n.id, n.req)
+		}
 	}
 }

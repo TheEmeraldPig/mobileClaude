@@ -62,6 +62,7 @@ func initSprites() {
 	for name, rows := range iconArt {
 		icons[name] = ebiten.NewImageFromImage(pixelArt(rows))
 	}
+	icons["dna"] = ebiten.NewImageFromImage(dnaArt())
 }
 
 // blobSprite draws a round blob with googly eyes, shaded like the UI: light top-left
@@ -322,6 +323,55 @@ func pixelArt(rows []string) *image.RGBA {
 		for x, ch := range row {
 			if c, ok := iconPal[ch]; ok {
 				img.SetRGBA(x, y, c)
+			}
+		}
+	}
+	return img
+}
+
+// dnaArt is the DNA icon: a double helix, two strands (cyan and pink) twisting round
+// each other with gold base-pair rungs between them, the strand in front drawn last.
+func dnaArt() *image.RGBA {
+	const w, h = 11, 18
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	strand := func(y int, shift float64) (x int, front bool) {
+		a := float64(y)*math.Pi/7 + shift
+		return int(math.Round(5 + 3.6*math.Sin(a))), math.Cos(a) > 0
+	}
+	cols := []color.RGBA{rgb(0x5fe8ff), rgb(0xff6fb5)}
+	dark := []color.RGBA{rgb(0x2a9fd6), rgb(0xc8407a)}
+	// rungs first, between the strands
+	for y := 1; y < h-1; y += 2 {
+		x0, _ := strand(y, 0)
+		x1, _ := strand(y, math.Pi)
+		if x0 > x1 {
+			x0, x1 = x1, x0
+		}
+		for x := x0 + 1; x < x1; x++ {
+			img.SetRGBA(x, y, rgb(0xffc94a))
+		}
+	}
+	// back halves, then front halves, each with a dark outline
+	for pass := 0; pass < 2; pass++ {
+		for s := 0; s < 2; s++ {
+			for y := 0; y < h; y++ {
+				x, front := strand(y, float64(s)*math.Pi)
+				if front != (pass == 1) {
+					continue
+				}
+				c := cols[s]
+				if !front {
+					c = dark[s]
+				}
+				for _, d := range [][2]int{{-1, 0}, {2, 0}} {
+					if xx := x + d[0]; xx >= 0 && xx < w && img.RGBAAt(xx, y).A == 0 {
+						img.SetRGBA(xx, y, outline)
+					}
+				}
+				img.SetRGBA(x, y, c)
+				if x+1 < w {
+					img.SetRGBA(x+1, y, c)
+				}
 			}
 		}
 	}

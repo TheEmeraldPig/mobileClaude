@@ -19,11 +19,13 @@ type mods struct {
 	hybrid  float64       // value multiplier for biotes with 2+ mutations
 	rolls   int           // times each new biote rolls for mutations
 	inherit bool          // children copy their parent's mutations
+	genes   float64       // multiplies every mutation's value multiplier
+	plain   float64       // multiplies the value of biotes with no mutations
 	notes   []string      // what is in effect, for the world panel
 }
 
 func newMods() mods {
-	m := mods{luck: 1, value: 1, cool: 1, hybrid: 1, rolls: 1, inherit: true}
+	m := mods{luck: 1, value: 1, cool: 1, hybrid: 1, rolls: 1, inherit: true, genes: 1, plain: 1}
 	for i := range m.chance {
 		m.chance[i], m.worth[i] = 1, 1
 	}
@@ -155,35 +157,56 @@ func (g *Game) cardSlots() int {
 
 // ---- skill tree: bought with points from rebirths, kept forever ----
 
+// Skills sit on a hexagon grid (axial coordinates q, r) in a flower around Origin:
+// six branches, one per direction, each bending outwards after two steps.
 type node struct {
 	id, name, desc string
 	cost           int
 	req            string
-	col, row       int
+	q, r           int
+	branch         int // index into branches; -1 for Origin
+}
+
+var branches = []struct {
+	name string
+	col  uint32
+}{
+	{"LUCK", 0x5fd86a}, {"NATURE", 0xb07cff}, {"SPEED", 0x5fd0ff},
+	{"GENES", 0xff7ab8}, {"CARDS", 0x6a8cff}, {"WEALTH", 0xffc94a},
 }
 
 var tree = []node{
-	{"origin", "Origin", "+25% biote value", 1, "", 2, 0},
-	{"luck1", "Lucky I", "+25% luck", 1, "origin", 0, 1},
-	{"luck2", "Lucky II", "+50% luck", 2, "luck1", 0, 2},
-	{"luck3", "Lucky III", "x2 luck", 3, "luck2", 0, 3},
-	{"helix", "Double Helix", "New biotes roll mutations twice", 5, "luck3", 0, 4},
-	{"quick1", "Quick I", "-10% split time", 1, "origin", 1, 1},
-	{"auto", "Auto Split", "Splits for you (AUTO button)", 2, "quick1", 1, 2},
-	{"quick2", "Quick II", "-15% split time", 2, "auto", 1, 3},
-	{"autosell", "Auto Sell", "Sells when full (AUTO on SELL)", 3, "quick2", 1, 4},
-	{"value1", "Value I", "x1.5 biote value", 1, "origin", 2, 1},
-	{"value2", "Value II", "x2 biote value", 2, "value1", 2, 2},
-	{"harvest", "Harvest", "+1 sell each round", 2, "value2", 2, 3},
-	{"value3", "Value III", "x3 biote value", 4, "harvest", 2, 4},
-	{"slot1", "Card Slot", "+1 card slot", 1, "origin", 3, 1},
-	{"market", "Better Market", "Rarer cards in the market", 2, "slot1", 3, 2},
-	{"slot2", "Card Slot II", "+1 card slot", 3, "market", 3, 3},
-	{"reroll", "Free Reroll", "First market reroll is free", 2, "slot2", 3, 4},
-	{"nightv", "Night Vision", "Night bonuses x2", 1, "origin", 4, 1},
-	{"magnet", "Storm Magnet", "Events come twice as often", 2, "nightv", 4, 2},
-	{"longev", "Long Events", "Events last twice as long", 2, "magnet", 4, 3},
-	{"sun", "Sun Worship", "Day bonuses x2", 3, "longev", 4, 4},
+	{"origin", "Origin", "+25% biote value", 1, "", 0, 0, -1},
+	// luck: up and right
+	{"luck1", "Lucky I", "+25% luck", 1, "origin", 1, -1, 0},
+	{"luck2", "Lucky II", "+50% luck", 2, "luck1", 2, -2, 0},
+	{"luck3", "Lucky III", "x2 luck", 3, "luck2", 3, -2, 0},
+	{"helix", "Double Helix", "New biotes roll mutations twice", 5, "luck3", 4, -2, 0},
+	// nature: up and left
+	{"nightv", "Night Vision", "Night bonuses x2", 1, "origin", 0, -1, 1},
+	{"magnet", "Storm Magnet", "Events come twice as often", 2, "nightv", 0, -2, 1},
+	{"longev", "Long Events", "Events last twice as long", 2, "magnet", -1, -2, 1},
+	{"sun", "Sun Worship", "Day bonuses x2", 3, "longev", -2, -2, 1},
+	// speed: left
+	{"quick1", "Quick I", "-10% split time", 1, "origin", -1, 0, 2},
+	{"auto", "Auto Split", "Splits for you (AUTO button)", 2, "quick1", -2, 0, 2},
+	{"quick2", "Quick II", "-15% split time", 2, "auto", -3, 0, 2},
+	{"autosell", "Auto Sell", "Sells when full (AUTO on SELL)", 3, "quick2", -4, 0, 2},
+	// genes: down and left
+	{"genes1", "Strong Genes", "Mutation multipliers x1.25", 1, "origin", -1, 1, 3},
+	{"bank", "DNA Bank", "+1 DNA for every round cleared", 2, "genes1", -2, 2, 3},
+	{"pure", "Purebred", "Plain biotes worth x3", 2, "bank", -3, 2, 3},
+	{"genes2", "Dominant Genes", "Mutation multipliers x1.5", 4, "pure", -4, 2, 3},
+	// cards: down and right
+	{"slot1", "Card Slot", "+1 card slot", 1, "origin", 0, 1, 4},
+	{"market", "Better Market", "Rarer cards in the market", 2, "slot1", 0, 2, 4},
+	{"slot2", "Card Slot II", "+1 card slot", 3, "market", 1, 2, 4},
+	{"reroll", "Free Reroll", "First market reroll is free", 2, "slot2", 2, 2, 4},
+	// wealth: right
+	{"value1", "Value I", "x1.5 biote value", 1, "origin", 1, 0, 5},
+	{"value2", "Value II", "x2 biote value", 2, "value1", 2, 0, 5},
+	{"harvest", "Harvest", "+1 sell each round", 2, "value2", 3, 0, 5},
+	{"value3", "Value III", "x3 biote value", 4, "harvest", 4, 0, 5},
 }
 
 func (g *Game) has(id string) bool { return g.st.Tree[id] }
@@ -304,7 +327,7 @@ var bosses = []bossDef{
 
 // boss is the twist in play now (nil outside an Outbreak round).
 func (g *Game) boss() *bossDef {
-	if g.st.Round != 2 {
+	if !g.st.Active || g.st.Round != 2 {
 		return nil
 	}
 	return &bosses[g.st.Boss%len(bosses)]
@@ -344,6 +367,15 @@ func (g *Game) computeMods() mods {
 	}
 	if g.has("harvest") {
 		m.sells++
+	}
+	if g.has("genes1") {
+		m.genes *= 1.25
+	}
+	if g.has("genes2") {
+		m.genes *= 1.5
+	}
+	if g.has("pure") {
+		m.plain *= 3
 	}
 	// cards
 	for _, id := range g.st.Cards {

@@ -31,7 +31,8 @@ type State struct {
 
 	// rounds
 	Ante        int      `json:"ante"`
-	Round       int      `json:"round"` // 0 Petri, 1 Colony, 2 Outbreak
+	Round       int      `json:"round"`  // 0 Petri, 1 Colony, 2 Outbreak
+	Active      bool     `json:"active"` // a round is running (they start when you choose)
 	RoundEarned float64  `json:"roundEarned"`
 	RoundSells  int      `json:"roundSells"`
 	Boss        int      `json:"boss"`

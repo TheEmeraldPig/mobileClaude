@@ -20,11 +20,6 @@ func (g *Game) layPanel(L *layout, wu float64) {
 	L.panel = R(px, py, pw, ph)
 	L.close = R(px+pw-36, py+6, 28, 28)
 	switch g.panel {
-	case "tree":
-		cw := (pw - 24) / 5
-		for _, n := range tree {
-			L.rows = append(L.rows, R(px+12+float64(n.col)*cw+3, py+60+float64(n.row)*50, cw-6, 38))
-		}
 	case "index":
 		cw, ch := (pw-24-3*8)/4, (ph-56-12-8)/2
 		for i := range rarities {
@@ -41,6 +36,8 @@ func (g *Game) layPanel(L *layout, wu float64) {
 		L.action = R(wu/2-80, py+ph-72, 160, 54)
 	case "card":
 		L.action = R(px+pw-12-140, py+ph-56, 140, 44)
+	case "round":
+		L.action = R(wu/2-90, py+ph-62, 180, 48)
 	}
 }
 
@@ -59,17 +56,6 @@ func (g *Game) tapPanel(L layout, x, y float64) {
 		return
 	}
 	switch g.panel {
-	case "tree":
-		for i, r := range L.rows {
-			if r.in(x, y) {
-				if g.selN == tree[i].id {
-					g.unlock(tree[i].id)
-				} else {
-					g.selN = tree[i].id
-					g.play("tap")
-				}
-			}
-		}
 	case "rebirth":
 		if L.action.in(x, y) {
 			g.rebirth()
@@ -90,6 +76,10 @@ func (g *Game) tapPanel(L layout, x, y float64) {
 		if L.action.in(x, y) {
 			g.sellCard(g.sel)
 		}
+	case "round":
+		if L.action.in(x, y) && !g.st.Active {
+			g.startRound()
+		}
 	}
 }
 
@@ -106,61 +96,6 @@ func (g *Game) drawPanel(dst *ebiten.Image, L layout) {
 	soft := rgb(0xd8ccff)
 
 	switch g.panel {
-	case "tree":
-		icon(dst, "star", L.panel.x+20*u, L.panel.y+22*u, 12*u)
-		say(dst, itoa(g.st.Points), face(fBig, 16*u), L.panel.x+30*u, L.panel.y+22*u, alLeft, colT, math.Round(1.5*u))
-		// lines from each node to the one it needs
-		for i, n := range tree {
-			if n.req == "" {
-				continue
-			}
-			for j, m := range tree {
-				if m.id == n.req {
-					a, b := L.rows[j], L.rows[i]
-					c := color.NRGBA{120, 100, 180, 255}
-					if g.has(n.id) {
-						c = color.NRGBA{255, 201, 74, 255}
-					}
-					vector.StrokeLine(dst, float32(a.cx()), float32(a.y+a.h), float32(b.cx()), float32(b.y), float32(math.Max(1, 2*u)), c, false)
-				}
-			}
-		}
-		for i, n := range tree {
-			r := L.rows[i]
-			sk := skGrey
-			switch {
-			case g.has(n.id):
-				sk = skGold
-			case g.canUnlock(&tree[i]) && g.st.Points >= n.cost:
-				sk = skGreen
-			case g.canUnlock(&tree[i]):
-				sk = skViolet
-			}
-			bevel(dst, r, sk, p)
-			if g.selN == n.id {
-				vector.StrokeRect(dst, float32(r.x-u), float32(r.y-u), float32(r.w+2*u), float32(r.h+2*u), float32(math.Max(1, 2*u)), colW, false)
-			}
-			say(dst, n.name, face(fSmall, 7*u), r.cx(), r.y+13*u, alCenter, colW, math.Round(u))
-			cost := itoa(n.cost) + " PT"
-			if g.has(n.id) {
-				cost = "OWNED"
-			}
-			say(dst, cost, face(fSmall, 6*u), r.cx(), r.y+27*u, alCenter, colO, 0)
-		}
-		info := "TAP A SKILL TO SEE IT, TAP AGAIN TO UNLOCK. POINTS COME FROM REBIRTHS."
-		if n := nodeByID(g.selN); n != nil {
-			info = n.name + ": " + n.desc
-			switch {
-			case g.has(n.id):
-				info += "  (OWNED)"
-			case !g.canUnlock(n):
-				info += "  (UNLOCK THE ONE ABOVE FIRST)"
-			default:
-				info += fmt.Sprintf("  -  %d PT, TAP AGAIN TO UNLOCK", n.cost)
-			}
-		}
-		say(dst, info, face(fSmall, 6*u), L.panel.cx(), L.panel.y+46*u, alCenter, soft, math.Round(u))
-
 	case "index":
 		found := 0
 		k := 0
@@ -218,7 +153,7 @@ func (g *Game) drawPanel(dst *ebiten.Image, L layout) {
 		}
 
 	case "market":
-		icon(dst, "gem", L.panel.x+20*u, L.panel.y+22*u, 12*u)
+		icon(dst, "dna", L.panel.x+20*u, L.panel.y+22*u, 18*u)
 		say(dst, itoa(g.st.Gems), face(fBig, 16*u), L.panel.x+30*u, L.panel.y+22*u, alLeft, rgb(0x9ff0ff), math.Round(1.5*u))
 		say(dst, g.st.MarketMsg, face(fSmall, 7*u), L.panel.cx(), L.panel.y+44*u, alCenter, colG, math.Round(u))
 		for i, r := range L.rows {
@@ -237,7 +172,7 @@ func (g *Game) drawPanel(dst *ebiten.Image, L layout) {
 				sk = skGreen
 			}
 			bevel(dst, br, sk, p)
-			icon(dst, "gem", br.cx()-12*u, br.cy(), 11*u)
+			icon(dst, "dna", br.cx()-12*u, br.cy(), 16*u)
 			say(dst, itoa(price), face(fBig, 15*u), br.cx()-2*u, br.cy()-u, alLeft, colW, math.Round(1.5*u))
 		}
 		say(dst, fmt.Sprintf("CARDS %d/%d", len(g.st.Cards), g.cardSlots()), face(fSmall, 7*u), L.panel.cx(), L.action.cy(), alCenter, soft, math.Round(u))
@@ -248,7 +183,7 @@ func (g *Game) drawPanel(dst *ebiten.Image, L layout) {
 		}
 		say(dst, rr, face(fSmall, 8*u), L.action.cx(), L.action.cy(), alCenter, colW, math.Round(u))
 		bevel(dst, L.action2, skOrange, p)
-		say(dst, "NEXT: "+roundNames[g.st.Round], face(fBig, 15*u), L.action2.cx(), L.action2.cy()-u, alCenter, colW, math.Round(1.5*u))
+		say(dst, "DONE", face(fBig, 16*u), L.action2.cx(), L.action2.cy()-u, alCenter, colW, math.Round(1.5*u))
 
 	case "blob":
 		if g.sel >= len(g.blobs) {
@@ -360,14 +295,25 @@ func (g *Game) drawPanel(dst *ebiten.Image, L layout) {
 		y += 62 * u
 		say(dst, fmt.Sprintf("ANTE %d", s.Ante), face(fBig, 16*u), cx, y, alCenter, colW, math.Round(1.5*u))
 		y += 22 * u
-		say(dst, fmt.Sprintf("EARN $%s IN %d SELLS  ($%s SO FAR, %d USED)", fmtNum(roundTarget(s.Ante, s.Round)), g.sellsAllowed(), fmtNum(s.RoundEarned), s.RoundSells), face(fSmall, 7*u), cx, y, alCenter, colW, math.Round(u))
+		line := fmt.Sprintf("EARN $%s IN %d SELLS  ($%s SO FAR, %d USED)", fmtNum(roundTarget(s.Ante, s.Round)), g.sellsAllowed(), fmtNum(s.RoundEarned), s.RoundSells)
+		if !s.Active {
+			line = fmt.Sprintf("START %s WHEN YOU'RE READY: EARN $%s IN %d SELLS", roundNames[s.Round], fmtNum(roundTarget(s.Ante, s.Round)), g.sellsAllowedFor(s.Round))
+		}
+		say(dst, line, face(fSmall, 7*u), cx, y, alCenter, colW, math.Round(u))
 		y += 18 * u
 		b := bosses[s.Boss%len(bosses)]
 		say(dst, "THIS ANTE'S OUTBREAK: "+b.name+" - "+b.desc, face(fSmall, 7*u), cx, y, alCenter, rgb(0xff9fb0), math.Round(u))
 		y += 18 * u
 		say(dst, "BEAT THE OUTBREAK FOR AN ABILITY CARD OF A RANDOM RARITY.", face(fSmall, 7*u), cx, y, alCenter, colT, math.Round(u))
 		y += 16 * u
-		say(dst, "EACH CLEARED ROUND OPENS THE MARKET. RUN OUT OF SELLS AND THE ROUND STARTS OVER.", face(fSmall, 6*u), cx, y, alCenter, soft, math.Round(u))
+		say(dst, "EACH CLEARED ROUND OPENS THE MARKET. RUN OUT OF SELLS AND YOU CAN TRY AGAIN.", face(fSmall, 6*u), cx, y, alCenter, soft, math.Round(u))
+		if s.Active {
+			bevel(dst, L.action, skGrey, p)
+			say(dst, "IN PROGRESS", face(fBig, 16*u), L.action.cx(), L.action.cy()-u, alCenter, colW, math.Round(1.5*u))
+		} else {
+			bevel(dst, L.action, skGreen, p)
+			say(dst, "START "+roundNames[s.Round], face(fBig, 18*u), L.action.cx(), L.action.cy()-u, alCenter, colW, math.Round(1.5*u))
+		}
 	}
 }
 

@@ -125,6 +125,15 @@ func (g *Game) capacity() int     { return capOf(g.st.CapLv) }
 func (g *Game) cooldown() float64 { return baseCooldown(g.st.SpeedLv) * g.m.cool }
 func (g *Game) sellsAllowed() int { return max(1, baseSells+g.m.sells) }
 
+// sellsAllowedFor is the sells a round will give, counting its boss before it starts.
+func (g *Game) sellsAllowedFor(round int) int {
+	n := baseSells + g.m.sells
+	if round == 2 && !g.st.Active && bosses[g.st.Boss%len(bosses)].id == "leech" {
+		n -= 2
+	}
+	return max(1, n)
+}
+
 // baseValueAt is a plain biote's value with value level lv and everything that
 // multiplies all biotes.
 func (g *Game) baseValueAt(lv int) float64 {
@@ -132,7 +141,7 @@ func (g *Game) baseValueAt(lv int) float64 {
 }
 
 // mutMult is what mutation r multiplies a biote's value by, cards included.
-func (g *Game) mutMult(r int) float64 { return rarities[r].Mult * g.m.worth[r] }
+func (g *Game) mutMult(r int) float64 { return rarities[r].Mult * g.m.worth[r] * g.m.genes }
 
 func (g *Game) blobValue(mask int) float64 {
 	v := g.baseValueAt(g.st.ValueLv)
@@ -141,6 +150,9 @@ func (g *Game) blobValue(mask int) float64 {
 	}
 	if maskCount(mask) >= 2 {
 		v *= g.m.hybrid
+	}
+	if mask == 0 {
+		v *= g.m.plain
 	}
 	return v
 }
@@ -276,21 +288,37 @@ func (g *Game) sell() {
 // roundSale counts a sale towards the current round.
 func (g *Game) roundSale(v float64) {
 	s := &g.st
+	if !s.Active {
+		return // between rounds, sales are just money
+	}
 	s.RoundEarned += v
 	s.RoundSells++
 	if s.RoundEarned >= roundTarget(s.Ante, s.Round) {
 		g.winRound()
 	} else if s.RoundSells >= g.sellsAllowed() {
 		g.floats = append(g.floats, floater{s: roundNames[s.Round] + " FAILED, TRY AGAIN", x: g.W / 2, y: g.H * 0.3, c: rgb(0xff8a8a), size: 24})
-		s.RoundEarned, s.RoundSells = 0, 0
+		s.RoundEarned, s.RoundSells, s.Active = 0, 0, false
 		g.play("deny")
 	}
+}
+
+// startRound starts the current round: from now on sales count towards its target.
+func (g *Game) startRound() {
+	s := &g.st
+	s.Active, s.RoundEarned, s.RoundSells = true, 0, 0
+	g.panel = ""
+	g.floats = append(g.floats, floater{s: roundNames[s.Round] + " STARTED!", x: g.W / 2, y: g.H * 0.3, c: colT, size: 26})
+	g.play("rare")
 }
 
 func (g *Game) winRound() {
 	s := &g.st
 	dna := roundReward(s.Round)
+	if g.has("bank") {
+		dna++
+	}
 	s.Gems += dna
+	s.Active = false // the next round waits until you start it
 	msg := roundNames[s.Round] + " CLEARED!  +" + itoa(dna) + " DNA"
 	if s.Round == 2 {
 		// beating the Outbreak gives an ability card of a random rarity
@@ -411,7 +439,7 @@ func (g *Game) rebirth() {
 	s.Rebirths++
 	s.Money, g.shown = 0, 0
 	s.ValueLv, s.SpeedLv, s.CapLv = 0, 0, 0
-	s.Ante, s.Round, s.RoundEarned, s.RoundSells, s.RunBosses = 1, 0, 0, 0, 0
+	s.Ante, s.Round, s.RoundEarned, s.RoundSells, s.RunBosses, s.Active = 1, 0, 0, 0, 0, false
 	s.Market = false
 	g.blobs = []blob{{m: 0, born: g.t, mt: -10, squash: -10}}
 	g.cool = 99
@@ -540,6 +568,10 @@ func (g *Game) open(panel string) {
 }
 
 func (g *Game) tap(L layout, x, y float64) {
+	if g.panel == "tree" {
+		g.tapTree(x, y)
+		return
+	}
 	if g.panel != "" {
 		g.tapPanel(L, x, y)
 		return
@@ -713,6 +745,7 @@ func (g *Game) Update() error {
 	}
 	g.floats = fl
 	g.sky.update(g)
+	g.tickMusic()
 	g.shown += (g.st.Money - g.shown) * math.Min(1, dt*8)
 	if math.Abs(g.st.Money-g.shown) < 0.5 || g.st.Money < g.shown {
 		g.shown = g.st.Money

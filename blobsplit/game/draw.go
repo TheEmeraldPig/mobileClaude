@@ -198,6 +198,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if g.W < 1 || g.H < 1 {
 		return
 	}
+	if g.panel == "tree" {
+		g.drawTree(screen) // its own full screen
+		g.hookDraw(screen)
+		return
+	}
 	L := g.lay()
 	g.drawSky(screen)
 	g.drawBoard(screen, L)
@@ -362,7 +367,7 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 		mc = mix(colW, colG, (bump-1)*4)
 	}
 	say(dst, fmtNum(g.shown), face(fBig, 32*u*bump), L.money.x+24*u*bump, L.money.cy(), alLeft, mc, math.Round(2*u))
-	icon(dst, "gem", L.gems.x+10*u, L.gems.cy(), 14*u)
+	icon(dst, "dna", L.gems.x+8*u, L.gems.cy(), 20*u)
 	say(dst, itoa(g.st.Gems), face(fBig, 20*u), L.gems.x+22*u, L.gems.cy(), alLeft, rgb(0x9ff0ff), math.Round(1.5*u))
 	if g.st.Points > 0 {
 		icon(dst, "star", L.gems.x+56*u, L.gems.cy(), 13*u)
@@ -510,6 +515,15 @@ func (g *Game) drawRoundCard(dst *ebiten.Image, r rect, p float64) {
 	say(dst, title, face(fSmall, 8*u), r.x+9*u, r.y+13*u, alLeft, colT, math.Round(u))
 	say(dst, "ANTE "+itoa(s.Ante), face(fSmall, 8*u), r.x+r.w-9*u, r.y+13*u, alRight, colW, math.Round(u))
 	target := roundTarget(s.Ante, s.Round)
+	if !s.Active {
+		// waiting for you to start it
+		say(dst, "EARN $"+fmtNum(target)+" IN "+itoa(g.sellsAllowedFor(s.Round))+" SELLS", face(fSmall, 7*u), r.x+9*u, r.y+29*u, alLeft, colW, math.Round(u))
+		btn := rect{r.x + 9*u, r.y + 38*u, r.w - 18*u, 18 * u}
+		glow := 0.5 + 0.5*math.Sin(g.t*4)
+		bevel(dst, btn, skin{mix(skGreen.b, skGreen.l, glow*0.4), skGreen.l, skGreen.s}, math.Max(1, p-1))
+		say(dst, "TAP TO START", face(fSmall, 7*u), btn.cx(), btn.cy(), alCenter, colW, math.Round(u))
+		return
+	}
 	say(dst, "$"+fmtNum(s.RoundEarned)+" / $"+fmtNum(target), face(fSmall, 8*u), r.x+9*u, r.y+30*u, alLeft, colW, math.Round(u))
 	bar := rect{r.x + 9*u, r.y + 40*u, r.w - 18*u, 6 * u}
 	fill(dst, bar.x, bar.y, bar.w, bar.h, colO)
