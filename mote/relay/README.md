@@ -1,8 +1,11 @@
-# Mote relay (multiplayer server)
+# Mote relay (optional online server)
+
+**Not needed for multiplayer:** the game hosts worlds on the local network by itself
+(see `game/netlan.go`). This server only adds joining with a code from anywhere.
 
 A tiny server that lets players join each other's worlds with a 5-letter code. It
 only passes messages between the host's game and its guests (up to 3), so it needs
-almost no CPU or memory. The protocol is described at the top of `main.go`.
+almost no CPU or memory. The protocol is described at the top of `../relaycore/relaycore.go`.
 
 ## Put it online (free, on Render)
 

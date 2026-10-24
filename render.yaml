@@ -12,5 +12,6 @@ services:
     buildFilter:
       paths:
         - mote/relay/**
+        - mote/relaycore/**
         - mote/go.mod
         - mote/go.sum

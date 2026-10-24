@@ -166,6 +166,8 @@ func hud() {
 		dtxt += "  -  " + modeNames[world.Mode]
 	}
 	switch {
+	case netRole == netHost && lanServer != nil:
+		dtxt += fmt.Sprintf("  -  Open to friends (%d/%d)", len(peers)+1, maxPlayers)
 	case netRole == netHost && netCode != "":
 		dtxt += fmt.Sprintf("  -  Code %s (%d/%d)", netCode, len(peers)+1, maxPlayers)
 	case netRole == netGuest:
@@ -735,7 +737,7 @@ func pauseMenu() {
 		}
 	case netHost:
 		if Button(Rect{x, y, lw, bh}, "Close to friends", styleSlate, true, icoX) {
-			netClose()
+			netShutdown()
 			toast("Your world is closed to friends")
 		}
 	}
@@ -753,7 +755,7 @@ func pauseMenu() {
 		}
 		saveGame()
 		if netRole == netHost {
-			netClose()
+			netShutdown()
 		}
 		openScreen(scMain)
 		return

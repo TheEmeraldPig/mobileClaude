@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"strings"
@@ -101,7 +102,17 @@ func netConnect(url string, host bool) {
 	inboxMu.Lock()
 	inbox = nil
 	inboxMu.Unlock()
-	out := netOutQ
+	netCtx = ctx
+	if url != "" {
+		netDial(url)
+	}
+}
+
+var netCtx context.Context
+
+// Connect (in the background) to url, for the connection netConnect set up
+func netDial(url string) {
+	ctx, out := netCtx, netOutQ
 	go func() {
 		dctx, dcancel := context.WithTimeout(ctx, 75*time.Second) // free servers can take a while to wake
 		c, _, err := websocket.Dial(dctx, url, nil)
@@ -225,30 +236,66 @@ func netShare(typ byte, v any) {
 
 var guestJoined = map[int]bool{} // host: guests that are connected and have said hello
 
+// Open the world to friends on the same network: this game runs the hub, connects
+// to it as the host, and announces the world (see netlan.go)
 func startHosting() {
+	netConnect("", true) // closes any old connection first
+	port, err := startLANHub()
+	if err != nil {
+		netStatus = "Couldn't open your world: " + err.Error()
+		toast(netStatus)
+		return
+	}
+	netDial(fmt.Sprintf("ws://127.0.0.1:%d/host", port))
+	netRole, netMyID = netHost, 0
+	netStatus = "Opening your world..."
+	updateAd()
+	startAnnouncing()
+}
+
+// Host through the online relay instead (only when one is set up)
+func startHostingOnline() {
 	u := relayURL()
 	if u == "" {
-		toast("No multiplayer server is set (Settings, Multiplayer)")
 		return
 	}
 	netConnect(u+"/host", true)
 	netRole, netMyID = netHost, 0
-	netStatus = "Opening your world..."
-	toast("Opening your world to friends...")
+	netStatus = "Opening your world online..."
 }
 
+// Join a world on the local network: addr is "host:port" (or a typed address)
+func joinLAN(addr string) {
+	u := lanJoinURL(addr)
+	if u == "" {
+		return
+	}
+	beginJoin(u + "/join")
+}
+
+// Join through the online relay with a code
 func joinWorld(code string) {
 	u := relayURL()
 	if u == "" {
-		netStatus = "No multiplayer server is set (Settings, Multiplayer)"
+		netStatus = "Online codes aren't set up in this build"
 		return
 	}
+	beginJoin(u + "/join?code=" + strings.ToUpper(code))
+}
+
+func beginJoin(url string) {
 	saveGame() // keep the world we're leaving
-	netConnect(u+"/join?code="+strings.ToUpper(code), false)
+	netConnect(url, false)
 	netRole = netGuest
 	netMyID = -1 // until the host says hello back
 	netStatus = "Joining..."
 	sendHello = true
+}
+
+// Stop everything multiplayer: the connection, and the hub if we were hosting
+func netShutdown() {
+	netClose()
+	stopLANHub()
 }
 
 var sendHello bool
@@ -258,7 +305,7 @@ func leaveMultiplayer() {
 		sendChar()
 	}
 	wasGuest := netRole == netGuest
-	netClose()
+	netShutdown()
 	netStatus = ""
 	if wasGuest {
 		world = WorldInfo{}
@@ -284,7 +331,7 @@ func netUpdate() {
 		if len(f) == 1 && f[0] == 0xff { // the connection ended
 			reason := failReason.Load()
 			wasGuest := netRole == netGuest
-			netClose()
+			netShutdown()
 			netStatus = reason
 			if reason != "" {
 				toast(reason)
@@ -321,6 +368,9 @@ func netUpdate() {
 	}
 	if frame%6 == 0 {
 		shareEnts()
+	}
+	if netRole == netHost && lanServer != nil && frame%30 == 0 {
+		updateAd()
 	}
 	if netRole == netHost && frame%60 == 0 {
 		netShare(mTime, timeMsg{T: worldTime, PvP: world.PvP, Boss: bossDown, Mode: world.Mode})

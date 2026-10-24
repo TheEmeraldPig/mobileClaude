@@ -287,7 +287,7 @@ func die() {
 	case deathLost:
 		deathLines = []string{"Hardcore: " + world.Name + " is gone for good."}
 		if netRole == netHost {
-			netClose() // the world is gone, so friends in it have to leave
+			netShutdown() // the world is gone, so friends in it have to leave
 		}
 		deleteWorld(world.ID)
 	case world.Mode == modeEasy:

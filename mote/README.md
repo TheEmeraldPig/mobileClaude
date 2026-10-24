@@ -28,7 +28,7 @@ Each world is its own save in `worlds/<id>.json`, listed in `worlds.json`, and h
 | Mine background walls | Hold right-click with a pickaxe | Mining: Back walls on the build bar |
 | Talk to a trader | Right-click them | Tap them |
 | Guide book | Pause menu | Pause menu |
-| Play with friends | Main menu: Multiplayer; or Pause: Open to friends | Same |
+| Play with friends (same Wi-Fi or hotspot) | Main menu: Multiplayer; or Pause: Open to friends | Same |
 
 Hand crafting covers planks, torches and the workbench. Everything else is made by opening a station: the workbench (tools, blocks, walls, stations, blueprints), the furnace (bars, glass, bread) and the anvil (metal tools, weapons, armor).
 
@@ -62,7 +62,7 @@ Hand crafting covers planks, torches and the workbench. Everything else is made 
   - `audio.go`: synthesised sound effects and music.
   - `save.go`: settings and save game. Add new state to `serializeState`/`restoreState`. Besides blocks, each chunk can save a wall layer and two paint layers (`wall`, `paint`, `wpaint` in `world.go`).
   - `update_windows.go`: the .exe self-updater (left out with `-tags steam`).
-  - Multiplayer (`net.go`, `netsync.go`, `netmenu.go`): up to 4 players join a host's world with a 5-letter code through the relay server in `relay/` (see `relay/README.md` to put it online; CI builds its address in from the `MOTE_RELAY_URL` repository variable). Terrain comes from the seed, so only changes travel: a joining guest gets the host's changed chunks, then each game sends the cells its own player changed (found by comparing a box around the player before and after their actions each frame). Creatures and dropped items belong to the game that spawned them; hits and pickups are sent to their owner. The host saves guests' characters in its world (`guests` in `save.go`). Falling sand and water run on each game separately.
+  - Multiplayer (`net.go`, `netsync.go`, `netmenu.go`, `netlan.go`): up to 4 players in a host's world, with no server: the hosting game runs the message hub (`relaycore/`) on port 47470 and announces its world by UDP broadcast on port 47469 every 0.7 s; games on the Multiplayer screen list what they hear and connect straight to the host, or players type the host's address (which also works over virtual-LAN apps like Tailscale/ZeroTier). Optional: the same hub can run online as `relay/` for join codes (`relay/README.md`; CI builds its address in from the `MOTE_RELAY_URL` repository variable, and the code box only appears when one is set). Terrain comes from the seed, so only changes travel: a joining guest gets the host's changed chunks, then each game sends the cells its own player changed (found by comparing a box around the player before and after their actions each frame). Creatures and dropped items belong to the game that spawned them; hits and pickups are sent to their owner. The host saves guests' characters in its world (`guests` in `save.go`). Falling sand and water run on each game separately.
 - `cmd/mote/` is the desktop entry point, with the Windows icon and manifest in `winres/`.
 - `mobile/` is the Android entry point, bound into an .aar by `ebitenmobile`.
 - `android/` is the Android app project that wraps the .aar.

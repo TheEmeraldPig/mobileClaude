@@ -56,7 +56,8 @@ var book = []chapter{
 		"Coins come from selling ore, bars, food and gear, from creatures, and from chests. Traders sell things that are hard to find, like healing potions, heart crystals and better tools.",
 	}},
 	{"Playing with friends", "gem", []string{
-		"Up to four motes can share a world. To host, open one of your worlds from Multiplayer (or choose Open to friends in the pause menu) and share the 5-letter code it shows. To join, type a friend's code under Multiplayer.",
+		"Up to four motes can share a world on the same Wi-Fi or phone hotspot, with no account or server. To host, open one of your worlds from Multiplayer (or choose Open to friends in the pause menu). Friends open Multiplayer and tap Join next to your world.",
+		"If your world doesn't show up, friends can type your address (shown in your pause menu). Friends far away can play too if everyone joins the same free virtual network app, like Tailscale or ZeroTier, and types your address from it. On a PC, allow Mote through the firewall when Windows asks.",
 		"Joining gives you a new character in that world; it's kept in your friend's save, so next time you join you carry on where you left off. The host can let players hurt each other from the pause menu.",
 	}},
 	{"Game modes", "heart", []string{

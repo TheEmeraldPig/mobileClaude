@@ -1,6 +1,8 @@
 package com.theemeraldpig.mote;
 
 import android.app.Activity;
+import android.content.Context;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.view.View;
 
@@ -11,6 +13,7 @@ import go.Seq;
 public class MainActivity extends Activity {
     private MoteView view;
     private Updater updater;
+    private WifiManager.MulticastLock wifiLock;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -24,6 +27,24 @@ public class MainActivity extends Activity {
         hideSystemBars();
         updater = new Updater(this);
         updater.start();
+        // Many phones drop Wi-Fi broadcasts to save battery unless an app asks for
+        // them; multiplayer finds worlds on the same Wi-Fi through them
+        try {
+            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm != null) {
+                wifiLock = wm.createMulticastLock("mote-find-worlds");
+                wifiLock.setReferenceCounted(false);
+                wifiLock.acquire();
+            }
+        } catch (Exception e) {
+            // finding worlds may not work, but joining by address still does
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
+        super.onDestroy();
     }
 
     @Override

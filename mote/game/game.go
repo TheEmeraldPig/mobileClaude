@@ -231,6 +231,9 @@ func (g *Game) Update() error {
 		mainMenuArt()
 		multiplayerMenu()
 	}
+	if cur != scMultiplayer {
+		stopFinding()
+	}
 	shake *= 0.86
 	drawToast()
 

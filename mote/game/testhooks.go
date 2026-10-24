@@ -176,6 +176,15 @@ func runScript() {
 				player.y = p.st.Y - 4*CELL
 				break
 			}
+		case "joinlan": // joinlan=ADDRESS
+			joinLAN(arg)
+		case "joinfound": // join the first world found on the network
+			if l := foundWorlds(); len(l) > 0 {
+				fmt.Printf("frame %d found %q by %q at %s\n", frame, l[0].ad.World, l[0].ad.Host, l[0].addr)
+				joinLAN(l[0].addr)
+			} else {
+				fmt.Printf("frame %d found nothing\n", frame)
+			}
 		case "mp": // the Multiplayer screen
 			openMultiplayer()
 		case "code": // code=ABCDE typed into the Multiplayer screen
