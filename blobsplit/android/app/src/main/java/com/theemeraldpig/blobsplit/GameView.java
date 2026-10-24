@@ -17,12 +17,12 @@ public class GameView extends EbitenView {
 
     @Override
     protected void onErrorOnGameUpdate(Exception e) {
-        Log.e("BlobSplit", "game stopped", e);
+        Log.e("Biote", "game stopped", e);
         if (shown) return;
         shown = true;
         try {
             new AlertDialog.Builder(getContext())
-                .setTitle("Blob Split ran into a problem")
+                .setTitle("Biote ran into a problem")
                 .setMessage(String.valueOf(e))
                 .setPositiveButton("OK", null)
                 .show();

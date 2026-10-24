@@ -16,7 +16,7 @@ func TestUpdateBeforeLayout(t *testing.T) {
 	g := NewGame()
 	g.blobs = nil
 	for i := 0; i < 64; i++ {
-		g.blobs = append(g.blobs, blob{r: i % len(rarities), mt: -10, squash: -10})
+		g.blobs = append(g.blobs, blob{m: (i * 37) % (1 << nMut) &^ 1, mt: -10, squash: -10})
 	}
 	for i := 0; i < 120; i++ {
 		if err := g.Update(); err != nil {

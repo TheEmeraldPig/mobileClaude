@@ -25,7 +25,7 @@ func CatchCrash() {
 		}
 		stack := string(debug.Stack())
 		crashMsg = fmt.Sprint(r)
-		log.Printf("Blob Split crashed: %s\n%s", crashMsg, stack)
+		log.Printf("Biote crashed: %s\n%s", crashMsg, stack)
 		_ = os.MkdirAll(dataDir(), 0o755)
 		_ = os.WriteFile(filepath.Join(dataDir(), "crash.txt"), []byte(Version+"\n"+crashMsg+"\n\n"+stack), 0o644)
 		var keep []string
@@ -61,7 +61,7 @@ func DrawCrash(screen *ebiten.Image) {
 		}
 		lines = append(lines, l)
 	}
-	ebitenutil.DebugPrintAt(img, "Blob Split ran into a problem (build "+Version+").\nPlease send a screenshot of this.\n\n"+strings.Join(lines, "\n"), 8, 8)
+	ebitenutil.DebugPrintAt(img, "Biote ran into a problem (build "+Version+").\nPlease send a screenshot of this.\n\n"+strings.Join(lines, "\n"), 8, 8)
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Scale(float64(scale), float64(scale))
 	screen.DrawImage(img, op)

@@ -1,4 +1,4 @@
-// Blob Split desktop entry point, for playing and testing on a PC.
+// Biote desktop entry point, for playing and testing on a PC.
 package main
 
 import (
@@ -10,7 +10,7 @@ import (
 
 func main() {
 	g := game.NewGame()
-	ebiten.SetWindowTitle("Blob Split")
+	ebiten.SetWindowTitle("Biote")
 	ebiten.SetWindowSize(1280, 640)
 	if w, h := game.WindowSize(); w > 0 {
 		ebiten.SetWindowSize(w, h)

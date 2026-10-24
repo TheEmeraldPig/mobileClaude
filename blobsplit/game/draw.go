@@ -2,9 +2,9 @@ package game
 
 import (
 	"fmt"
-	"image"
 	"image/color"
 	"math"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -16,14 +16,19 @@ type layout struct {
 	money, gems          rect
 	buy, music, sound    rect
 	shop, index, rebirth rect
-	cards                [4]rect
-	split, sell, auto    rect
+	world                rect
+	cards                [4]rect // three upgrades, then the round
+	round                rect
+	hand                 []rect // ability card slots
+	split, sell          rect
+	auto, autosell       rect
 	grid                 rect
 	cols, grows          int
 	cell                 float64
-	circle               [][2]float64 // blob centres when they form a circle instead
+	circle               [][2]float64 // biote centres when they form a circle instead
 	panel, close, action rect
-	rows                 []rect // shop rows or index cells
+	action2, action3     rect
+	rows                 []rect // tree nodes, market offers or catalog cells
 	p                    float64
 }
 
@@ -39,16 +44,26 @@ func (g *Game) lay() layout {
 	leftW := 78.0
 	rightW := math.Min(172, wu*0.27)
 	rightX := wu - rightW - 10
-	L.money = R(10, 6, 200, 34)
+	L.money = R(10, 6, 140, 34)
 	L.gems = R(10, 42, 120, 22)
 	for i, r := range []*rect{&L.shop, &L.index, &L.rebirth} {
-		*r = R(10, 74+float64(i)*66, leftW-6, 60)
+		*r = R(10, 70+float64(i)*64, leftW-6, 58)
 	}
+	L.world = R(10, 264, leftW-6, 86)
 	L.sound = R(wu-38, 8, 28, 28)
 	L.music = R(wu-72, 8, 28, 28)
 	L.buy = R(rightX, 8, rightW-72, 28)
 	for i := range L.cards {
 		L.cards[i] = R(rightX, 44+float64(i)*68, rightW, 62)
+	}
+	L.round = L.cards[3]
+	// ability cards along the top
+	slots := g.cardSlots()
+	hx0, hx1 := 150.0, rightX-10
+	cw := math.Min(28, (hx1-hx0)/float64(slots)-4)
+	hx := (hx0+hx1)/2 - (float64(slots)*(cw+4)-4)/2
+	for i := 0; i < slots; i++ {
+		L.hand = append(L.hand, R(hx+float64(i)*(cw+4), 4, cw, 36))
 	}
 	cx0, cx1 := 10+leftW+8, rightX-8
 	bw := math.Min(170, (cx1-cx0-12)/2)
@@ -56,9 +71,10 @@ func (g *Game) lay() layout {
 	L.split = R(bx, 360-72, bw, 60)
 	L.sell = R(bx+bw+12, 360-72, bw, 60)
 	L.auto = R(bx-4, 360-72-16, 46, 20)
-	L.grid = R(cx0, 46, cx1-cx0, 360-72-34-46)
+	L.autosell = R(bx+bw+12+bw-42, 360-72-16, 46, 20)
+	L.grid = R(cx0, 48, cx1-cx0, 360-72-34-48)
 
-	// Blobs are sized to fit how many are on the board, so they only change size when
+	// Biotes are sized to fit how many are on the board, so they only change size when
 	// a split makes more of them. They line up in a full rectangle (never a half-empty
 	// last row) when one fits the space well, and otherwise form a circle, whichever
 	// lets them be bigger.
@@ -81,30 +97,13 @@ func (g *Game) lay() layout {
 	if pts, cell := circleSlots(n, L.grid, 70*u); rectBest < anyBest*0.75 || cell > L.cell {
 		L.circle, L.cell = pts, cell
 	}
-
-	pw, ph := math.Min(wu-40, 470), 320.0
-	L.panel = R(wu/2-pw/2, 20, pw, ph)
-	L.close = R(wu/2+pw/2-36, 26, 28, 28)
-	px, py := wu/2-pw/2, 20.0
-	switch g.panel {
-	case "shop":
-		for i := range gemUps {
-			L.rows = append(L.rows, R(px+12, py+44+float64(i)*53, pw-24, 48))
-		}
-	case "index":
-		cw, ch := (pw-24-3*8)/4, (ph-56-12-8)/2
-		for i := range rarities {
-			L.rows = append(L.rows, R(px+12+float64(i%4)*(cw+8), py+50+float64(i/4)*(ch+8), cw, ch))
-		}
-	case "rebirth":
-		L.action = R(wu/2-80, py+ph-72, 160, 54)
-	}
+	g.layPanel(&L, wu)
 	return L
 }
 
-// circleSlots packs n blobs into a circle in the middle of area: a ring when there are
+// circleSlots packs n biotes into a circle in the middle of area: a ring when there are
 // a few, a sunflower spiral when there are more. It returns their centres and the
-// blob size.
+// biote size.
 func circleSlots(n int, area rect, maxCell float64) ([][2]float64, float64) {
 	pts := make([][2]float64, n)
 	switch {
@@ -121,7 +120,7 @@ func circleSlots(n int, area rect, maxCell float64) ([][2]float64, float64) {
 			pts[i] = [2]float64{r * math.Cos(a), r * math.Sin(a)}
 		}
 	}
-	// scale so the closest two blobs just touch and the outer ones stay inside
+	// scale so the closest two biotes just touch and the outer ones stay inside
 	near, far := math.Inf(1), 0.0
 	for i := range pts {
 		far = math.Max(far, math.Hypot(pts[i][0], pts[i][1]))
@@ -144,7 +143,7 @@ func circleSlots(n int, area rect, maxCell float64) ([][2]float64, float64) {
 	return pts, cell
 }
 
-// spriteScale is how much a blob sprite is scaled up to fill a cell of size s: whole
+// spriteScale is how much a biote sprite is scaled up to fill a cell of size s: whole
 // pixels where it can, so the pixel art stays crisp.
 func spriteScale(s float64) float64 {
 	scale := s * 0.86 / blobPx
@@ -157,7 +156,7 @@ func spriteScale(s float64) float64 {
 	return scale
 }
 
-// blobPos is the centre and cell size of blob i, including its pop-in animation.
+// blobPos is the centre and cell size of biote i, including its pop-in animation.
 func (g *Game) blobPos(L layout, i int) (x, y, s float64) {
 	slot := func(i int) (float64, float64) {
 		if i < len(L.circle) {
@@ -181,7 +180,7 @@ func (g *Game) blobPos(L layout, i int) (x, y, s float64) {
 	return x, y, g.cellNow(L)
 }
 
-// cellNow is the blob size, easing from its old size for a moment after a split.
+// cellNow is the biote size, easing from its old size for a moment after a split.
 func (g *Game) cellNow(L layout) float64 {
 	if a := g.t - g.cellT; a < 0.3 && g.cellA > 0 {
 		k := 1 - math.Pow(1-a/0.3, 3)
@@ -200,9 +199,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		return
 	}
 	L := g.lay()
-	g.drawBackground(screen)
+	g.drawSky(screen)
 	g.drawBoard(screen, L)
 	g.drawParticles(screen, false)
+	g.drawWeather(screen)
 	g.drawHUD(screen, L)
 	g.drawParticles(screen, true)
 	for _, f := range g.floats {
@@ -223,64 +223,36 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.hookDraw(screen)
 }
 
-// The background is a pixel-art dusk: purple sky to orange, a big moon and hills. It is
-// drawn at low resolution once per screen size and scaled up, so it looks pixelated.
-func (g *Game) drawBackground(dst *ebiten.Image) {
-	q := math.Max(2, math.Round(g.u*2))
-	lw, lh := int(math.Ceil(g.W/q)), int(math.Ceil(g.H/q))
-	if g.bg == nil || g.bgKey != [2]int{lw, lh} {
-		g.bgKey = [2]int{lw, lh}
-		img := image.NewRGBA(image.Rect(0, 0, lw, lh))
-		top, mid, low := rgb(0x1b1036), rgb(0x4a2160), rgb(0xe0703a)
-		mcx, mcy, mr := float64(lw)*0.3, float64(lh)*0.36, float64(lh)*0.24
-		for y := 0; y < lh; y++ {
-			t := float64(y) / float64(lh)
-			var c color.RGBA
-			if t < 0.5 {
-				c = mix(top, mid, t/0.5)
-			} else {
-				c = mix(mid, low, math.Min(1, (t-0.5)/0.35))
-			}
-			// banding, for a pixel-art look
-			band := math.Floor(t*14) / 14
-			c = mix(c, mix(top, low, band), 0.25)
-			for x := 0; x < lw; x++ {
-				cc := c
-				d := math.Hypot(float64(x)-mcx, float64(y)-mcy)
-				if d < mr {
-					cc = rgb(0xffcf6a)
-					if math.Hypot(float64(x)-mcx+mr*0.35, float64(y)-mcy+mr*0.2) < mr*0.18 ||
-						math.Hypot(float64(x)-mcx-mr*0.3, float64(y)-mcy-mr*0.35) < mr*0.12 ||
-						math.Hypot(float64(x)-mcx-mr*0.45, float64(y)-mcy+mr*0.3) < mr*0.08 {
-						cc = rgb(0xf0a84a)
-					}
-					if float64(x)-mcx+float64(y)-mcy > mr*0.9 {
-						cc = mul(cc, 0.9)
-					}
-				} else if d < mr*1.25 {
-					cc = mix(cc, rgb(0xffcf6a), 0.18*(1-(d-mr)/(mr*0.25)))
-				}
-				// two layers of hills
-				fx := float64(x) / float64(lw)
-				h1 := 0.70 + 0.06*math.Sin(fx*7+1) + 0.03*math.Sin(fx*17)
-				h2 := 0.80 + 0.05*math.Sin(fx*5+3) + 0.02*math.Sin(fx*23+1)
-				if t > h2 {
-					cc = mix(rgb(0x2a1238), rgb(0x1a0b24), (t-h2)*3)
-				} else if t > h1 {
-					cc = rgb(0x4a1f52)
-				}
-				img.SetRGBA(x, y, cc)
-			}
-		}
-		g.bg = ebiten.NewImageFromImage(img)
+// mutColor is a mutation's label colour (Rainbow cycles).
+func (g *Game) mutColor(r int) color.RGBA {
+	if rarities[r].Name == "Rainbow" {
+		return hsv(g.t*0.5, 0.6, 1)
 	}
+	return rgb(rarities[r].Label)
+}
+
+func (g *Game) drawBlob(dst *ebiten.Image, mask int, x, y, sx, sy float64, blink int) {
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(q, q)
-	dst.DrawImage(g.bg, op)
-	for _, s := range g.stars {
-		a := 0.4 + 0.6*math.Abs(math.Sin(g.t*1.3+s[2]))
-		sz := math.Max(1, math.Round(g.u*1.5))
-		fill(dst, math.Round(s[0]*g.W), math.Round(s[1]*g.H), sz, sz, color.NRGBA{255, 240, 220, uint8(a * 255)})
+	op.GeoM.Translate(-blobPx/2, -blobPx/2)
+	op.GeoM.Scale(sx, sy)
+	op.GeoM.Translate(math.Round(x), math.Round(y))
+	dst.DrawImage(blobImgs[maskTop(mask)][blink], op)
+}
+
+// pips are small squares under a biote, one for each mutation besides the top one.
+func (g *Game) drawPips(dst *ebiten.Image, mask int, x, y, scale float64) {
+	list := maskList(mask)
+	if len(list) < 2 {
+		return
+	}
+	list = list[:len(list)-1]
+	ps := math.Max(2, math.Round(scale*2.2))
+	w := float64(len(list))*(ps+math.Round(scale)) - math.Round(scale)
+	px := math.Round(x - w/2)
+	for _, r := range list {
+		fill(dst, px-1, y-1, ps+2, ps+2, colO)
+		fill(dst, px, y, ps, ps, g.mutColor(r))
+		px += ps + math.Round(scale)
 	}
 }
 
@@ -302,29 +274,22 @@ func (g *Game) drawBoard(dst *ebiten.Image, L layout) {
 			w := 0.18 * (1 - a/0.3) * math.Cos(a*30)
 			sx, sy = sx*(1+w), sy*(1-w)
 		}
-		if b.r > 0 {
-			c := rgb(rarities[b.r].Label)
-			if rarities[b.r].Name == "Rainbow" {
-				c = hsv(g.t*0.5, 0.6, 1)
-			}
+		top := maskTop(b.m)
+		if top > 0 {
+			c := g.mutColor(top)
 			pulse := 0.5 + 0.5*math.Sin(g.t*3+b.phase)
-			vector.DrawFilledCircle(dst, float32(x), float32(y), float32(size*(0.55+0.08*pulse)), color.NRGBA{c.R, c.G, c.B, uint8(35 + 30*pulse)}, true)
+			glow := 35 + 30*pulse + 15*float64(maskCount(b.m)-1)
+			vector.DrawFilledCircle(dst, float32(x), float32(y), float32(size*(0.55+0.08*pulse)), color.NRGBA{c.R, c.G, c.B, uint8(math.Min(150, glow))}, true)
 		}
 		blink := 0
 		if math.Mod(g.t+b.phase*5, 4.3) < 0.13 {
 			blink = 1
 		}
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(-blobPx/2, -blobPx/2)
-		op.GeoM.Scale(sx, sy)
-		op.GeoM.Translate(math.Round(x), math.Round(y))
-		dst.DrawImage(blobImgs[b.r][blink], op)
-		if b.r > 0 {
-			c := rgb(rarities[b.r].Label)
-			if rarities[b.r].Name == "Rainbow" {
-				c = hsv(g.t*0.5, 0.6, 1)
-			}
-			say(dst, "1/"+fmtNum(rarities[b.r].Odds), face(fSmall, math.Max(7, math.Min(10, s/g.u*0.22))*g.u), x, y-blobPx*scale/2-4*g.u, alCenter, c, math.Round(g.u))
+		g.drawBlob(dst, b.m, x, y, sx, sy, blink)
+		if top > 0 {
+			// the chance of all its mutations together, above it
+			say(dst, "1/"+fmtNum(comboOdds(b.m)), face(fSmall, math.Max(7, math.Min(10, s/g.u*0.22))*g.u), x, y-blobPx*scale/2-4*g.u, alCenter, g.mutColor(top), math.Round(g.u))
+			g.drawPips(dst, b.m, x, y+blobPx*scale/2-scale, math.Max(1, scale/2))
 		}
 	}
 }
@@ -335,7 +300,7 @@ func (g *Game) drawParticles(dst *ebiten.Image, blobs bool) {
 			continue
 		}
 		if p.age < 0 {
-			// a sold blob waiting its turn: it squashes down, ready to jump
+			// a sold biote waiting its turn: it squashes down, ready to jump
 			if p.r >= 0 {
 				w := 0.25 * math.Max(0, 1+p.age/0.15) // squashes over the last 0.15s
 				op := &ebiten.DrawImageOptions{}
@@ -371,9 +336,25 @@ func (g *Game) drawParticles(dst *ebiten.Image, blobs bool) {
 	}
 }
 
+// drawCardFace draws an ability card in r: its rarity colour, its mutation's sprite
+// and, if there's room, its name.
+func (g *Game) drawCardFace(dst *ebiten.Image, r rect, c *cardDef, p float64, named bool) {
+	sk := cardRarities[c.rar].sk
+	bevel(dst, r, sk, p)
+	inner := rect{r.x + 2*p, r.y + 2*p, r.w - 4*p, r.h * 0.55}
+	fill(dst, inner.x, inner.y, inner.w, inner.h, mul(sk.b, 0.55))
+	s := math.Max(1, math.Floor(math.Min(inner.w, inner.h)*0.9/blobPx))
+	g.drawBlob(dst, 1<<c.mut&^1, inner.cx(), inner.cy(), s, s, 0)
+	if named {
+		say(dst, c.name, face(fBig, 12*g.u), r.cx(), r.y+r.h*0.72, alCenter, colW, math.Round(1.5*g.u))
+	} else {
+		say(dst, string([]rune(c.name)[:1]), face(fBig, 12*g.u), r.cx(), r.y+r.h*0.78, alCenter, colW, math.Round(1.5*g.u))
+	}
+}
+
 func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	u, p := g.u, L.p
-	// money and gems
+	// money, DNA and points
 	bump := 1 + 0.2*math.Max(0, 1-(g.t-g.soldT)/0.2)
 	say(dst, "$", face(fBig, 34*u*bump), L.money.x+2*u, L.money.cy(), alLeft, colG, math.Round(2*u))
 	mc := colW
@@ -382,37 +363,51 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	}
 	say(dst, fmtNum(g.shown), face(fBig, 32*u*bump), L.money.x+24*u*bump, L.money.cy(), alLeft, mc, math.Round(2*u))
 	icon(dst, "gem", L.gems.x+10*u, L.gems.cy(), 14*u)
-	say(dst, fmtNum(float64(g.st.Gems)), face(fBig, 20*u), L.gems.x+24*u, L.gems.cy(), alLeft, rgb(0x9ff0ff), math.Round(1.5*u))
+	say(dst, itoa(g.st.Gems), face(fBig, 20*u), L.gems.x+22*u, L.gems.cy(), alLeft, rgb(0x9ff0ff), math.Round(1.5*u))
+	if g.st.Points > 0 {
+		icon(dst, "star", L.gems.x+56*u, L.gems.cy(), 13*u)
+		say(dst, itoa(g.st.Points), face(fBig, 20*u), L.gems.x+66*u, L.gems.cy(), alLeft, colT, math.Round(1.5*u))
+	}
 
 	// left menu
 	canRebirth := g.st.Money >= rebirthReq(g.st.Rebirths)
 	for _, b := range []struct {
 		r         rect
 		ic, label string
-		sk        skin
-	}{{L.shop, "bag", "SHOP", skViolet}, {L.index, "book", "INDEX", skViolet}, {L.rebirth, "rebirth", "REBIRTH", skViolet}} {
-		sk := b.sk
+	}{{L.shop, "tree", "SKILLS"}, {L.index, "book", "CATALOG"}, {L.rebirth, "rebirth", "REBIRTH"}} {
+		sk := skViolet
 		if b.ic == "rebirth" && canRebirth {
 			sk = skGold
 		}
 		bevel(dst, b.r, sk, p)
 		if b.ic == "rebirth" {
 			// with the current rebirth multiplier next to the icon
-			icon(dst, b.ic, b.r.cx()-13*u, b.r.y+24*u, 24*u)
-			say(dst, "x"+fmtNum(rebirthMult(g.st.Rebirths)), face(fBig, 16*u), b.r.cx()+1*u, b.r.y+24*u, alLeft, rgb(0x8ef06a), math.Round(1.5*u))
+			icon(dst, b.ic, b.r.cx()-13*u, b.r.y+22*u, 24*u)
+			say(dst, "x"+fmtNum(rebirthMult(g.st.Rebirths)), face(fBig, 16*u), b.r.cx()+1*u, b.r.y+22*u, alLeft, rgb(0x8ef06a), math.Round(1.5*u))
 		} else {
-			icon(dst, b.ic, b.r.cx(), b.r.y+24*u, 26*u)
+			icon(dst, b.ic, b.r.cx(), b.r.y+22*u, 24*u)
 		}
-		say(dst, b.label, face(fSmall, 8*u), b.r.cx(), b.r.y+b.r.h-12*u, alCenter, colW, math.Round(u))
+		say(dst, b.label, face(fSmall, 8*u), b.r.cx(), b.r.y+b.r.h-11*u, alCenter, colW, math.Round(u))
 	}
 	if canRebirth {
 		badge(dst, L.rebirth.x+L.rebirth.w-6*u, L.rebirth.y+4*u, u, g.t)
 	}
-	if g.st.Gems >= cheapestGem(g) {
+	if g.st.Points > 0 && g.cheapestNode() <= g.st.Points {
 		badge(dst, L.shop.x+L.shop.w-6*u, L.shop.y+4*u, u, g.t)
 	}
+	g.drawWorldChip(dst, L.world, p)
 
-	// rebirth multiplier, next to the gems
+	// ability cards
+	for i, r := range L.hand {
+		if i < len(g.st.Cards) {
+			if c := cardByID(g.st.Cards[i]); c != nil {
+				g.drawCardFace(dst, r, c, math.Max(1, p-1), false)
+				continue
+			}
+		}
+		fill(dst, r.x, r.y, r.w, r.h, color.NRGBA{10, 5, 25, 90})
+		vector.StrokeRect(dst, float32(r.x+u), float32(r.y+u), float32(r.w-2*u), float32(r.h-2*u), float32(math.Max(1, u)), color.NRGBA{200, 180, 255, 70}, false)
+	}
 
 	// top right: buy amount, music and sound
 	bevel(dst, L.buy, skGreen, p)
@@ -431,7 +426,7 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	icon(dst, ic, L.sound.cx(), L.sound.cy(), 14*u)
 
 	// upgrade cards
-	for i, r := range L.cards {
+	for i, r := range L.cards[:nUps] {
 		title, from, to, cost, maxed := g.cardInfo(i)
 		afford := !maxed && g.st.Money >= cost
 		sk := skDark
@@ -452,6 +447,7 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 			say(dst, from+" > "+to, face(fSmall, 9*u), r.x+9*u, r.y+40*u, alLeft, colW, math.Round(u))
 		}
 	}
+	g.drawRoundCard(dst, L.round, p)
 
 	// split, auto and sell
 	n, c := len(g.blobs), g.capacity()
@@ -474,18 +470,7 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	say(dst, lbl, face(fBig, 26*u), L.split.cx(), L.split.cy()-6*u, alCenter, colW, math.Round(2*u))
 	say(dst, sub, face(fSmall, 8*u), L.split.cx(), L.split.y+L.split.h-15*u, alCenter, subc, math.Round(u))
 	say(dst, fmt.Sprintf("x%d/%d", n, c), face(fBig, 15*u), L.split.x+L.split.w-2*u, L.split.y-8*u, alRight, colW, math.Round(1.5*u))
-
-	ask := skGrey
-	if g.gem("auto") > 0 && g.st.Auto {
-		ask = skGreen
-	}
-	bevel(dst, L.auto, ask, p)
-	if g.gem("auto") == 0 {
-		icon(dst, "lock", L.auto.x+9*u, L.auto.cy(), 9*u)
-		say(dst, "AUTO", face(fSmall, 7*u), L.auto.x+28*u, L.auto.cy(), alCenter, colW, math.Round(u))
-	} else {
-		say(dst, "AUTO", face(fSmall, 8*u), L.auto.cx(), L.auto.cy(), alCenter, colW, math.Round(u))
-	}
+	g.drawToggle(dst, L.auto, "AUTO", g.has("auto"), g.st.Auto, p)
 
 	sk := skOrange
 	if n < 2 {
@@ -494,13 +479,90 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	bevel(dst, L.sell, sk, p)
 	say(dst, "SELL", face(fBig, 26*u), L.sell.cx(), L.sell.cy()-6*u, alCenter, colW, math.Round(2*u))
 	say(dst, "+$"+fmtNum(g.boardValue()), face(fSmall, 8*u), L.sell.cx(), L.sell.y+L.sell.h-14*u, alCenter, colG, math.Round(u))
+	g.drawToggle(dst, L.autosell, "AUTO", g.has("autosell"), g.st.AutoSell, p)
 }
 
-func cheapestGem(g *Game) int {
+// drawToggle is a small AUTO switch: locked until its skill is unlocked.
+func (g *Game) drawToggle(dst *ebiten.Image, r rect, label string, owned, on bool, p float64) {
+	u := g.u
+	sk := skGrey
+	if owned && on {
+		sk = skGreen
+	}
+	bevel(dst, r, sk, p)
+	if !owned {
+		icon(dst, "lock", r.x+9*u, r.cy(), 9*u)
+		say(dst, label, face(fSmall, 7*u), r.x+28*u, r.cy(), alCenter, colW, math.Round(u))
+	} else {
+		say(dst, label, face(fSmall, 8*u), r.cx(), r.cy(), alCenter, colW, math.Round(u))
+	}
+}
+
+// drawRoundCard shows the current round: its name, the target, sells left.
+func (g *Game) drawRoundCard(dst *ebiten.Image, r rect, p float64) {
+	u, s := g.u, &g.st
+	sk := skin{rgb(0x3a2a6a), rgb(0x6a4fc8), rgb(0x1f1440)}
+	if s.Round == 2 {
+		sk = skin{rgb(0x6a1f3a), rgb(0xc84f6a), rgb(0x3a1020)}
+	}
+	bevel(dst, r, sk, p)
+	title := roundNames[s.Round]
+	say(dst, title, face(fSmall, 8*u), r.x+9*u, r.y+13*u, alLeft, colT, math.Round(u))
+	say(dst, "ANTE "+itoa(s.Ante), face(fSmall, 8*u), r.x+r.w-9*u, r.y+13*u, alRight, colW, math.Round(u))
+	target := roundTarget(s.Ante, s.Round)
+	say(dst, "$"+fmtNum(s.RoundEarned)+" / $"+fmtNum(target), face(fSmall, 8*u), r.x+9*u, r.y+30*u, alLeft, colW, math.Round(u))
+	bar := rect{r.x + 9*u, r.y + 40*u, r.w - 18*u, 6 * u}
+	fill(dst, bar.x, bar.y, bar.w, bar.h, colO)
+	fill(dst, bar.x+u, bar.y+u, (bar.w-2*u)*math.Min(1, s.RoundEarned/target), bar.h-2*u, colG)
+	left := g.sellsAllowed() - s.RoundSells
+	sub := fmt.Sprintf("%d SELLS LEFT", left)
+	if b := g.boss(); b != nil {
+		sub = b.name + " - " + sub
+	}
+	say(dst, sub, face(fSmall, 6*u), r.x+9*u, r.y+53*u, alLeft, rgb(0xd8ccff), math.Round(u))
+}
+
+// drawWorldChip shows day or night, and the current event.
+func (g *Game) drawWorldChip(dst *ebiten.Image, r rect, p float64) {
+	u := g.u
+	bevel(dst, r, skDark, p)
+	night := g.night()
+	// time until the sky turns
+	ph := math.Mod(g.st.Clock, dayLen) / dayLen
+	left := 0.0
+	if night {
+		left = (1 - ph) * dayLen
+	} else {
+		left = (0.5 - ph) * dayLen
+	}
+	name, c := "DAY", colT
+	if night {
+		name, c = "NIGHT", rgb(0xb9a8ff)
+	}
+	g.drawSunMoon(dst, r.x+13*u, r.y+15*u, 7*u, night)
+	say(dst, name, face(fSmall, 8*u), r.x+25*u, r.y+11*u, alLeft, c, math.Round(u))
+	say(dst, fmtTime(left), face(fSmall, 7*u), r.x+25*u, r.y+22*u, alLeft, colW, math.Round(u))
+	if e := eventByID(g.st.Event); e != nil {
+		flash := 0.75 + 0.25*math.Sin(g.t*5)
+		say(dst, e.name, face(fSmall, 7*u), r.cx(), r.y+42*u, alCenter, mix(colW, colT, flash), math.Round(u))
+		short, _, _ := strings.Cut(e.desc, ",") // the box is narrow: the main effect only
+		say(dst, short, face(fSmall, 6*u), r.cx(), r.y+55*u, alCenter, rgb(0xd8ccff), math.Round(u))
+		say(dst, fmtTime(g.st.EventLeft), face(fSmall, 6*u), r.cx(), r.y+68*u, alCenter, colW, math.Round(u))
+	} else {
+		say(dst, "NEXT EVENT", face(fSmall, 6*u), r.cx(), r.y+46*u, alCenter, rgb(0xd8ccff), math.Round(u))
+		next := g.st.NextEvent
+		if g.has("magnet") {
+			next /= 2
+		}
+		say(dst, fmtTime(next), face(fSmall, 7*u), r.cx(), r.y+60*u, alCenter, colW, math.Round(u))
+	}
+}
+
+func (g *Game) cheapestNode() int {
 	m := math.MaxInt
-	for _, u := range gemUps {
-		if l := g.gem(u.id); l < u.max {
-			m = min(m, gemCost(u, l))
+	for i := range tree {
+		if g.canUnlock(&tree[i]) {
+			m = min(m, tree[i].cost)
 		}
 	}
 	return m
@@ -515,124 +577,35 @@ func badge(dst *ebiten.Image, x, y, u, t float64) {
 }
 
 func (g *Game) drawBanner(dst *ebiten.Image) {
-	a := g.t - g.banner.t
-	if g.banner.r < 0 || a > 2.8 {
+	u := g.u
+	show := func(a float64, title, line string, sprite int) {
+		k := math.Min(1, a/0.25)
+		if a > 2.4 {
+			k = 1 - (a-2.4)/0.4
+		}
+		w, h := 260*u, 54*u
+		r := rect{g.W/2 - w/2, -h + (h+8*u)*k, w, h}
+		bevel(dst, r, skGold, math.Max(1, math.Round(u*1.3)))
+		s := math.Floor(40 * u / blobPx)
+		g.drawBlob(dst, 1<<sprite&^1, r.x+10*u+blobPx*s/2, r.cy(), s, s, 0)
+		say(dst, title, face(fSmall, 9*u), r.x+60*u, r.y+16*u, alLeft, colO, 0)
+		say(dst, line, face(fBig, 17*u), r.x+60*u, r.y+35*u, alLeft, colW, math.Round(1.5*u))
+	}
+	if a := g.t - g.banner.t; g.banner.r >= 0 && a < 2.8 {
+		ri := rarities[g.banner.r]
+		line := ri.Name + "  1/" + fmtNum(ri.Odds)
+		if g.banner.text != "NEW MUTATION!" {
+			line = g.banner.text
+			show(a, "BOSS REWARD", line, g.banner.r)
+			return
+		}
+		show(a, g.banner.text, line, g.banner.r)
 		return
 	}
-	u := g.u
-	k := math.Min(1, a/0.25)
-	if a > 2.4 {
-		k = 1 - (a-2.4)/0.4
-	}
-	w, h := 240*u, 54*u
-	r := rect{g.W/2 - w/2, -h + (h+8*u)*k, w, h}
-	bevel(dst, r, skGold, math.Max(1, math.Round(u*1.3)))
-	ri := rarities[g.banner.r]
-	op := &ebiten.DrawImageOptions{}
-	s := math.Floor(40 * u / blobPx)
-	op.GeoM.Scale(s, s)
-	op.GeoM.Translate(r.x+10*u, r.cy()-blobPx*s/2)
-	dst.DrawImage(blobImgs[g.banner.r][0], op)
-	say(dst, "NEW BLOB!", face(fSmall, 9*u), r.x+60*u, r.y+16*u, alLeft, colO, 0)
-	say(dst, ri.Name+"  1/"+fmtNum(ri.Odds), face(fBig, 18*u), r.x+60*u, r.y+35*u, alLeft, colW, math.Round(1.5*u))
-}
-
-func (g *Game) drawPanel(dst *ebiten.Image, L layout) {
-	u, p := g.u, L.p
-	fill(dst, 0, 0, g.W, g.H, color.NRGBA{10, 5, 25, 150})
-	bevel(dst, L.panel, skDark, p)
-	title := map[string]string{"shop": "GEM SHOP", "index": "BLOB INDEX", "rebirth": "REBIRTH"}[g.panel]
-	say(dst, title, face(fBig, 22*u), L.panel.cx(), L.panel.y+22*u, alCenter, colT, math.Round(2*u))
-	bevel(dst, L.close, skOrange, p)
-	say(dst, "X", face(fBig, 16*u), L.close.cx(), L.close.cy()-u, alCenter, colW, math.Round(1.5*u))
-
-	switch g.panel {
-	case "shop":
-		icon(dst, "gem", L.panel.x+20*u, L.panel.y+22*u, 12*u)
-		say(dst, fmtNum(float64(g.st.Gems)), face(fBig, 16*u), L.panel.x+32*u, L.panel.y+22*u, alLeft, rgb(0x9ff0ff), math.Round(1.5*u))
-		for i, r := range L.rows {
-			gu := gemUps[i]
-			lv := g.gem(gu.id)
-			bevel(dst, r, skViolet, p)
-			say(dst, gu.name, face(fBig, 15*u), r.x+10*u, r.y+16*u, alLeft, colW, math.Round(1.5*u))
-			desc := gu.desc
-			if gu.max > 1 {
-				desc += fmt.Sprintf("   LV %d/%d", lv, gu.max)
-			}
-			say(dst, desc, face(fSmall, 7*u), r.x+10*u, r.y+34*u, alLeft, rgb(0xd8ccff), math.Round(u))
-			br := rect{r.x + r.w - 92*u, r.y + 7*u, 84 * u, r.h - 14*u}
-			switch {
-			case lv >= gu.max && gu.max == 1:
-				on := (gu.id == "auto" && g.st.Auto) || (gu.id == "autosell" && g.st.AutoSell)
-				sk, t := skGrey, "OFF"
-				if on {
-					sk, t = skGreen, "ON"
-				}
-				bevel(dst, br, sk, p)
-				say(dst, t, face(fSmall, 9*u), br.cx(), br.cy(), alCenter, colW, math.Round(u))
-			case lv >= gu.max:
-				bevel(dst, br, skDark, p)
-				say(dst, "MAXED", face(fSmall, 8*u), br.cx(), br.cy(), alCenter, colT, math.Round(u))
-			default:
-				c := gemCost(gu, lv)
-				sk := skGrey
-				if g.st.Gems >= c {
-					sk = skGreen
-				}
-				bevel(dst, br, sk, p)
-				icon(dst, "gem", br.x+22*u, br.cy(), 11*u)
-				say(dst, fmt.Sprint(c), face(fBig, 15*u), br.x+34*u, br.cy()-u, alLeft, colW, math.Round(1.5*u))
-			}
-		}
-	case "index":
-		for i, r := range L.rows {
-			ri := rarities[i]
-			found := g.st.Found[i] > 0 || i == 0
-			bevel(dst, r, skViolet, p)
-			s := math.Floor(math.Min(r.w*0.5, r.h*0.45) / blobPx)
-			op := &ebiten.DrawImageOptions{}
-			op.GeoM.Scale(s, s)
-			op.GeoM.Translate(r.cx()-blobPx*s/2, r.y+6*u)
-			if !found {
-				op.ColorScale.Scale(0, 0, 0, 0.6)
-			}
-			dst.DrawImage(blobImgs[i][0], op)
-			name := ri.Name
-			if !found {
-				name = "???"
-			}
-			ty := r.y + 10*u + blobPx*s
-			say(dst, name, face(fBig, 13*u), r.cx(), ty, alCenter, colW, math.Round(1.5*u))
-			odds := "COMMON"
-			if i > 0 {
-				odds = "1/" + fmtNum(ri.Odds)
-			}
-			say(dst, odds+"  x"+fmtNum(ri.Mult), face(fSmall, 7*u), r.cx(), ty+14*u, alCenter, rgb(ri.Label), math.Round(u))
-			if found && i > 0 {
-				say(dst, "MADE "+fmtNum(float64(g.st.Found[i])), face(fSmall, 6*u), r.cx(), ty+25*u, alCenter, rgb(0xd8ccff), math.Round(u))
-			}
-		}
-	case "rebirth":
-		cx, y := L.panel.cx(), L.panel.y+62*u
-		r := g.st.Rebirths
-		say(dst, "x"+fmtNum(rebirthMult(r))+"  >  x"+fmtNum(rebirthMult(r+1)), face(fBig, 30*u), cx, y+10*u, alCenter, colT, math.Round(2*u))
-		say(dst, "BLOB VALUE MULTIPLIER", face(fSmall, 8*u), cx, y+36*u, alCenter, colW, math.Round(u))
-		icon(dst, "gem", cx-50*u, y+66*u, 14*u)
-		say(dst, fmt.Sprintf("+%d GEMS", rebirthGems(r)), face(fBig, 18*u), cx-36*u, y+66*u, alLeft, rgb(0x9ff0ff), math.Round(1.5*u))
-		say(dst, "NEEDS $"+fmtNum(rebirthReq(r)), face(fBig, 16*u), cx, y+102*u, alCenter, colG, math.Round(1.5*u))
-		say(dst, "RESETS YOUR MONEY, BLOBS AND UPGRADES", face(fSmall, 7*u), cx, y+126*u, alCenter, rgb(0xd8ccff), math.Round(u))
-		ok := g.st.Money >= rebirthReq(r)
-		sk := skGrey
-		if ok {
-			sk = skGold
-		}
-		bevel(dst, L.action, sk, p)
-		say(dst, "REBIRTH", face(fBig, 22*u), L.action.cx(), L.action.cy()-2*u, alCenter, colW, math.Round(2*u))
-		if !ok {
-			k := math.Min(1, g.st.Money/rebirthReq(r))
-			bar := rect{L.action.x, L.action.y - 14*u, L.action.w, 8 * u}
-			fill(dst, bar.x, bar.y, bar.w, bar.h, colO)
-			fill(dst, bar.x+u, bar.y+u, (bar.w-2*u)*k, bar.h-2*u, colG)
+	if e := eventByID(g.st.Event); e != nil {
+		if a := g.t - g.eventT; a < 2.8 {
+			top := map[string]int{"meteor": mCosmic, "blizzard": mFrost, "goldrush": mGold, "aurora": mRainbow, "bloom": mHeart, "heatwave": mToxic, "eclipse": mShadow}[e.id]
+			show(a, "EVENT!", e.name+": "+e.desc, top)
 		}
 	}
 }

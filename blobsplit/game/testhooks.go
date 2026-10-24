@@ -13,8 +13,9 @@ import (
 //
 //	BLOB_SHOT=out.png   save a screenshot after BLOB_SHOT_AT frames (default 90) and quit
 //	BLOB_DEMO=1         start with a late-game board: money, gems, upgrades and rare blobs
-//	BLOB_PANEL=shop     open a panel: shop, index or rebirth
-//	BLOB_DO=split,sell  actions run one every 20 frames: split, sell, buy0-3, rebirth, mode
+//	BLOB_PANEL=tree     open a panel: tree, index, rebirth, market, blob, card, world, round
+//	BLOB_CLOCK=0.75     time of day (0.25 midday, 0.75 midnight); BLOB_EVENT=meteor starts an event
+//	BLOB_DO=split,sell  actions run one every 20 frames: split, sell, buy0-2, rebirth, mode, win
 //	BLOB_SIZE=1280x720  window size;  BLOB_FRESH=1 ignores the save;  BLOB_NOAUDIO=1
 var (
 	shotPath = os.Getenv("BLOB_SHOT")
@@ -41,30 +42,43 @@ func (g *Game) hookInit() {
 		doList = strings.Split(s, ",")
 	}
 	g.panel = os.Getenv("BLOB_PANEL")
+	if c, err := strconv.ParseFloat(os.Getenv("BLOB_CLOCK"), 64); err == nil {
+		g.st.Clock = c * dayLen // 0-1 through the day: 0.25 midday, 0.75 midnight
+	}
+	if n, err := strconv.Atoi(os.Getenv("BLOB_SEL")); err == nil {
+		defer func() { g.sel = n }() // after the demo board is set up
+	}
+	if e := os.Getenv("BLOB_EVENT"); e != "" {
+		g.st.Event, g.st.EventLeft, g.eventT = e, 40, -10
+	}
 	if os.Getenv("BLOB_DEMO") == "" {
 		return
 	}
 	s := &g.st
-	s.Money, s.Gems, s.Rebirths = 1.6e9, 14, 3
-	s.ValueLv, s.SpeedLv, s.CapLv, s.LuckLv = 60, maxSpeedLv, maxCapLv, 6
-	s.GemLv = map[string]int{"auto": 1, "golden": 2}
-	s.Auto = false
+	s.Money, s.Gems, s.Rebirths, s.Points = 1.6e9, 14, 3, 4
+	s.ValueLv, s.SpeedLv, s.CapLv = 60, maxSpeedLv, maxCapLv
+	s.Tree = map[string]bool{"origin": true, "quick1": true, "auto": true, "luck1": true, "slot1": true}
+	s.Cards = []string{"clover", "shade", "jackpot", "prism"}
+	s.Ante, s.Round, s.RoundEarned, s.RoundSells = 3, 1, 2.1e4, 2
 	s.Found = []int{900, 12, 4, 2, 1, 0, 0, 0}
+	s.Offers = []string{"midas", "frostbite", "harvest"}
+	s.MarketMsg = "COLONY CLEARED!  +3 DNA"
 	g.blobs = nil
 	for i := 0; i < 64; i++ {
-		r := 0
+		m := 0
 		switch i {
 		case 4, 7, 22:
-			r = 2
+			m = 1 << mShadow
 		case 10, 30, 31, 33:
-			r = 1
+			m = 1 << mGold
 		case 17:
-			r = 3
+			m = 1<<mFrost | 1<<mGold
 		case 40:
-			r = 4
+			m = 1<<mHeart | 1<<mShadow | 1<<mGold
 		}
-		g.blobs = append(g.blobs, blob{r: r, born: -10, mt: -10, squash: -10, phase: float64(i) * 1.7})
+		g.blobs = append(g.blobs, blob{m: m, born: -10, mt: -10, squash: -10, phase: float64(i) * 1.7})
 	}
+	g.sel = 40
 	g.shown = s.Money
 }
 
@@ -80,6 +94,8 @@ func (g *Game) hookUpdate() {
 			g.sell()
 		case a == "rebirth":
 			g.rebirth()
+		case a == "win":
+			g.winRound()
 		case a == "mode":
 			g.st.BuyMode = (g.st.BuyMode + 1) % len(buyModes)
 		case strings.HasPrefix(a, "buy"):

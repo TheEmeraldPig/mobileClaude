@@ -20,9 +20,9 @@
 - Every push to `mote/` builds and releases `Mote.exe`, `Mote-steam.exe` and `Mote.apk` through `.github/workflows/mote.yml`.
 - Check layouts by running under Xvfb with the test hooks in `game/testhooks.go` (`MOTE_SCRIPT`, `MOTE_TOUCH=1`, `MOTE_NOAUDIO=1`).
 
-## blobsplit/ (the game "Blob Split": Android / Google Play)
+## blobsplit/ (the game "Biote", formerly Blob Split: Android / Google Play)
 
-- An idle split-and-sell game in Go + Ebitengine, landscape, made for phones. See `blobsplit/README.md`.
-- Balance (rarities, costs, rebirth) is in `game/econ.go`; new saved state goes in `State` in `game/save.go`.
+- An idle split-and-sell game in Go + Ebitengine, landscape, made for phones. See `blobsplit/README.md`. The folder, package id and save folder keep the old name so updates install over existing copies.
+- Balance (mutations, costs, rebirth, round targets) is in `game/econ.go`; cards, skill tree, events, bosses and day/night all feed the `mods` worked out in `game/mods.go`. Mutations are bit masks and stack. New saved state goes in `State` in `game/save.go` (bump `stateVer` and migrate in `loadState` if the format changes).
 - UI reuses Mote's pixel style: `bevel()` boxes with skins in `game/ui.go`; all text is the pixel font Jersey 15, at sizes snapped to whole font pixels (`fontPx` in `ui.go`) so it stays sharp; the user rejected Pixelify Sans/Silkscreen and Titan One. Layout is in units where the screen is 360 tall (`lay()` in `game/draw.go`); check it at phone (800x360), tablet (1024x768) and PC sizes with the test hooks in `game/testhooks.go` under Xvfb.
-- Every push to `blobsplit/` builds `BlobSplit.apk` and `BlobSplit.aab` through `.github/workflows/blobsplit.yml` and releases them as `blobsplit-<n>` (never marked latest, because Mote's updaters read the latest release).
+- Every push to `blobsplit/` builds `Biote.apk` and `Biote.aab` through `.github/workflows/blobsplit.yml` and releases them as `biote-<n>` (never marked latest, because Mote's updaters read the latest release).
