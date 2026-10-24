@@ -22,91 +22,28 @@ type mods struct {
 	genes   float64       // multiplies every mutation's value multiplier
 	plain   float64       // multiplies the value of biotes with no mutations
 	target  float64       // multiplies room money targets
-	dnaMul  int           // multiplies DNA from rooms
 	notes   []string      // what is in effect, for the world panel
+
+	spread    float64       // multiplies how often neighbours pass mutations on
+	spreadMut [nMut]float64 // the same, for one mutation
+	chimera   float64       // value multiplier for biotes with 3+ mutations
+	offline   float64       // multiplies gains while the game is closed
+	evLen     float64       // multiplies how long events last
+	evFreq    float64       // multiplies how often events come
+	evPow     float64       // how strong events are (1 normal)
+	noBoss    bool          // bosses have no twist
 }
 
 func newMods() mods {
-	m := mods{luck: 1, value: 1, cool: 1, hybrid: 1, rolls: 1, inherit: true, genes: 1, plain: 1, target: 1, dnaMul: 1}
+	m := mods{luck: 1, value: 1, cool: 1, hybrid: 1, rolls: 1, inherit: true, genes: 1, plain: 1, target: 1,
+		spread: 1, chimera: 1, offline: 1, evLen: 1, evFreq: 1, evPow: 1}
 	for i := range m.chance {
-		m.chance[i], m.worth[i] = 1, 1
+		m.chance[i], m.worth[i], m.spreadMut[i] = 1, 1, 1
 	}
 	return m
 }
 
 // ---- ability cards ----
-
-var cardRarities = []struct {
-	name  string
-	sk    skin
-	price int
-	odds  float64 // weight in the market and for boss rewards
-}{
-	{"COMMON", skin{rgb(0x5a6a8a), rgb(0x8a9aba), rgb(0x33405a)}, 3, 60},
-	{"UNCOMMON", skin{rgb(0x2f9a4a), rgb(0x6fe07a), rgb(0x1a5a2a)}, 6, 28},
-	{"RARE", skin{rgb(0x3a6ae0), rgb(0x8ab0ff), rgb(0x203a8a)}, 10, 10},
-	{"LEGENDARY", skin{rgb(0xe09a20), rgb(0xffe08a), rgb(0x8a5010)}, 18, 2},
-}
-
-type cardDef struct {
-	id, name, desc string
-	rar            int
-	mut            int // mutation shown on the card (0 = a plain biote)
-	apply          func(g *Game, m *mods)
-}
-
-var cards = []cardDef{
-	{"clover", "Clover", "+30% luck", 0, 0, func(g *Game, m *mods) { m.luck *= 1.3 }},
-	{"fert", "Fertilizer", "-10% split time", 0, 0, func(g *Game, m *mods) { m.cool *= 0.9 }},
-	{"purse", "Coin Purse", "+25% sale value", 0, mGold, func(g *Game, m *mods) { m.value *= 1.25 }},
-	{"harvest", "Extra Harvest", "+1 sell in every room", 0, 0, func(g *Game, m *mods) { m.sells++ }},
-	{"tooth", "Gold Tooth", "Gold x2 chance", 0, mGold, func(g *Game, m *mods) { m.chance[mGold] *= 2 }},
-	{"sunscreen", "Sunscreen", "+50% value by day", 0, 0, func(g *Game, m *mods) {
-		if !g.night() {
-			m.value *= 1.5
-		}
-	}},
-	{"owl", "Night Owl", "x2 luck at night", 1, mShadow, func(g *Game, m *mods) {
-		if g.night() {
-			m.luck *= 2
-		}
-	}},
-	{"shade", "Shade", "Shadow x3 chance, x2 value", 1, mShadow, func(g *Game, m *mods) {
-		m.chance[mShadow] *= 3
-		m.worth[mShadow] *= 2
-	}},
-	{"frostbite", "Frostbite", "Frost x3 chance", 1, mFrost, func(g *Game, m *mods) { m.chance[mFrost] *= 3 }},
-	{"crowd", "Crowd", "+1% value per biote", 1, 0, func(g *Game, m *mods) { m.crowd += 0.01 }},
-	{"mitosis", "Mitosis", "-25% split time", 1, 0, func(g *Game, m *mods) { m.cool *= 0.75 }},
-	{"storm", "Storm Chaser", "Events twice as strong", 1, mFrost, nil}, // read in eventMods
-	{"heart", "Heartthrob", "Heart x3 chance, x2 value", 2, mHeart, func(g *Game, m *mods) {
-		m.chance[mHeart] *= 3
-		m.worth[mHeart] *= 2
-	}},
-	{"toxic", "Toxic Waste", "Toxic x4 chance", 2, mToxic, func(g *Game, m *mods) { m.chance[mToxic] *= 4 }},
-	{"jackpot", "Jackpot", "5% chance a sale pays x10", 2, mGold, func(g *Game, m *mods) { m.jackpot += 0.05 }},
-	{"hybrid", "Hybrid", "x3 value with 2+ mutations", 2, mRainbow, func(g *Game, m *mods) { m.hybrid *= 3 }},
-	{"prism", "Prism", "Rainbow x4 chance, x2 value", 3, mRainbow, func(g *Game, m *mods) {
-		m.chance[mRainbow] *= 4
-		m.worth[mRainbow] *= 2
-	}},
-	{"stargazer", "Stargazer", "Cosmic x5 chance at night", 3, mCosmic, func(g *Game, m *mods) {
-		if g.night() {
-			m.chance[mCosmic] *= 5
-		}
-	}},
-	{"midas", "Midas", "x3 all value", 3, mGold, func(g *Game, m *mods) { m.value *= 3 }},
-	{"mutagen", "Mutagen", "x3 luck", 3, mToxic, func(g *Game, m *mods) { m.luck *= 3 }},
-}
-
-func cardByID(id string) *cardDef {
-	for i := range cards {
-		if cards[i].id == id {
-			return &cards[i]
-		}
-	}
-	return nil
-}
 
 func (g *Game) hasCard(id string) bool {
 	for _, c := range g.st.Cards {
@@ -151,19 +88,19 @@ var tree = []node{
 	{"sun", "Sun Worship", "Day bonuses x2", 3, "longev", -2, -2, 1},
 	// speed: left
 	{"quick1", "Quick I", "-10% split time", 1, "origin", -1, 0, 2},
-	{"auto", "Auto Split", "Splits for you (AUTO button)", 2, "quick1", -2, 0, 2},
+	{"auto", "Fast Auto Split", "AUTO splits as fast as you can (x2 slower without)", 2, "quick1", -2, 0, 2},
 	{"quick2", "Quick II", "-15% split time", 2, "auto", -3, 0, 2},
-	{"autosell", "Auto Sell", "Sells when full (AUTO on SELL)", 3, "quick2", -4, 0, 2},
+	{"autosell", "Fast Auto Sell", "AUTO sells as soon as it's full (x2 slower without)", 3, "quick2", -4, 0, 2},
 	// genes: down and left
 	{"genes1", "Strong Genes", "Mutation multipliers x1.25", 1, "origin", -1, 1, 3},
-	{"bank", "DNA Bank", "+1 DNA for every room cleared", 2, "genes1", -2, 2, 3},
+	{"bank", "Gene Bank", "+50% DNA from rebirths", 2, "genes1", -2, 2, 3},
 	{"pure", "Purebred", "Plain biotes worth x3", 2, "bank", -3, 2, 3},
 	{"genes2", "Dominant Genes", "Mutation multipliers x1.5", 4, "pure", -4, 2, 3},
 	// cards: down and right
 	{"slot1", "Climber", "Room money targets -15%", 1, "origin", 0, 1, 4},
 	{"market", "Lucky Draw", "Rarer cards from floors", 2, "slot1", 0, 2, 4},
 	{"slot2", "Endurance", "+1 sell in every room", 3, "market", 1, 2, 4},
-	{"reroll", "Bounty", "x2 DNA from rooms", 2, "slot2", 2, 2, 4},
+	{"reroll", "Bounty", "+1 token every rebirth", 2, "slot2", 2, 2, 4},
 	// wealth: right
 	{"value1", "Value I", "x1.5 biote value", 1, "origin", 1, 0, 5},
 	{"value2", "Value II", "x2 biote value", 2, "value1", 2, 0, 5},
@@ -242,10 +179,11 @@ func eventByID(id string) *eventDef {
 }
 
 func (g *Game) eventLength() float64 {
+	l := 45 * g.m.evLen
 	if g.has("longev") {
-		return 90
+		l *= 2
 	}
-	return 45
+	return l
 }
 
 // tickEvents runs the event clock: when one ends, the next comes 2-4 minutes later
@@ -260,10 +198,11 @@ func (g *Game) tickEvents() {
 		}
 		return
 	}
+	speed := g.m.evFreq
 	if g.has("magnet") {
-		s.NextEvent -= dt
+		speed *= 2
 	}
-	if s.NextEvent -= dt; s.NextEvent > 0 {
+	if s.NextEvent -= dt * speed; s.NextEvent > 0 {
 		return
 	}
 	var pool []string
@@ -351,8 +290,11 @@ func (g *Game) computeMods() mods {
 	if g.has("slot2") {
 		m.sells++
 	}
-	if g.has("reroll") {
-		m.dnaMul = 2
+	// the DNA lab: each mutation's value, how common it is, how far it spreads
+	for r := 1; r < nMut; r++ {
+		m.worth[r] *= 1 + 0.25*float64(g.lab(labValue, r))
+		m.chance[r] *= 1 + 0.2*float64(g.lab(labChance, r))
+		m.spreadMut[r] *= 1 + 0.5*float64(g.lab(labSpread, r))
 	}
 	// cards
 	for _, id := range g.st.Cards {
@@ -380,15 +322,11 @@ func (g *Game) computeMods() mods {
 	}
 	// the current event
 	if e := eventByID(g.st.Event); e != nil {
-		k := 1.0
-		if g.hasCard("storm") {
-			k = 2
-		}
-		e.apply(&m, k)
+		e.apply(&m, m.evPow)
 		add(e.name + ": " + e.desc)
 	}
 	// the boss
-	if b := g.boss(); b != nil {
+	if b := g.boss(); b != nil && !m.noBoss {
 		switch b.id {
 		case "parasite":
 			m.value *= 0.5

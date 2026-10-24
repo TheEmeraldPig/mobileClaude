@@ -27,7 +27,9 @@ type layout struct {
 	circle               [][2]float64 // biote centres when they form a circle instead
 	panel, close, action rect
 	action2, action3     rect
-	rows                 []rect // tree nodes, market offers or catalog cells
+	rows                 []rect // rows of the genome or shop
+	btns                 []rect // their buttons (and settings' YES / NO)
+	rowMut               []int  // the mutation of each genome row
 	p                    float64
 }
 
@@ -49,9 +51,9 @@ func (g *Game) lay() layout {
 		*r = R(10, 70+float64(i)*64, leftW-6, 58)
 	}
 	L.world = R(10, 264, leftW-6, 86)
-	L.sound = R(wu-38, 8, 28, 28)
-	L.music = R(wu-72, 8, 28, 28)
-	L.buy = R(rightX, 8, rightW-72, 28)
+	L.sound = R(wu-38, 8, 28, 28)    // the settings gear
+	L.music = R(wu-38-70, 8, 66, 28) // the token shop
+	L.buy = R(rightX, 8, rightW-74-34, 28)
 	for i := range L.cards {
 		L.cards[i] = R(rightX, 44+float64(i)*68, rightW, 62)
 	}
@@ -346,6 +348,8 @@ func (g *Game) drawParticles(dst *ebiten.Image, blobs bool) {
 func (g *Game) drawCardFace(dst *ebiten.Image, r rect, c *cardDef, p float64, named bool) {
 	sk := cardRarities[c.rar].sk
 	bevel(dst, r, sk, p)
+	// a stripe in the card type's colour along the bottom
+	fill(dst, r.x+2*p, r.y+r.h-2*p-math.Max(2, r.h*0.07), r.w-4*p, math.Max(2, r.h*0.07), rgb(cardTypes[c.typ].col))
 	inner := rect{r.x + 2*p, r.y + 2*p, r.w - 4*p, r.h * 0.55}
 	fill(dst, inner.x, inner.y, inner.w, inner.h, mul(sk.b, 0.55))
 	s := math.Max(1, math.Floor(math.Min(inner.w, inner.h)*0.9/blobPx))
@@ -379,7 +383,7 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	for _, b := range []struct {
 		r         rect
 		ic, label string
-	}{{L.shop, "tree", "SKILLS"}, {L.index, "book", "CATALOG"}, {L.rebirth, "rebirth", "REBIRTH"}} {
+	}{{L.shop, "tree", "SKILLS"}, {L.index, "dna", "GENOME"}, {L.rebirth, "rebirth", "REBIRTH"}} {
 		sk := skViolet
 		if b.ic == "rebirth" && canRebirth {
 			sk = skGold
@@ -402,21 +406,14 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	}
 	g.drawWorldChip(dst, L.world, p)
 
-	// top right: buy amount, music and sound
+	// top right: buy amount, the token shop and settings
 	bevel(dst, L.buy, skGreen, p)
 	say(dst, "BUY "+buyModes[g.st.BuyMode], face(fBig, 14*u), L.buy.cx(), L.buy.cy()-u, alCenter, colW, math.Round(1.5*u))
-	bevel(dst, L.music, skDark, p)
-	ic := "note"
-	if g.st.NoMusic {
-		ic = "nonote"
-	}
-	icon(dst, ic, L.music.cx(), L.music.cy(), 14*u)
+	bevel(dst, L.music, skGold, p)
+	icon(dst, "token", L.music.x+13*u, L.music.cy(), 16*u)
+	say(dst, itoa(g.st.Tokens), face(fBig, 14*u), L.music.x+24*u, L.music.cy()-u, alLeft, colW, math.Round(1.5*u))
 	bevel(dst, L.sound, skDark, p)
-	ic = "sound"
-	if !g.st.Sound {
-		ic = "mute"
-	}
-	icon(dst, ic, L.sound.cx(), L.sound.cy(), 14*u)
+	icon(dst, "gear", L.sound.cx(), L.sound.cy(), 16*u)
 
 	// upgrade cards
 	for i, r := range L.cards[:nUps] {
@@ -463,7 +460,7 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	say(dst, lbl, face(fBig, 26*u), L.split.cx(), L.split.cy()-6*u, alCenter, colW, math.Round(2*u))
 	say(dst, sub, face(fSmall, 8*u), L.split.cx(), L.split.y+L.split.h-15*u, alCenter, subc, math.Round(u))
 	say(dst, fmt.Sprintf("x%d/%d", n, c), face(fBig, 15*u), L.split.x+L.split.w-2*u, L.split.y-8*u, alRight, colW, math.Round(1.5*u))
-	g.drawToggle(dst, L.auto, "AUTO", g.has("auto"), g.st.Auto, p)
+	g.drawToggle(dst, L.auto, "AUTO", true, g.st.Auto, p)
 
 	sk := skOrange
 	if n < 2 {
@@ -472,7 +469,7 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	bevel(dst, L.sell, sk, p)
 	say(dst, "SELL", face(fBig, 26*u), L.sell.cx(), L.sell.cy()-6*u, alCenter, colW, math.Round(2*u))
 	say(dst, "+$"+fmtNum(g.boardValue()), face(fSmall, 8*u), L.sell.cx(), L.sell.y+L.sell.h-14*u, alCenter, colG, math.Round(u))
-	g.drawToggle(dst, L.autosell, "AUTO", g.has("autosell"), g.st.AutoSell, p)
+	g.drawToggle(dst, L.autosell, "AUTO", true, g.st.AutoSell, p)
 }
 
 // drawToggle is a small AUTO switch: locked until its skill is unlocked.

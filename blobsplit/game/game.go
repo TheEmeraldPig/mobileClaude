@@ -83,6 +83,12 @@ type Game struct {
 	saveT   float64
 	quit    bool
 	sky     sky
+
+	lastSale float64 // time of the last sale, for the income rate
+	away     float64 // seconds away, shown on the welcome-back screen
+	awayGain float64
+	confirm  bool // the reset button was pressed once
+	cardTab  int  // the card rarity shown in the CHALLENGE screen
 }
 
 func NewGame() *Game {
@@ -100,6 +106,7 @@ func NewGame() *Game {
 	g.sky.init()
 	g.hookInit()
 	g.m = g.computeMods()
+	g.checkAway()
 	g.updateMusic()
 	current = g
 	return g
@@ -123,8 +130,11 @@ func (g *Game) cooldown() float64 { return baseCooldown(g.st.SpeedLv) * g.m.cool
 // baseValueAt is a plain biote's value with value level lv and everything that
 // multiplies all biotes.
 func (g *Game) baseValueAt(lv int) float64 {
-	dna := 1 + 0.01*float64(g.st.Gems) // each DNA adds 1%
-	return valueOf(lv) * rebirthMult(g.st.Rebirths) * g.m.value * dna * (1 + g.m.crowd*float64(len(g.blobs)))
+	v := valueOf(lv) * rebirthMult(g.st.Rebirths) * g.m.value * (1 + g.m.crowd*float64(len(g.blobs)))
+	if g.st.Perks["golden"] {
+		v *= 2
+	}
+	return v
 }
 
 // mutMult is what mutation r multiplies a biote's value by, cards included.
@@ -137,6 +147,9 @@ func (g *Game) blobValue(mask int) float64 {
 	}
 	if maskCount(mask) >= 2 {
 		v *= g.m.hybrid
+	}
+	if maskCount(mask) >= 3 {
+		v *= g.m.chimera
 	}
 	if mask == 0 {
 		v *= g.m.plain
@@ -160,7 +173,7 @@ func (g *Game) gainChance(r int) float64 {
 // childMask is the mutations of a biote split from a parent with mask p: a copy of
 // the parent's (unless the boss says otherwise), and a chance at each one it doesn't
 // have yet.
-func (g *Game) childMask(p int) int {
+func (g *Game) childMask(p int, near ...int) int {
 	m := 0
 	if g.m.inherit {
 		m = p
@@ -172,7 +185,36 @@ func (g *Game) childMask(p int) int {
 			}
 		}
 	}
+	// neighbours on the board pass their mutations on now and then
+	for _, n := range near {
+		for _, r := range maskList(n &^ m) {
+			if rand.Float64() < g.spreadChance(r) {
+				m |= 1 << r
+			}
+		}
+	}
 	return m
+}
+
+// spreadChance is the chance that a neighbour's mutation r reaches a new biote.
+func (g *Game) spreadChance(r int) float64 {
+	return math.Min(0.5, spreadBase*g.m.spread*g.m.spreadMut[r])
+}
+
+// neighbours are the biotes next to biote i on the board (left, right, above, below).
+func neighbours(L layout, i, n int) []int {
+	var out []int
+	cols := max(1, L.cols)
+	if L.circle != nil {
+		cols = n + 1 // a circle: only the ones either side
+	}
+	for _, j := range []int{i - 1, i + 1, i - cols, i + cols} {
+		if j < 0 || j >= n || ((j == i-1 || j == i+1) && j/cols != i/cols) {
+			continue
+		}
+		out = append(out, j)
+	}
+	return out
 }
 
 func (g *Game) trySplit(manual bool) {
@@ -209,7 +251,11 @@ func (g *Game) trySplit(manual bool) {
 			continue
 		}
 		next[len(next)-1].squash = g.t
-		m := g.childMask(p.m)
+		var near []int
+		for _, j := range neighbours(L, i, n) {
+			near = append(near, g.blobs[j].m)
+		}
+		m := g.childMask(p.m, near...)
 		next = append(next, blob{m: m, born: g.t, squash: -10, phase: rand.Float64() * 7, fx: p.fx, fy: p.fy, mt: g.t})
 		for _, r := range maskList(m &^ p.m) {
 			g.st.Found[r]++
@@ -253,6 +299,7 @@ func (g *Game) sell() {
 	}
 	g.st.Money += v
 	g.st.Earned += v
+	g.noteSale(v)
 	// Every biote pops (a ring and a burst of coins), hops up, then flies in an arc to
 	// the money counter, in a wave across the board.
 	tx, ty := L.money.x+20*g.u, L.money.cy()
@@ -283,6 +330,14 @@ func (g *Game) sell() {
 	g.roomSale(v, mutated)
 }
 
+// autoSlow is how much longer AUTO waits: twice the time until its skill is unlocked.
+func autoSlow(skill bool) float64 {
+	if skill {
+		return 1
+	}
+	return 2
+}
+
 func (g *Game) unlock(id string) {
 	n := nodeByID(id)
 	if n == nil || !g.canUnlock(n) || g.st.Points < n.cost {
@@ -291,12 +346,6 @@ func (g *Game) unlock(id string) {
 	}
 	g.st.Points -= n.cost
 	g.st.Tree[id] = true
-	switch id {
-	case "auto":
-		g.st.Auto = true
-	case "autosell":
-		g.st.AutoSell = true
-	}
 	g.play("buy")
 	g.save()
 }
@@ -307,7 +356,10 @@ func (g *Game) rebirth() {
 		g.play("deny")
 		return
 	}
-	s.Points += rebirthPoints(s.RunFloors)
+	pts, dna, tokens := g.rebirthRewards()
+	s.Points += pts
+	s.Gems += dna
+	s.Tokens += tokens
 	s.Rebirths++
 	s.Money, g.shown = 0, 0
 	s.ValueLv, s.SpeedLv, s.CapLv = 0, 0, 0
@@ -323,6 +375,23 @@ func (g *Game) rebirth() {
 	}
 	g.play("rebirth")
 	g.save()
+}
+
+// rebirthRewards is what rebirthing now pays: one skill point, DNA for every floor
+// cleared this run, and a token for every time your money doubled the requirement.
+func (g *Game) rebirthRewards() (points, dna, tokens int) {
+	s := &g.st
+	dna = max(1, s.RunFloors)
+	if g.has("bank") {
+		dna += dna / 2
+	}
+	if req := rebirthReq(s.Rebirths); s.Money >= req {
+		tokens = int(math.Log2(s.Money / req))
+	}
+	if g.has("reroll") {
+		tokens++
+	}
+	return 1, dna, tokens
 }
 
 // Upgrade cards: 0 biote value, 1 split speed, 2 capacity.
@@ -459,21 +528,11 @@ func (g *Game) tap(L layout, x, y float64) {
 		}
 		g.trySplit(true)
 	case L.auto.in(x, y):
-		if g.has("auto") {
-			g.st.Auto = !g.st.Auto
-			g.play("tap")
-		} else {
-			g.selN = "auto"
-			g.open("tree")
-		}
+		g.st.Auto = !g.st.Auto
+		g.play("tap")
 	case L.autosell.in(x, y):
-		if g.has("autosell") {
-			g.st.AutoSell = !g.st.AutoSell
-			g.play("tap")
-		} else {
-			g.selN = "autosell"
-			g.open("tree")
-		}
+		g.st.AutoSell = !g.st.AutoSell
+		g.play("tap")
 	case L.sell.in(x, y):
 		g.sell()
 	case L.shop.in(x, y):
@@ -487,12 +546,12 @@ func (g *Game) tap(L layout, x, y float64) {
 	case L.challenge.in(x, y):
 		g.open("challenge")
 	case L.sound.in(x, y):
-		g.st.Sound = !g.st.Sound
-		g.play("tap")
+		g.confirm = false
+		g.open("settings")
 	case L.music.in(x, y):
-		g.st.NoMusic = !g.st.NoMusic
-		g.updateMusic()
-		g.play("tap")
+		g.open("shop")
+	case L.gems.in(x, y):
+		g.open("index") // the DNA lab
 	case L.buy.in(x, y):
 		g.st.BuyMode = (g.st.BuyMode + 1) % len(buyModes)
 		g.play("tap")
@@ -560,12 +619,13 @@ func (g *Game) Update() error {
 
 	g.cool += dt
 	{
-		if g.st.Auto && g.has("auto") {
+		// AUTO works from the start at half speed; its skills make it full speed
+		if g.st.Auto && g.cool >= g.cooldown()*autoSlow(g.has("auto")) {
 			g.trySplit(false)
 		}
 		if len(g.blobs) >= g.capacity() {
 			g.full += dt
-			if g.st.AutoSell && g.has("autosell") && g.full > 0.6 {
+			if g.st.AutoSell && g.full >= g.cooldown()*autoSlow(g.has("autosell")) {
 				g.sell()
 			}
 		} else {

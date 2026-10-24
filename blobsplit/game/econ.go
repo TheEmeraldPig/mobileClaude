@@ -91,12 +91,18 @@ const (
 	maxSpeedLv = 5 // 3.0s down to 2.0s
 )
 
-func capOf(l int) int            { return 4 << l }
-func capCost(l int) float64      { return growCost(10, 1.2, 0.25, l) }
-func speedCost(l int) float64    { return growCost(15, 1.0, 0.15, l) }
-func valueOf(l int) float64      { return (1 + float64(l)) * math.Pow(1.07, float64(l)) }
-func valueCost(l int) float64    { return growCost(3, 0.07, 0.0015, l) }
-func baseCooldown(l int) float64 { return 3.0 - 0.2*float64(l) }
+// valueStep is what each biote value level multiplies value by; its cost grows a
+// little faster, so each floor takes a bit longer than the one before.
+const valueStep = 1.1
+
+func capOf(l int) int         { return 4 << l }
+func capCost(l int) float64   { return growCost(10, 1.2, 0.25, l) }
+func speedCost(l int) float64 { return growCost(15, 1.0, 0.15, l) }
+func valueOf(l int) float64   { return math.Pow(valueStep, float64(l)) }
+func valueCost(l int) float64 {
+	return math.Round(120*math.Pow(valueStep*1.014, float64(l))) + float64(l)
+}
+func baseCooldown(l int) float64 { return 4.5 - 0.25*float64(l) }
 
 // growCost is base * e^(a*l + b*l*l) + l: each level costs only a little more than
 // the last while levels are low (e^a times, and always at least $1 more), and the
@@ -108,7 +114,7 @@ func growCost(base, a, b float64, l int) float64 {
 
 // Rebirth: needs money, resets the run (money, upgrades, floor) and doubles biote
 // value for good. It pays skill points: one, plus one for every floor cleared.
-func rebirthReq(r int) float64     { return 25000 * math.Pow(10, float64(r)) }
+func rebirthReq(r int) float64     { return 1e9 * math.Pow(100, float64(r)) }
 func rebirthMult(r int) float64    { return math.Pow(2, float64(r)) }
 func rebirthPoints(floors int) int { return 1 + floors }
 

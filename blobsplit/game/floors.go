@@ -39,7 +39,7 @@ type req struct {
 }
 
 // floorBase is the money scale of a floor: three times the last.
-func floorBase(f int) float64 { return 25 * math.Pow(3, float64(f-1)) }
+func floorBase(f int) float64 { return 25 * math.Pow(4, float64(f-1)) }
 
 // roomReq works out the current room's requirement. It is the same every time for a
 // given floor and room, so it doesn't change when you come back to it.
@@ -68,9 +68,9 @@ func (g *Game) reqFor(f, room int) req {
 	case reqSingle:
 		return req{kind: kind, target: base * 0.6 * k, sells: baseSells + extra}
 	case reqMutants:
-		return req{kind: kind, count: min(2+(f-1)*2, 40), sells: 6 + extra}
+		return req{kind: kind, count: min(2+f, 48), sells: 6 + extra}
 	case reqGain:
-		return req{kind: kind, mut: 1 + rng.Intn(min(nMut-1, 1+f/2)), sells: 8 + extra}
+		return req{kind: kind, mut: 1 + rng.Intn(min(nMut-1, 1+f/3)), sells: 10 + extra}
 	}
 	return req{kind: reqEarn, target: base * k, sells: baseSells + extra}
 }
@@ -100,18 +100,6 @@ func (g *Game) progress(r req) (float64, string) {
 		return 0, "NOT YET"
 	}
 	return math.Min(1, s.RoomEarned/r.target), "$" + fmtNum(s.RoomEarned) + " / $" + fmtNum(r.target)
-}
-
-// roomDNA is what clearing a room pays.
-func (g *Game) roomDNA(room int) int {
-	n := 1 + (g.st.Floor-1)/2
-	if room == roomsPerFloor-1 {
-		n *= 3
-	}
-	if g.has("bank") {
-		n++
-	}
-	return n * g.m.dnaMul
 }
 
 // roomSale counts a sale (worth v, with mutated mutated biotes) towards the room.
@@ -159,11 +147,9 @@ func (g *Game) failRoom() {
 
 func (g *Game) clearRoom() {
 	s := &g.st
-	dna := g.roomDNA(s.Room)
-	s.Gems += dna
-	msg := fmt.Sprintf("ROOM %d CLEARED!  +%d DNA", s.Room+1, dna)
+	msg := fmt.Sprintf("ROOM %d CLEARED!", s.Room+1)
 	if s.Room == roomsPerFloor-1 {
-		msg = fmt.Sprintf("FLOOR %d CLEARED!  +%d DNA", s.Floor, dna)
+		msg = fmt.Sprintf("FLOOR %d CLEARED!  +1 DNA NEXT REBIRTH", s.Floor)
 		s.Floor++
 		s.Room = 0
 		s.RunFloors++
@@ -202,7 +188,7 @@ func (g *Game) awardCard() {
 	for i, c := range left {
 		w[i] = cardRarities[c.rar].odds
 		if g.has("market") && c.rar > 0 {
-			w[i] *= 2
+			w[i] *= 1.5 + 0.5*float64(c.rar)
 		}
 		total += w[i]
 	}
@@ -234,8 +220,10 @@ type challengeLayout struct {
 	back  rect
 	left  rect
 	rooms []rect
-	cards []rect
 	right rect
+	tabs  []rect // one per card rarity
+	cards []rect // the shown rarity's cards, in cardsOf order
+	shown []int  // their indexes in cards
 	info  rect
 }
 
@@ -252,15 +240,21 @@ func (g *Game) layChallenge() challengeLayout {
 		C.rooms = append(C.rooms, R(24+float64(i)*(rw+6), 92, rw, 38))
 	}
 	rx := 12 + lw + 12
-	C.right = R(rx, 50, wu-rx-12, 298)
-	cols, rows := 5, 4
-	cw := math.Min((C.right.w/u-24-float64(cols-1)*6)/float64(cols), 48)
-	ch := math.Min(cw*1.3, (200-float64(rows-1)*6)/float64(rows))
-	gx := rx + (C.right.w/u-(float64(cols)*cw+float64(cols-1)*6))/2
-	for i := range cards {
-		C.cards = append(C.cards, R(gx+float64(i%cols)*(cw+6), 76+float64(i/cols)*(ch+6), cw, ch))
+	pw := wu - rx - 12
+	C.right = R(rx, 50, pw, 298)
+	tw := (pw - 24 - 4*4) / float64(len(cardRarities))
+	for i := range cardRarities {
+		C.tabs = append(C.tabs, R(rx+12+float64(i)*(tw+4), 74, tw, 20))
 	}
-	C.info = R(rx+12, 76+float64(rows)*(ch+6)+4, C.right.w/u-24, 298-(76-50)-float64(rows)*(ch+6)-16)
+	C.shown = cardsOf(g.cardTab)
+	cols, rows := 6, 4
+	cw := math.Min((pw-24-float64(cols-1)*5)/float64(cols), 40)
+	ch := math.Min(cw*1.25, (176-float64(rows-1)*5)/float64(rows))
+	gx := rx + (pw-(float64(cols)*cw+float64(cols-1)*5))/2
+	for k := range C.shown {
+		C.cards = append(C.cards, R(gx+float64(k%cols)*(cw+5), 100+float64(k/cols)*(ch+5), cw, ch))
+	}
+	C.info = R(rx+12, 100+float64(rows)*(ch+5)+2, pw-24, 348-(100+float64(rows)*(ch+5)+2)-8)
 	return C
 }
 
@@ -271,9 +265,15 @@ func (g *Game) tapChallenge(x, y float64) {
 		g.play("tap")
 		return
 	}
-	for i, r := range C.cards {
+	for i, r := range C.tabs {
 		if r.in(x, y) {
-			g.sel = i
+			g.cardTab, g.sel = i, -1
+			g.play("tap")
+		}
+	}
+	for k, r := range C.cards {
+		if r.in(x, y) {
+			g.sel = C.shown[k]
 			g.play("tap")
 		}
 	}
@@ -309,7 +309,7 @@ func (g *Game) drawChallenge(dst *ebiten.Image) {
 	g.drawSpace(dst)
 	say(dst, "CHALLENGE", face(fBig, 24*u), g.W/2, 24*u, alCenter, colT, math.Round(2*u))
 	icon(dst, "dna", 20*u, 24*u, 20*u)
-	say(dst, itoa(s.Gems)+" DNA  (+"+itoa(s.Gems)+"% VALUE)", face(fBig, 15*u), 32*u, 24*u, alLeft, rgb(0x9ff0ff), math.Round(1.5*u))
+	say(dst, fmt.Sprintf("%d DNA  -  %d FLOORS THIS RUN", s.Gems, s.RunFloors), face(fBig, 15*u), 32*u, 24*u, alLeft, rgb(0x9ff0ff), math.Round(1.5*u))
 	bevel(dst, C.back, skOrange, p)
 	say(dst, "X", face(fBig, 18*u), C.back.cx(), C.back.cy()-u, alCenter, colW, math.Round(1.5*u))
 
@@ -357,23 +357,42 @@ func (g *Game) drawChallenge(dst *ebiten.Image) {
 	say(dst, label, face(fSmall, 7*u), lx, y, alLeft, colW, math.Round(u))
 	say(dst, fmt.Sprintf("SELLS LEFT %d", r.sells-s.RoomSells), face(fSmall, 7*u), C.left.x+C.left.w-12*u, y, alRight, colT, math.Round(u))
 	y += 18 * u
-	say(dst, fmt.Sprintf("REWARD +%d DNA", g.roomDNA(s.Room)), face(fSmall, 7*u), lx, y, alLeft, rgb(0x9ff0ff), math.Round(u))
+	if r.boss {
+		say(dst, "CLEAR IT FOR +1 DNA AT YOUR NEXT REBIRTH", face(fSmall, 7*u), lx, y, alLeft, rgb(0x9ff0ff), math.Round(u))
+	}
 	g.wrapSay(dst, "Every sale counts. Run out of sells and you go back to room 1 of this floor, with nothing else lost. Every 10th floor you clear unlocks a card.", lx, C.left.y+C.left.h-44*u, C.left.w-24*u, 6, soft)
 
-	// unlocked cards
+	// unlocked cards, one rarity at a time
 	bevel(dst, C.right, skDark, p)
-	say(dst, fmt.Sprintf("CARDS  %d/%d", len(s.Cards), len(cards)), face(fBig, 15*u), C.right.x+12*u, C.right.y+14*u, alLeft, colW, math.Round(1.5*u))
-	say(dst, "ALL UNLOCKED CARDS ARE ACTIVE", face(fSmall, 6*u), C.right.x+C.right.w-12*u, C.right.y+14*u, alRight, soft, math.Round(u))
+	say(dst, fmt.Sprintf("CARDS  %d/%d", len(s.Cards), len(cards)), face(fBig, 15*u), C.right.x+12*u, C.right.y+12*u, alLeft, colW, math.Round(1.5*u))
+	say(dst, "ALL UNLOCKED CARDS ARE ACTIVE", face(fSmall, 6*u), C.right.x+C.right.w-12*u, C.right.y+12*u, alRight, soft, math.Round(u))
 	owned := map[string]bool{}
 	for _, id := range s.Cards {
 		owned[id] = true
 	}
-	for i, r := range C.cards {
+	for i, r := range C.tabs {
+		rr := cardRarities[i]
+		n, have := 0, 0
+		for _, k := range cardsOf(i) {
+			n++
+			if owned[cards[k].id] {
+				have++
+			}
+		}
+		sk := skin{mul(rr.sk.b, 0.45), mul(rr.sk.l, 0.55), mul(rr.sk.s, 0.6)}
+		if i == g.cardTab {
+			sk = rr.sk
+		}
+		bevel(dst, r, sk, math.Max(1, p-1))
+		say(dst, fmt.Sprintf("%s %d/%d", rr.name[:min(4, len(rr.name))], have, n), face(fSmall, 6*u), r.cx(), r.cy(), alCenter, colW, math.Round(u))
+	}
+	for k, r := range C.cards {
+		i := C.shown[k]
 		c := &cards[i]
 		if !owned[c.id] {
 			fill(dst, r.x, r.y, r.w, r.h, color.NRGBA{10, 5, 25, 160})
 			vector.StrokeRect(dst, float32(r.x+u), float32(r.y+u), float32(r.w-2*u), float32(r.h-2*u), float32(math.Max(1, u)), color.NRGBA{160, 140, 220, 90}, false)
-			say(dst, "?", face(fBig, 16*u), r.cx(), r.cy(), alCenter, rgb(0x6a6090), 0)
+			say(dst, "?", face(fBig, 14*u), r.cx(), r.cy(), alCenter, rgb(0x6a6090), 0)
 		} else {
 			g.drawCardFace(dst, r, c, math.Max(1, p-1), false)
 		}
@@ -384,11 +403,12 @@ func (g *Game) drawChallenge(dst *ebiten.Image) {
 	if g.sel >= 0 && g.sel < len(cards) {
 		c := &cards[g.sel]
 		if owned[c.id] {
-			say(dst, c.name+"  -  "+cardRarities[c.rar].name, face(fSmall, 8*u), C.info.x, C.info.y+8*u, alLeft, cardRarities[c.rar].sk.l, math.Round(u))
-			g.wrapSay(dst, c.desc, C.info.x, C.info.y+24*u, C.info.w, 8, colT)
+			say(dst, c.name, face(fSmall, 8*u), C.info.x, C.info.y+8*u, alLeft, colW, math.Round(u))
+			say(dst, cardRarities[c.rar].name+" "+cardTypes[c.typ].name, face(fSmall, 6*u), C.info.x+C.info.w, C.info.y+8*u, alRight, rgb(cardTypes[c.typ].col), math.Round(u))
+			g.wrapSay(dst, c.desc, C.info.x, C.info.y+22*u, C.info.w, 8, colT)
 		} else {
-			say(dst, "LOCKED", face(fSmall, 8*u), C.info.x, C.info.y+8*u, alLeft, soft, math.Round(u))
-			g.wrapSay(dst, "Unlocked by clearing floors: one card every 10 floors past your best.", C.info.x, C.info.y+24*u, C.info.w, 7, soft)
+			say(dst, "LOCKED "+cardRarities[c.rar].name+" "+cardTypes[c.typ].name+" CARD", face(fSmall, 7*u), C.info.x, C.info.y+8*u, alLeft, soft, math.Round(u))
+			g.wrapSay(dst, "Won by clearing floors: one card every 10 floors past your best.", C.info.x, C.info.y+22*u, C.info.w, 7, soft)
 		}
 	}
 }

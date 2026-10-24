@@ -77,8 +77,8 @@ func TestFloors(t *testing.T) {
 	// clear rooms 1 and 2, then fail room 3: back to room 1, DNA kept
 	clear()
 	clear()
-	if s.Room != 2 || s.Gems == 0 {
-		t.Fatalf("after two rooms: room %d DNA %d", s.Room, s.Gems)
+	if s.Room != 2 {
+		t.Fatalf("after two rooms: room %d", s.Room)
 	}
 	dna := s.Gems
 	r := g.roomReq()
@@ -109,7 +109,7 @@ func TestCardsAndTree(t *testing.T) {
 	s := &g.st
 	s.Cards = []string{"clover"}
 	g.m = g.computeMods()
-	if g.m.luck != 1.3 {
+	if g.m.luck != 1.2 {
 		t.Fatalf("clover luck %v", g.m.luck)
 	}
 	// the tree: nodes need the one above
@@ -135,15 +135,16 @@ func TestCardsAndTree(t *testing.T) {
 	}
 }
 
-// Rebirth pays a point plus one per floor cleared, and keeps cards and skills.
+// Rebirth pays one skill point, DNA per floor and tokens per doubling, and keeps cards and skills.
 func TestRebirth(t *testing.T) {
 	g := testGame(t)
 	s := &g.st
-	s.Money, s.RunFloors, s.Cards, s.Floor = rebirthReq(0), 2, []string{"midas"}, 3
+	s.Money, s.RunFloors, s.Cards, s.Floor = rebirthReq(0)*8.5, 2, []string{"midas"}, 3
 	s.Tree["origin"] = true
 	g.rebirth()
-	if s.Points != 3 || s.Rebirths != 1 || s.Floor != 1 || len(s.Cards) != 1 || !g.has("origin") {
-		t.Fatalf("rebirth: points %d floor %d cards %v", s.Points, s.Floor, s.Cards)
+	// one point, DNA per floor cleared, a token per doubling of the requirement (8x = 3)
+	if s.Points != 1 || s.Gems != 2 || s.Tokens != 3 || s.Rebirths != 1 || s.Floor != 1 || len(s.Cards) != 1 || !g.has("origin") {
+		t.Fatalf("rebirth: points %d DNA %d tokens %d floor %d cards %v", s.Points, s.Gems, s.Tokens, s.Floor, s.Cards)
 	}
 }
 
@@ -217,5 +218,75 @@ func TestTreeReveals(t *testing.T) {
 	g.unlock("origin")
 	if !g.visible(nodeByID("luck1")) || g.visible(nodeByID("luck2")) {
 		t.Fatal("after Origin, Lucky I should show and Lucky II should not")
+	}
+}
+
+// Neighbours pass their mutations on: with spread pushed up, a plain parent next to a
+// Cosmic biote gets Cosmic children.
+func TestSpread(t *testing.T) {
+	g := testGame(t)
+	g.m.spread = 1000
+	got := 0
+	for i := 0; i < 50; i++ {
+		if maskHas(g.childMask(0, 1<<mCosmic), mCosmic) {
+			got++
+		}
+	}
+	if got < 15 { // spread is capped at a 50% chance
+		t.Fatalf("spread only %d/50", got)
+	}
+	g.m = g.computeMods()
+	L := layout{cols: 4}
+	if n := neighbours(L, 5, 16); len(n) != 4 {
+		t.Fatalf("a middle biote has 4 neighbours, got %v", n)
+	}
+	if n := neighbours(L, 4, 16); len(n) != 3 {
+		t.Fatalf("a biote on the left edge has 3 neighbours, got %v", n)
+	}
+}
+
+// The DNA lab spends DNA and changes the mutation.
+func TestLab(t *testing.T) {
+	g := testGame(t)
+	g.st.Gems, g.st.Found[mGold] = 10, 1
+	before := g.mutMult(mGold)
+	g.buyLab(labValue, mGold)
+	g.m = g.computeMods()
+	if g.st.Gems != 10-labCost(mGold, 0) || g.mutMult(mGold) <= before {
+		t.Fatalf("lab: DNA %d mult %v -> %v", g.st.Gems, before, g.mutMult(mGold))
+	}
+}
+
+// Idle gains pay a share of recent income for the time away, up to the cap.
+func TestIdle(t *testing.T) {
+	g := testGame(t)
+	g.st.Rate = 100
+	g.giveIdle(3600)
+	if want := 100 * idleShare * 3600; math.Abs(g.st.Money-want) > 1e-6 || g.panel != "away" {
+		t.Fatalf("idle: %v, want %v", g.st.Money, want)
+	}
+	g.st.Money = 0
+	g.giveIdle(1e9)
+	if want := 100 * idleShare * idleMax; math.Abs(g.st.Money-want) > 1e-6 {
+		t.Fatalf("idle cap: %v, want %v", g.st.Money, want)
+	}
+}
+
+// Every card has a known rarity and type and a unique id; there are lots of them.
+func TestCardTable(t *testing.T) {
+	seen := map[string]bool{}
+	for _, c := range cards {
+		if seen[c.id] || c.rar < 0 || c.rar >= len(cardRarities) || c.typ < 0 || c.typ >= len(cardTypes) {
+			t.Fatalf("card %s", c.id)
+		}
+		seen[c.id] = true
+	}
+	for _, id := range oldCards {
+		if !seen[id] {
+			t.Fatalf("old card maps to unknown %s", id)
+		}
+	}
+	if len(cards) < 60 {
+		t.Fatalf("only %d cards", len(cards))
 	}
 }

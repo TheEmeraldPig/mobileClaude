@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // State is everything that is saved.
@@ -25,6 +26,12 @@ type State struct {
 	Found    []int   `json:"found"`   // times each mutation has been gained
 	Board    []int   `json:"board"`   // mutation masks of the biotes on the board
 	Earned   float64 `json:"earned"`
+
+	Tokens   int             `json:"tokens"`   // from rebirths, for the token shop
+	Lab      [][]int         `json:"lab"`      // DNA lab levels: [value, chance, spread][mutation]
+	Perks    map[string]bool `json:"perks"`    // permanent token shop items
+	LastSeen int64           `json:"lastSeen"` // unix time of the last save, for idle gains
+	Rate     float64         `json:"rate"`     // recent income per second
 
 	Tree  map[string]bool `json:"tree"`  // skill tree nodes unlocked
 	Cards []string        `json:"cards"` // ability cards unlocked (all active)
@@ -50,13 +57,30 @@ type State struct {
 	OldGemLv map[string]int `json:"gemLv,omitempty"`
 }
 
-const stateVer = 3
+const stateVer = 4
 
 func newState() State {
-	return State{
+	st := State{
 		Ver: stateVer, Sound: true, Found: make([]int, nMut), Board: []int{0},
 		Tree: map[string]bool{}, Floor: 1, Boss: rand.Intn(len(bosses)),
 		Clock: dayLen * 0.05, NextEvent: 90,
+	}
+	st.fill()
+	return st
+}
+
+// fill makes sure the maps and tables exist.
+func (st *State) fill() {
+	if st.Perks == nil {
+		st.Perks = map[string]bool{}
+	}
+	for len(st.Lab) < nLab {
+		st.Lab = append(st.Lab, nil)
+	}
+	for k := range st.Lab {
+		for len(st.Lab[k]) < nMut {
+			st.Lab[k] = append(st.Lab[k], 0)
+		}
 	}
 }
 
@@ -98,7 +122,7 @@ func loadState() State {
 		}
 		st.Points += 2 * st.Rebirths
 		st.Auto, st.AutoSell = false, false
-		st.Ver = stateVer
+		st.Ver = 3
 	}
 	st.OldBlobs, st.OldGemLv = nil, nil
 	if st.Tree == nil {
@@ -113,11 +137,26 @@ func loadState() State {
 	if st.Ver < 3 {
 		// rounds and the card market became floors: cards you had stay unlocked
 		st.Floor, st.Room = 1, 0
-		st.Ver = stateVer
+		st.Ver = 3
 	}
 	if st.Floor < 1 {
 		st.Floor = 1
 	}
+	if st.Ver < 4 {
+		// the big card update: old cards become their new versions
+		var keep []string
+		for _, id := range st.Cards {
+			if n, ok := oldCards[id]; ok {
+				id = n
+			}
+			if cardByID(id) != nil {
+				keep = append(keep, id)
+			}
+		}
+		st.Cards = keep
+		st.Ver = stateVer
+	}
+	st.fill()
 	return st
 }
 
@@ -125,6 +164,7 @@ func (g *Game) save() {
 	if os.Getenv("BLOB_SHOT") != "" {
 		return // screenshot runs don't touch the real save
 	}
+	g.st.LastSeen = time.Now().Unix()
 	g.st.Board = g.st.Board[:0]
 	for _, b := range g.blobs {
 		g.st.Board = append(g.st.Board, b.m)
