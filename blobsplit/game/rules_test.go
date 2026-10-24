@@ -201,3 +201,18 @@ func TestTreeHexes(t *testing.T) {
 		}
 	}
 }
+
+// Only Origin shows at first; unlocking a skill reveals the next one in its branch.
+func TestTreeReveals(t *testing.T) {
+	g := testGame(t)
+	for _, n := range tree {
+		if g.visible(nodeByID(n.id)) != (n.req == "") {
+			t.Fatalf("%s visible on a new save: %v", n.id, g.visible(nodeByID(n.id)))
+		}
+	}
+	g.st.Points = 5
+	g.unlock("origin")
+	if !g.visible(nodeByID("luck1")) || g.visible(nodeByID("luck2")) {
+		t.Fatal("after Origin, Lucky I should show and Lucky II should not")
+	}
+}

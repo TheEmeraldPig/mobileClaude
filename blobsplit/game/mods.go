@@ -221,6 +221,12 @@ func nodeByID(id string) *node {
 }
 
 // canUnlock says whether node n is next in its branch.
+// visible says whether a skill shows in the tree: once you own it, or own the skill
+// it needs, so each branch grows outwards as you unlock it.
+func (g *Game) visible(n *node) bool {
+	return n.req == "" || g.has(n.id) || g.has(n.req)
+}
+
 func (g *Game) canUnlock(n *node) bool {
 	return !g.has(n.id) && (n.req == "" || g.has(n.req))
 }

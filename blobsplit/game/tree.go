@@ -95,6 +95,9 @@ func (g *Game) tapTree(x, y float64) {
 		return
 	}
 	for i, c := range T.centers {
+		if !g.visible(&tree[i]) {
+			continue
+		}
 		if math.Hypot(x-c[0], y-c[1]) < T.s*0.9 {
 			if g.selN == tree[i].id && g.canUnlock(&tree[i]) {
 				g.unlock(tree[i].id) // a second tap unlocks
@@ -137,7 +140,7 @@ func (g *Game) drawTree(dst *ebiten.Image) {
 
 	// links between skills
 	for i, n := range tree {
-		if n.req == "" {
+		if n.req == "" || !g.visible(&tree[i]) {
 			continue
 		}
 		j := 0
@@ -160,6 +163,9 @@ func (g *Game) drawTree(dst *ebiten.Image) {
 	// the hexagons
 	for i := range tree {
 		n := &tree[i]
+		if !g.visible(n) {
+			continue // shown once the skill before it is unlocked
+		}
 		x, y := T.centers[i][0], T.centers[i][1]
 		s := T.s * 0.92
 		bc := nodeColor(n)
@@ -220,7 +226,7 @@ func (g *Game) drawTree(dst *ebiten.Image) {
 	bevel(dst, T.info, skDark, p)
 	n := nodeByID(g.selN)
 	if n == nil {
-		g.wrapSay(dst, "Tap a hexagon to see a skill. Skills cost skill points, which you earn by rebirthing (1, plus 1 for every Outbreak beaten). Each branch starts at Origin in the middle.", T.info.x+12*u, T.info.y+18*u, T.info.w-24*u, 8, rgb(0xd8ccff))
+		g.wrapSay(dst, "Tap a hexagon to see a skill. Skills cost skill points, which you earn by rebirthing (1, plus 1 for every Outbreak beaten). Start with Origin in the middle; each skill you unlock reveals the next one in its branch.", T.info.x+12*u, T.info.y+18*u, T.info.w-24*u, 8, rgb(0xd8ccff))
 		return
 	}
 	bc := nodeColor(n)
