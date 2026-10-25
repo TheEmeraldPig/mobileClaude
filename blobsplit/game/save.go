@@ -52,18 +52,25 @@ type State struct {
 	EventLeft float64 `json:"eventLeft"`
 	NextEvent float64 `json:"nextEvent"`
 
+	// tutorial, visitors and the shop
+	Tut        int                `json:"tut"`        // tutorial step; len(tutSteps) when done
+	DrawerShut bool               `json:"drawerShut"` // the upgrades drawer is closed
+	Buffs      map[string]float64 `json:"buffs"`      // timed buffs: seconds left
+	NextVisit  float64            `json:"nextVisit"`  // seconds until the next visitor
+	PtFrac     float64            `json:"ptFrac"`     // part skill point carried over (x1.5 boost)
+
 	// from older versions
 	OldBlobs []int          `json:"blobs,omitempty"`
 	OldGemLv map[string]int `json:"gemLv,omitempty"`
 }
 
-const stateVer = 4
+const stateVer = 5
 
 func newState() State {
 	st := State{
 		Ver: stateVer, Sound: true, Found: make([]int, nMut), Board: []int{0},
 		Tree: map[string]bool{}, Floor: 1, Boss: rand.Intn(len(bosses)),
-		Clock: dayLen * 0.05, NextEvent: 90,
+		Clock: dayLen * 0.05, NextEvent: 90, NextVisit: 60,
 	}
 	st.fill()
 	return st
@@ -73,6 +80,9 @@ func newState() State {
 func (st *State) fill() {
 	if st.Perks == nil {
 		st.Perks = map[string]bool{}
+	}
+	if st.Buffs == nil {
+		st.Buffs = map[string]float64{}
 	}
 	for len(st.Lab) < nLab {
 		st.Lab = append(st.Lab, nil)
@@ -154,6 +164,14 @@ func loadState() State {
 			}
 		}
 		st.Cards = keep
+		st.Ver = 4
+	}
+	if st.Ver < 5 {
+		// the tutorial is for new players
+		if st.Earned > 0 {
+			st.Tut = len(tutSteps)
+		}
+		st.NextVisit = 60
 		st.Ver = stateVer
 	}
 	st.fill()

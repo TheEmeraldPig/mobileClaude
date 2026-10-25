@@ -17,6 +17,8 @@ import (
 //	BLOB_CLOCK=0.75     time of day (0.25 midday, 0.75 midnight); BLOB_EVENT=meteor starts an event
 //	BLOB_DO=split,sell  actions run one every 20 frames: split, sell, buy0-2, rebirth, mode, win
 //	BLOB_SIZE=1280x720  window size;  BLOB_FRESH=1 ignores the save;  BLOB_NOAUDIO=1
+//	BLOB_TUT=2          tutorial step;  BLOB_DRAWER=0 closes the upgrades drawer;  BLOB_SCROLL=60
+//	BLOB_DO actions also: visitor, ad, buff (all buffs on), away, gift, offer, tab1-3
 var (
 	shotPath = os.Getenv("BLOB_SHOT")
 	shotAt   = 90
@@ -47,6 +49,23 @@ func (g *Game) hookInit() {
 	}
 	if n, err := strconv.Atoi(os.Getenv("BLOB_SEL")); err == nil {
 		defer func() { g.sel = n }() // after the demo board is set up
+	}
+	if n, err := strconv.Atoi(os.Getenv("BLOB_TUT")); err == nil {
+		defer func() { g.st.Tut = n }()
+	} else if os.Getenv("BLOB_DEMO") != "" || g.panel != "" {
+		g.st.Tut = len(tutSteps)
+	}
+	if os.Getenv("BLOB_DRAWER") == "0" {
+		g.st.DrawerShut, g.drawerK = true, 0
+	}
+	if n, err := strconv.ParseFloat(os.Getenv("BLOB_SCROLL"), 64); err == nil {
+		g.scroll = n
+	}
+	switch g.panel {
+	case "away":
+		g.away, g.awayGain = 3*3600+720, 4.2e6
+	case "visitor":
+		g.offer = visitor{buff: 1, gift: true}
 	}
 	if e := os.Getenv("BLOB_EVENT"); e != "" {
 		g.st.Event, g.st.EventLeft, g.eventT = e, 40, -10
@@ -91,9 +110,27 @@ func (g *Game) hookUpdate() {
 		case a == "sell":
 			g.sell()
 		case a == "rebirth":
-			g.rebirth()
+			g.rebirth(false)
 		case a == "win":
 			g.clearRoom()
+		case a == "visitor":
+			g.sendVisitor()
+			g.vis.t0 = g.t - visitLen*0.4
+		case a == "ad":
+			g.watchAd(func() { g.st.Money++ })
+		case a == "buff":
+			for _, b := range buffs {
+				if b.secs > 0 {
+					g.st.Buffs[b.id] = b.secs
+				}
+			}
+		case a == "away":
+			g.giveIdle(5000)
+		case a == "gift", a == "offer":
+			g.offer = visitor{buff: 0, gift: a == "gift"}
+			g.panel = "visitor"
+		case strings.HasPrefix(a, "tab"):
+			g.shopTab, _ = strconv.Atoi(a[3:])
 		case a == "mode":
 			g.st.BuyMode = (g.st.BuyMode + 1) % len(buyModes)
 		case strings.HasPrefix(a, "buy"):
@@ -104,7 +141,7 @@ func (g *Game) hookUpdate() {
 }
 
 func (g *Game) hookDraw(screen *ebiten.Image) {
-	if shotPath == "" || g.frame != shotAt {
+	if shotPath == "" || g.frame < shotAt || g.quit {
 		return
 	}
 	f, err := os.Create(shotPath)

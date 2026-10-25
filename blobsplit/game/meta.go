@@ -49,51 +49,6 @@ func (g *Game) buyLab(kind, r int) {
 	g.save()
 }
 
-// ---- tokens: earned from rebirths, and the exchange rate for the shop's real-money
-// items (1000 tokens = $1). Real-money payment needs Google Play Billing, which isn't
-// in the game yet, so for now every item is bought with tokens. ----
-
-const tokensPerDollar = 1000
-
-type shopItem struct {
-	id, name, desc string
-	cents          int
-	once           bool // a permanent perk, bought once
-}
-
-var shopItems = []shopItem{
-	{"point", "Skill Point", "+1 skill point", 99, false},
-	{"warp", "Time Warp", "2 hours of idle gains right now", 199, false},
-	{"card", "Card Pack", "Unlock a random new card", 299, false},
-	{"offline2", "Night Watch", "Idle gains x2 forever", 399, true},
-	{"golden", "Golden Biotes", "All biote value x2 forever", 499, true},
-}
-
-func (it shopItem) tokens() int { return it.cents * tokensPerDollar / 100 }
-
-func (it shopItem) price() string { return fmt.Sprintf("$%d.%02d", it.cents/100, it.cents%100) }
-
-func (g *Game) buyShop(i int) {
-	it := shopItems[i]
-	if (it.once && g.st.Perks[it.id]) || g.st.Tokens < it.tokens() {
-		g.play("deny")
-		return
-	}
-	g.st.Tokens -= it.tokens()
-	switch it.id {
-	case "point":
-		g.st.Points++
-	case "warp":
-		g.giveIdle(2 * 3600)
-	case "card":
-		g.awardCard()
-	default:
-		g.st.Perks[it.id] = true
-	}
-	g.play("rebirth")
-	g.save()
-}
-
 // ---- idle gains: while the game is closed you earn a share of your recent income ----
 
 const (
@@ -125,8 +80,16 @@ func (g *Game) giveIdle(sec float64) {
 	gain := g.idleRate() * sec
 	g.st.Money += gain
 	g.st.Earned += gain
-	g.away, g.awayGain = sec, gain
+	g.away, g.awayGain, g.awayDoubled = sec, gain, false
 	g.panel = "away"
+}
+
+// incomeRate is money per second while playing: your recent income, or before
+// there is any, a guess from the board you can fill. Time skips pay this.
+func (g *Game) incomeRate() float64 {
+	c := float64(g.capacity())
+	guess := c * g.baseValueAt(g.st.ValueLv) / (g.cooldown() * (math.Log2(c) + 1))
+	return math.Max(g.st.Rate, guess)
 }
 
 // checkAway runs once at start: pays for the time since the game was last saved.

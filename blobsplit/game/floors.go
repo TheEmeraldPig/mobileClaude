@@ -166,6 +166,12 @@ func (g *Game) clearRoom() {
 	}
 	g.resetRoom()
 	g.floats = append(g.floats, floater{s: msg, x: g.W / 2, y: g.H * 0.3, c: colG, size: 24})
+	if s.Room == 0 { // a whole floor
+		g.confetti(90)
+		g.shakeT = g.t
+	} else {
+		g.confetti(30)
+	}
 	g.play("rebirth")
 	g.save()
 }
@@ -225,6 +231,7 @@ type challengeLayout struct {
 	cards []rect // the shown rarity's cards, in cardsOf order
 	shown []int  // their indexes in cards
 	info  rect
+	skip  [2]rect // skip 10 floors: dollars, tokens
 }
 
 func (g *Game) layChallenge() challengeLayout {
@@ -242,6 +249,8 @@ func (g *Game) layChallenge() challengeLayout {
 	rx := 12 + lw + 12
 	pw := wu - rx - 12
 	C.right = R(rx, 50, pw, 298)
+	C.skip[0] = R(lw-24-110-6-72, 348-12-30, 72, 30)
+	C.skip[1] = R(lw-24-110+12, 348-12-30, 110, 30)
 	tw := (pw - 24 - 4*4) / float64(len(cardRarities))
 	for i := range cardRarities {
 		C.tabs = append(C.tabs, R(rx+12+float64(i)*(tw+4), 74, tw, 20))
@@ -264,6 +273,12 @@ func (g *Game) tapChallenge(x, y float64) {
 		g.panel = ""
 		g.play("tap")
 		return
+	}
+	for i, r := range C.skip {
+		if r.in(x, y) {
+			g.buyItem("floors", i == 0)
+			return
+		}
 	}
 	for i, r := range C.tabs {
 		if r.in(x, y) {
@@ -360,7 +375,9 @@ func (g *Game) drawChallenge(dst *ebiten.Image) {
 	if r.boss {
 		say(dst, "CLEAR IT FOR +1 DNA AT YOUR NEXT REBIRTH", face(fSmall, 7*u), lx, y, alLeft, rgb(0x9ff0ff), math.Round(u))
 	}
-	g.wrapSay(dst, "Every sale counts. Run out of sells and you go back to room 1 of this floor, with nothing else lost. Every 10th floor you clear unlocks a card.", lx, C.left.y+C.left.h-44*u, C.left.w-24*u, 6, soft)
+	g.wrapSay(dst, "Run out of sells and you go back to room 1, with nothing else lost. Every 10th floor you clear unlocks a card.", lx, C.left.y+C.left.h-76*u, C.left.w-24*u, 6, soft)
+	say(dst, "SKIP 10 FLOORS", face(fBig, 14*u), lx, C.skip[0].cy()-u, alLeft, colT, math.Round(1.5*u))
+	g.drawPriceButtons(dst, shopByID("floors"), g.pop(C.skip[0]), g.pop(C.skip[1]), p, "")
 
 	// unlocked cards, one rarity at a time
 	bevel(dst, C.right, skDark, p)

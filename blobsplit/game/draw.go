@@ -17,7 +17,8 @@ type layout struct {
 	buy, music, sound    rect
 	shop, index, rebirth rect
 	world                rect
-	cards                [4]rect // three upgrades, then the challenge button
+	cards                [nUps]rect // the upgrades, in the drawer
+	drawer, handle       rect       // the upgrades drawer and the tab that opens it
 	challenge            rect
 	split, sell          rect
 	auto, autosell       rect
@@ -27,9 +28,15 @@ type layout struct {
 	circle               [][2]float64 // biote centres when they form a circle instead
 	panel, close, action rect
 	action2, action3     rect
+	action4              rect
 	rows                 []rect // rows of the genome or shop
 	btns                 []rect // their buttons (and settings' YES / NO)
-	rowMut               []int  // the mutation of each genome row
+	rowMut               []int  // the mutation of each genome row, or shop item
+	tabs                 []rect // the shop's tabs
+	view, bar            rect   // a panel's scrolling list and its scroll bar
+	scrollMax            float64
+	tutBox, tutSkip      rect
+	tutOK                rect
 	p                    float64
 }
 
@@ -52,20 +59,24 @@ func (g *Game) lay() layout {
 	}
 	L.world = R(10, 264, leftW-6, 86)
 	L.sound = R(wu-38, 8, 28, 28)    // the settings gear
-	L.music = R(wu-38-70, 8, 66, 28) // the token shop
-	L.buy = R(rightX, 8, rightW-74-34, 28)
+	L.music = R(wu-38-70, 8, 66, 28) // the shop
+	L.challenge = R(wu/2-85, 4, 170, 40)
+	// the upgrades drawer slides in from the right; its tab stays on screen
+	off := (1 - g.drawerK) * (rightW + 14)
+	L.drawer = R(rightX-6+off, 50, rightW+12, 236)
+	L.handle = R(rightX-6+off-24, 130, 26, 72)
+	L.buy = R(rightX+off, 56, rightW, 24)
 	for i := range L.cards {
-		L.cards[i] = R(rightX, 44+float64(i)*68, rightW, 62)
+		L.cards[i] = R(rightX+off, 86+float64(i)*66, rightW, 60)
 	}
-	L.challenge = L.cards[3]
-	cx0, cx1 := 10+leftW+8, rightX-8
+	cx0, cx1 := 10+leftW+8, rightX-6+off-24-6
 	bw := math.Min(170, (cx1-cx0-12)/2)
 	bx := (cx0+cx1)/2 - bw - 6
 	L.split = R(bx, 360-72, bw, 60)
 	L.sell = R(bx+bw+12, 360-72, bw, 60)
 	L.auto = R(bx-4, 360-72-16, 46, 20)
 	L.autosell = R(bx+bw+12+bw-42, 360-72-16, 46, 20)
-	L.grid = R(cx0, 48, cx1-cx0, 360-72-34-48)
+	L.grid = R(cx0, 66, cx1-cx0, 360-72-20-66)
 
 	// Biotes are sized to fit how many are on the board, so they only change size when
 	// a split makes more of them. They line up in a full rectangle (never a half-empty
@@ -91,6 +102,7 @@ func (g *Game) lay() layout {
 		L.circle, L.cell = pts, cell
 	}
 	g.layPanel(&L, wu)
+	g.layTut(&L)
 	return L
 }
 
@@ -170,7 +182,8 @@ func (g *Game) blobPos(L layout, i int) (x, y, s float64) {
 		}
 		y += math.Sin(g.t*2.2+b.phase) * L.cell * 0.025
 	}
-	return x, y, g.cellNow(L)
+	dx, dy := g.shakeAt()
+	return x + dx, y + dy, g.cellNow(L)
 }
 
 // cellNow is the biote size, easing from its old size for a moment after a split.
@@ -197,11 +210,13 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		} else {
 			g.drawChallenge(screen)
 		}
+		g.drawParticles(screen, false)
 		g.drawBanner(screen)
 		for _, f := range g.floats {
 			a := math.Min(1, 1.6*(1-f.t/1.3))
 			say(screen, f.s, face(fBig, 22*g.u), f.x, f.y-f.t*34*g.u, alCenter, color.RGBA{uint8(float64(f.c.R) * a), uint8(float64(f.c.G) * a), uint8(float64(f.c.B) * a), uint8(255 * a)}, math.Round(2*g.u*a))
 		}
+		g.drawAd(screen)
 		g.hookDraw(screen)
 		return
 	}
@@ -212,6 +227,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.drawWeather(screen)
 	g.drawHUD(screen, L)
 	g.drawParticles(screen, true)
+	g.drawVisitor(screen)
 	for _, f := range g.floats {
 		a := math.Min(1, 1.6*(1-f.t/1.3))
 		c := f.c
@@ -224,9 +240,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		say(screen, f.s, face(fBig, sz*g.u), f.x, f.y-f.t*34*g.u, alCenter, color.RGBA{uint8(float64(c.R) * a), uint8(float64(c.G) * a), uint8(float64(c.B) * a), uint8(255 * a)}, math.Round(sz/10*g.u*a))
 	}
 	g.drawBanner(screen)
+	g.drawTut(screen, L)
 	if g.panel != "" {
 		g.drawPanel(screen, L)
 	}
+	g.drawAd(screen)
 	g.hookDraw(screen)
 }
 
@@ -268,7 +286,7 @@ func (g *Game) drawBoard(dst *ebiten.Image, L layout) {
 		x, y, s := g.blobPos(L, i)
 		size := s * 0.86
 		scale := spriteScale(s)
-		if g.t-g.cellT < 0.3 {
+		if g.t-g.cellT < 0.3 || (g.drawerK > 0 && g.drawerK < 1) {
 			scale = s * 0.86 / blobPx // smooth while growing or shrinking
 		}
 		sx, sy := scale, scale
@@ -388,15 +406,16 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 		if b.ic == "rebirth" && canRebirth {
 			sk = skGold
 		}
-		bevel(dst, b.r, sk, p)
+		r := g.pop(b.r)
+		bevel(dst, r, sk, p)
 		if b.ic == "rebirth" {
 			// with the current rebirth multiplier next to the icon
-			icon(dst, b.ic, b.r.cx()-13*u, b.r.y+22*u, 24*u)
-			say(dst, "x"+fmtNum(rebirthMult(g.st.Rebirths)), face(fBig, 16*u), b.r.cx()+1*u, b.r.y+22*u, alLeft, rgb(0x8ef06a), math.Round(1.5*u))
+			icon(dst, b.ic, r.cx()-13*u, r.y+22*u, 24*u)
+			say(dst, "x"+fmtNum(rebirthMult(g.st.Rebirths)), face(fBig, 16*u), r.cx()+1*u, r.y+22*u, alLeft, rgb(0x8ef06a), math.Round(1.5*u))
 		} else {
-			icon(dst, b.ic, b.r.cx(), b.r.y+22*u, 24*u)
+			icon(dst, b.ic, r.cx(), r.y+22*u, 24*u)
 		}
-		say(dst, b.label, face(fSmall, 8*u), b.r.cx(), b.r.y+b.r.h-11*u, alCenter, colW, math.Round(u))
+		say(dst, b.label, face(fSmall, 8*u), r.cx(), r.y+r.h-11*u, alCenter, colW, math.Round(u))
 	}
 	if canRebirth {
 		badge(dst, L.rebirth.x+L.rebirth.w-6*u, L.rebirth.y+4*u, u, g.t)
@@ -406,49 +425,63 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	}
 	g.drawWorldChip(dst, L.world, p)
 
-	// top right: buy amount, the token shop and settings
-	bevel(dst, L.buy, skGreen, p)
-	say(dst, "BUY "+buyModes[g.st.BuyMode], face(fBig, 14*u), L.buy.cx(), L.buy.cy()-u, alCenter, colW, math.Round(1.5*u))
-	bevel(dst, L.music, skGold, p)
-	icon(dst, "token", L.music.x+13*u, L.music.cy(), 16*u)
-	say(dst, itoa(g.st.Tokens), face(fBig, 14*u), L.music.x+24*u, L.music.cy()-u, alLeft, colW, math.Round(1.5*u))
-	bevel(dst, L.sound, skDark, p)
-	icon(dst, "gear", L.sound.cx(), L.sound.cy(), 16*u)
+	// top right: the shop and settings
+	r := g.pop(L.music)
+	bevel(dst, r, skGold, p)
+	icon(dst, "token", r.x+13*u, r.cy(), 16*u)
+	say(dst, itoa(g.st.Tokens), face(fBig, 14*u), r.x+24*u, r.cy()-u, alLeft, colW, math.Round(1.5*u))
+	say(dst, "SHOP", face(fSmall, 6*u), r.cx(), r.y+r.h+7*u, alCenter, colT, math.Round(u))
+	r = g.pop(L.sound)
+	bevel(dst, r, skDark, p)
+	icon(dst, "gear", r.cx(), r.cy(), 16*u)
+	g.drawChallengeButton(dst, g.pop(L.challenge), p)
+	g.drawBuffs(dst, L.grid, L.challenge.y+L.challenge.h+3*u)
 
-	// upgrade cards
-	for i, r := range L.cards[:nUps] {
-		title, from, to, cost, maxed := g.cardInfo(i)
-		afford := !maxed && g.st.Money >= cost
-		sk := skDark
-		if afford {
-			sk = skOrange
-		}
-		bevel(dst, r, sk, p)
-		say(dst, title, face(fSmall, 8*u), r.x+9*u, r.y+15*u, alLeft, colW, math.Round(u))
-		if maxed {
-			say(dst, "MAXED", face(fSmall, 8*u), r.x+r.w-9*u, r.y+15*u, alRight, colT, math.Round(u))
-			say(dst, from, face(fSmall, 9*u), r.x+9*u, r.y+40*u, alLeft, colW, math.Round(u))
-		} else {
-			cc := colG
-			if !afford {
-				cc = rgb(0xff8a8a)
+	// the upgrades drawer, and its tab
+	if g.drawerK > 0 {
+		bevel(dst, L.drawer, skDark, p)
+		r = g.pop(L.buy)
+		bevel(dst, r, skGreen, p)
+		say(dst, "BUY "+buyModes[g.st.BuyMode], face(fBig, 14*u), r.cx(), r.cy()-u, alCenter, colW, math.Round(1.5*u))
+		for i, r := range L.cards {
+			title, from, to, cost, maxed := g.cardInfo(i)
+			afford := !maxed && g.st.Money >= cost
+			sk := skDark
+			if afford {
+				sk = skOrange
 			}
-			say(dst, "$"+fmtNum(cost), face(fSmall, 8*u), r.x+r.w-9*u, r.y+15*u, alRight, cc, math.Round(u))
-			say(dst, from+" > "+to, face(fSmall, 9*u), r.x+9*u, r.y+40*u, alLeft, colW, math.Round(u))
+			r = g.pop(r)
+			bevel(dst, r, sk, p)
+			if afford {
+				g.shimmer(dst, r, float64(i)*0.7)
+			}
+			say(dst, title, face(fSmall, 8*u), r.x+9*u, r.y+15*u, alLeft, colW, math.Round(u))
+			if maxed {
+				say(dst, "MAXED", face(fSmall, 8*u), r.x+r.w-9*u, r.y+15*u, alRight, colT, math.Round(u))
+				say(dst, from, face(fSmall, 9*u), r.x+9*u, r.y+40*u, alLeft, colW, math.Round(u))
+			} else {
+				cc := colG
+				if !afford {
+					cc = rgb(0xff8a8a)
+				}
+				say(dst, "$"+fmtNum(cost), face(fSmall, 8*u), r.x+r.w-9*u, r.y+15*u, alRight, cc, math.Round(u))
+				say(dst, from+" > "+to, face(fSmall, 9*u), r.x+9*u, r.y+40*u, alLeft, colW, math.Round(u))
+			}
 		}
 	}
-	g.drawChallengeButton(dst, L.challenge, p)
+	g.drawHandle(dst, g.pop(L.handle), p)
 
 	// split, auto and sell
 	n, c := len(g.blobs), g.capacity()
 	full := n >= c
-	bevel(dst, L.split, skViolet, p)
+	sr := g.pop(L.split)
+	bevel(dst, sr, skViolet, p)
 	if !full {
 		k := math.Min(1, g.cool/g.cooldown())
-		in := rect{L.split.x + 2*p, L.split.y + L.split.h - 2*p - 5*u, (L.split.w - 4*p) * k, 4 * u}
+		in := rect{sr.x + 2*p, sr.y + sr.h - 2*p - 5*u, (sr.w - 4*p) * k, 4 * u}
 		fill(dst, in.x, in.y, in.w, in.h, colL)
 		if k >= 1 {
-			fill(dst, L.split.x+2*p, L.split.y+2*p, L.split.w-4*p, L.split.h-4*p, color.NRGBA{255, 255, 255, uint8(25 + 20*math.Sin(g.t*6))})
+			fill(dst, sr.x+2*p, sr.y+2*p, sr.w-4*p, sr.h-4*p, color.NRGBA{255, 255, 255, uint8(25 + 20*math.Sin(g.t*6))})
 		}
 	}
 	lbl, sub, subc := "SPLIT", "READY!", colT
@@ -457,8 +490,8 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	} else if left := g.cooldown() - g.cool; left > 0 {
 		sub, subc = fmt.Sprintf("%.1fs", left), colW
 	}
-	say(dst, lbl, face(fBig, 26*u), L.split.cx(), L.split.cy()-6*u, alCenter, colW, math.Round(2*u))
-	say(dst, sub, face(fSmall, 8*u), L.split.cx(), L.split.y+L.split.h-15*u, alCenter, subc, math.Round(u))
+	say(dst, lbl, face(fBig, 26*u), sr.cx(), sr.cy()-6*u, alCenter, colW, math.Round(2*u))
+	say(dst, sub, face(fSmall, 8*u), sr.cx(), sr.y+sr.h-15*u, alCenter, subc, math.Round(u))
 	say(dst, fmt.Sprintf("x%d/%d", n, c), face(fBig, 15*u), L.split.x+L.split.w-2*u, L.split.y-8*u, alRight, colW, math.Round(1.5*u))
 	g.drawToggle(dst, L.auto, "AUTO", true, g.st.Auto, p)
 
@@ -466,10 +499,54 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	if n < 2 {
 		sk = skGrey
 	}
-	bevel(dst, L.sell, sk, p)
-	say(dst, "SELL", face(fBig, 26*u), L.sell.cx(), L.sell.cy()-6*u, alCenter, colW, math.Round(2*u))
-	say(dst, "+$"+fmtNum(g.boardValue()), face(fSmall, 8*u), L.sell.cx(), L.sell.y+L.sell.h-14*u, alCenter, colG, math.Round(u))
+	sl := g.pop(L.sell)
+	if full {
+		// a full board: SELL throbs to be pressed
+		sl = grow(sl, 1+0.05*math.Abs(math.Sin(g.t*5)))
+	}
+	bevel(dst, sl, sk, p)
+	if full {
+		fill(dst, sl.x+2*p, sl.y+2*p, sl.w-4*p, sl.h-4*p, color.NRGBA{255, 255, 200, uint8(30 + 30*math.Sin(g.t*10))})
+	}
+	say(dst, "SELL", face(fBig, 26*u), sl.cx(), sl.cy()-6*u, alCenter, colW, math.Round(2*u))
+	say(dst, "+$"+fmtNum(g.boardValue()), face(fSmall, 8*u), sl.cx(), sl.y+sl.h-14*u, alCenter, colG, math.Round(u))
 	g.drawToggle(dst, L.autosell, "AUTO", true, g.st.AutoSell, p)
+}
+
+// shimmer sweeps a band of light across r now and then (an upgrade you can afford).
+func (g *Game) shimmer(dst *ebiten.Image, r rect, phase float64) {
+	k := math.Mod(g.t*0.6+phase, 2.2)
+	if k > 1 {
+		return
+	}
+	bw := 14 * g.u
+	x := r.x - bw + (r.w+bw)*k
+	x0, x1 := math.Max(x, r.x+2), math.Min(x+bw, r.x+r.w-2)
+	if x1 > x0 {
+		fill(dst, x0, r.y+2, x1-x0, r.h-4, color.NRGBA{255, 255, 255, 45})
+	}
+}
+
+// drawHandle is the tab on the upgrades drawer: an arrow that points the way it moves.
+func (g *Game) drawHandle(dst *ebiten.Image, r rect, p float64) {
+	u := g.u
+	bevel(dst, r, skViolet, p)
+	cx, cy, s := r.cx(), r.y+22*u, 6*u
+	dir := 1.0 // closes: points right
+	if g.st.DrawerShut {
+		dir = -1
+	}
+	fillPoly(dst, [][2]float64{{cx - s*dir*0.6, cy - s}, {cx + s*dir*0.6, cy}, {cx - s*dir*0.6, cy + s}}, colW)
+	say(dst, "$", face(fBig, 16*u), cx, r.y+44*u, alCenter, colT, math.Round(1.5*u))
+	say(dst, "UP", face(fSmall, 6*u), cx, r.y+60*u, alCenter, colW, math.Round(u))
+	if g.st.DrawerShut {
+		for i := 0; i < nUps; i++ {
+			if _, _, _, cost, maxed := g.cardInfo(i); !maxed && g.st.Money >= cost {
+				badge(dst, r.x+2*u, r.y+2*u, u, g.t)
+				break
+			}
+		}
+	}
 }
 
 // drawToggle is a small AUTO switch: locked until its skill is unlocked.
@@ -499,8 +576,8 @@ func (g *Game) drawChallengeButton(dst *ebiten.Image, r rect, p float64) {
 		sk = skin{mix(rgb(0x6a1f3a), rgb(0x9a2f4a), glow), rgb(0xc84f6a), rgb(0x3a1020)}
 	}
 	bevel(dst, r, sk, p)
-	say(dst, "CHALLENGE", face(fSmall, 8*u), r.x+9*u, r.y+13*u, alLeft, colT, math.Round(u))
-	say(dst, "FLOOR "+itoa(s.Floor), face(fSmall, 8*u), r.x+r.w-9*u, r.y+13*u, alRight, colW, math.Round(u))
+	say(dst, "CHALLENGE", face(fSmall, 8*u), r.x+9*u, r.y+12*u, alLeft, colT, math.Round(u))
+	say(dst, "FLOOR "+itoa(s.Floor), face(fSmall, 8*u), r.x+r.w-9*u, r.y+12*u, alRight, colW, math.Round(u))
 	pw := (r.w - 18*u - 4*4*u) / roomsPerFloor
 	for i := 0; i < roomsPerFloor; i++ {
 		c := color.RGBA{60, 50, 100, 255}
@@ -508,20 +585,15 @@ func (g *Game) drawChallengeButton(dst *ebiten.Image, r rect, p float64) {
 		case i < s.Room:
 			c = colG
 		case i == s.Room:
-			c = colT
+			c = mix(colT, colW, 0.3+0.3*math.Sin(g.t*5))
 		}
 		if i == roomsPerFloor-1 && i != s.Room {
 			c = rgb(0xc84f6a)
 		}
 		x := r.x + 9*u + float64(i)*(pw+4*u)
-		fill(dst, x, r.y+26*u, pw, 12*u, colO)
-		fill(dst, x+u, r.y+27*u, pw-2*u, 10*u, c)
+		fill(dst, x, r.y+23*u, pw, 10*u, colO)
+		fill(dst, x+u, r.y+24*u, pw-2*u, 8*u, c)
 	}
-	sub := fmt.Sprintf("ROOM %d/%d  -  TAP TO SEE", s.Room+1, roomsPerFloor)
-	if boss {
-		sub = "BOSS ROOM  -  TAP TO SEE"
-	}
-	say(dst, sub, face(fSmall, 6*u), r.x+9*u, r.y+51*u, alLeft, rgb(0xd8ccff), math.Round(u))
 }
 
 // drawWorldChip shows day or night, and the current event.

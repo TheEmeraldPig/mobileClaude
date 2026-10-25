@@ -49,7 +49,7 @@ func TestSim(t *testing.T) {
 			}
 			// rebirth only once climbing has stalled for 5 minutes
 			if g.st.Money >= rebirthReq(g.st.Rebirths) && g.t-lastGain > 300 {
-				g.rebirth()
+				g.rebirth(false)
 				g.panel = ""
 			}
 		}

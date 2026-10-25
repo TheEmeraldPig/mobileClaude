@@ -141,7 +141,7 @@ func TestRebirth(t *testing.T) {
 	s := &g.st
 	s.Money, s.RunFloors, s.Cards, s.Floor = rebirthReq(0)*8.5, 2, []string{"midas"}, 3
 	s.Tree["origin"] = true
-	g.rebirth()
+	g.rebirth(false)
 	// one point, DNA per floor cleared, a token per doubling of the requirement (8x = 3)
 	if s.Points != 1 || s.Gems != 2 || s.Tokens != 3 || s.Rebirths != 1 || s.Floor != 1 || len(s.Cards) != 1 || !g.has("origin") {
 		t.Fatalf("rebirth: points %d DNA %d tokens %d floor %d cards %v", s.Points, s.Gems, s.Tokens, s.Floor, s.Cards)
@@ -288,5 +288,147 @@ func TestCardTable(t *testing.T) {
 	}
 	if len(cards) < 60 {
 		t.Fatalf("only %d cards", len(cards))
+	}
+}
+
+// Shop items cost tokens (1000 per $1); boosts apply and can't be bought twice.
+func TestShop(t *testing.T) {
+	g := testGame(t)
+	it := shopByID("xmoney")
+	if it.tokens() != 4990 {
+		t.Fatalf("x1.5 money costs %d tokens", it.tokens())
+	}
+	before := g.blobValue(0)
+	g.buyItem("xmoney", true) // no store connected: nothing happens
+	if g.st.Perks["xmoney"] {
+		t.Fatal("bought with real money while no store is connected")
+	}
+	g.st.Tokens = 6000
+	g.buyItem("xmoney", false)
+	if !g.st.Perks["xmoney"] || g.st.Tokens != 1010 || math.Abs(g.blobValue(0)/before-1.5) > 1e-9 {
+		t.Fatalf("money boost: perk %v tokens %d value %v -> %v", g.st.Perks["xmoney"], g.st.Tokens, before, g.blobValue(0))
+	}
+	g.st.Tokens = 6000
+	g.buyItem("xmoney", false)
+	if g.st.Tokens != 6000 {
+		t.Fatal("bought a perk twice")
+	}
+	// a real-money purchase arrives through the channel
+	Purchase = func(sku string, done func(bool)) { done(true) }
+	defer func() { Purchase = nil }()
+	g.buyItem("noads", true)
+	g.tickShop()
+	if !g.st.Perks["noads"] {
+		t.Fatal("paid purchase not granted")
+	}
+}
+
+// Paying to skip: rebirth without the money, and jump 10 floors (cards included).
+func TestPaidSkips(t *testing.T) {
+	g := testGame(t)
+	s := &g.st
+	s.Money, s.RunFloors = 5, 3
+	g.rebirth(true)
+	if s.Rebirths != 1 || s.Gems != 3 || s.Tokens != 0 || s.Points != 1 {
+		t.Fatalf("paid rebirth: rebirths %d DNA %d tokens %d points %d", s.Rebirths, s.Gems, s.Tokens, s.Points)
+	}
+	s.Floor, s.BestFloor, s.Room = 13, 12, 2
+	g.skipFloors(10)
+	if s.Floor != 23 || s.BestFloor != 22 || s.Room != 0 || len(s.Cards) != 1 || s.RunFloors != 10 {
+		t.Fatalf("skip: floor %d best %d room %d cards %d run %d", s.Floor, s.BestFloor, s.Room, len(s.Cards), s.RunFloors)
+	}
+	// with the x1.5 skill point boost, every second rebirth pays 2
+	s.Perks["xpoints"] = true
+	s.Points = 0
+	g.rebirth(true)
+	g.rebirth(true)
+	if s.Points != 3 {
+		t.Fatalf("x1.5 points over two rebirths: %d", s.Points)
+	}
+}
+
+// Ads give their reward after the placeholder runs, or at once with No Ads.
+func TestAds(t *testing.T) {
+	g := testGame(t)
+	got := 0
+	g.watchAd(func() { got++ })
+	if got != 0 || !g.ad.on {
+		t.Fatal("ad reward came before the ad")
+	}
+	g.t += adLen
+	g.tickShop()
+	if got != 1 || g.ad.on {
+		t.Fatalf("ad: reward %d on %v", got, g.ad.on)
+	}
+	g.st.Perks["noads"] = true
+	g.watchAd(func() { got++ })
+	if got != 2 || g.ad.on {
+		t.Fatal("No Ads should reward at once")
+	}
+}
+
+// Visitors' buffs change the rules while they last, then run out.
+func TestBuffs(t *testing.T) {
+	g := testGame(t)
+	luck := g.computeMods().luck
+	g.giveBuff(1, 2) // Lucky Star, doubled
+	if g.st.Buffs["luck"] != 240 || g.computeMods().luck != luck*3 {
+		t.Fatalf("buff: %v luck %v", g.st.Buffs, g.computeMods().luck)
+	}
+	g.st.Buffs["luck"] = dt / 2
+	g.tickVisitors()
+	if g.buff("luck") {
+		t.Fatal("buff didn't run out")
+	}
+	// the piggy bank pays at once
+	g.st.Money = 0
+	g.giveBuff(3, 1)
+	if g.st.Money <= 0 {
+		t.Fatal("piggy bank paid nothing")
+	}
+}
+
+// The tutorial moves on as you play, and players from before it skip it.
+func TestTutorial(t *testing.T) {
+	g := testGame(t)
+	if g.st.Tut != 0 {
+		t.Fatalf("new game starts at step %d", g.st.Tut)
+	}
+	g.cool = 99
+	g.trySplit(true)
+	g.tickTut()
+	if g.st.Tut != 1 {
+		t.Fatalf("after a split: step %d", g.st.Tut)
+	}
+
+	DataDir = t.TempDir()
+	os.Unsetenv("BLOB_FRESH")
+	defer os.Setenv("BLOB_FRESH", "1")
+	b, _ := json.Marshal(map[string]any{"ver": 4, "money": 50, "earned": 900})
+	os.WriteFile(filepath.Join(DataDir, "save.json"), b, 0o644)
+	if st := loadState(); st.Tut != len(tutSteps) || st.Buffs == nil {
+		t.Fatalf("old player: tutorial step %d", st.Tut)
+	}
+}
+
+// The upgrades drawer, the challenge button and the board never overlap, open or
+// closed, on a phone, a tablet and a PC.
+func TestDrawerLayout(t *testing.T) {
+	g := testGame(t)
+	for _, sz := range [][2]float64{{800, 360}, {1024, 768}, {1920, 1080}} {
+		g.W, g.H, g.u = sz[0], sz[1], sz[1]/360
+		for _, k := range []float64{0, 1} {
+			g.drawerK = k
+			L := g.lay()
+			if L.grid.x+L.grid.w > L.handle.x || L.sell.x+L.sell.w > L.handle.x {
+				t.Fatalf("%v drawer %v: board reaches the drawer tab", sz, k)
+			}
+			if L.challenge.x < L.money.x+L.money.w || L.challenge.x+L.challenge.w > L.music.x {
+				t.Fatalf("%v: challenge button overlaps the top bar", sz)
+			}
+			if k == 0 && L.handle.x+L.handle.w > g.W+1 {
+				t.Fatalf("%v: closed drawer tab is off screen", sz)
+			}
+		}
 	}
 }

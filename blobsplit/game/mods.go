@@ -302,6 +302,22 @@ func (g *Game) computeMods() mods {
 			c.apply(g, &m)
 		}
 	}
+	// shop boosts and visitors' buffs
+	if g.st.Perks["xluck"] {
+		m.luck *= 1.5
+	}
+	if g.buff("cash") {
+		m.value *= 2
+		add("DOUBLE CASH: biote value x2")
+	}
+	if g.buff("luck") {
+		m.luck *= 3
+		add("LUCKY STAR: mutation chance x3")
+	}
+	if g.buff("rush") {
+		m.cool *= 0.5
+		add("SPLIT RUSH: splits 2x faster")
+	}
 	// day and night
 	if g.night() {
 		k := 1.0

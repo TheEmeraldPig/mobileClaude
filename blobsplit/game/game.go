@@ -89,13 +89,32 @@ type Game struct {
 	awayGain float64
 	confirm  bool // the reset button was pressed once
 	cardTab  int  // the card rarity shown in the CHALLENGE screen
+
+	awayDoubled bool // the welcome-back gain was doubled with an ad
+	ad          adState
+	paid        chan string // items whose real-money purchase went through
+	adDone      chan bool   // ads that finished (whether they were watched)
+	vis, offer  visitor     // the visitor on screen, and the one tapped
+	shopTab     int
+	drawerK     float64 // the upgrades drawer: 0 closed, 1 open
+	scroll      float64 // how far a panel's list is scrolled, in units
+	drag        struct {
+		on, moved, bar bool
+		x, y, s0       float64
+	}
+	press  struct{ x, y, t float64 } // the last press, for squashing buttons
+	shakeT float64                   // the board shakes from this time
 }
 
 func NewGame() *Game {
 	initFonts()
 	initSprites()
 	initAudio()
-	g := &Game{st: loadState(), holdOn: -1}
+	g := &Game{st: loadState(), holdOn: -1, paid: make(chan string, 8), adDone: make(chan bool, 8), shakeT: -10}
+	g.press.t = -10
+	if !g.st.DrawerShut {
+		g.drawerK = 1
+	}
 	g.banner.r, g.banner.t = -1, -10
 	g.eventT = -10
 	for _, m := range g.st.Board {
@@ -133,6 +152,9 @@ func (g *Game) baseValueAt(lv int) float64 {
 	v := valueOf(lv) * rebirthMult(g.st.Rebirths) * g.m.value * (1 + g.m.crowd*float64(len(g.blobs)))
 	if g.st.Perks["golden"] {
 		v *= 2
+	}
+	if g.st.Perks["xmoney"] {
+		v *= 1.5
 	}
 	return v
 }
@@ -350,13 +372,16 @@ func (g *Game) unlock(id string) {
 	g.save()
 }
 
-func (g *Game) rebirth() {
+// rebirth rebirths if you have the money, or anyway when paid is set (bought in the
+// shop).
+func (g *Game) rebirth(paid bool) {
 	s := &g.st
-	if s.Money < rebirthReq(s.Rebirths) {
+	if !paid && s.Money < rebirthReq(s.Rebirths) {
 		g.play("deny")
 		return
 	}
 	pts, dna, tokens := g.rebirthRewards()
+	s.PtFrac = g.pointsDue() - float64(pts)
 	s.Points += pts
 	s.Gems += dna
 	s.Tokens += tokens
@@ -368,6 +393,7 @@ func (g *Game) rebirth() {
 	g.blobs = []blob{{m: 0, born: g.t, mt: -10, squash: -10}}
 	g.cool = 99
 	g.panel = "tree"
+	g.confetti(80)
 	for i := 0; i < 80; i++ {
 		a := rand.Float64() * 2 * math.Pi
 		sp := (2 + rand.Float64()*6) * g.u
@@ -391,7 +417,22 @@ func (g *Game) rebirthRewards() (points, dna, tokens int) {
 	if g.has("reroll") {
 		tokens++
 	}
-	return 1, dna, tokens
+	if s.Perks["xdna"] {
+		dna = int(math.Ceil(float64(dna) * 1.5))
+	}
+	if s.Perks["xtokens"] {
+		tokens = int(math.Ceil(float64(tokens) * 1.5))
+	}
+	return int(g.pointsDue()), dna, tokens
+}
+
+// pointsDue is the skill points a rebirth pays, with the part point carried over
+// from the last one when the x1.5 boost is on.
+func (g *Game) pointsDue() float64 {
+	if g.st.Perks["xpoints"] {
+		return 1.5 + g.st.PtFrac
+	}
+	return 1
 }
 
 // Upgrade cards: 0 biote value, 1 split speed, 2 capacity.
@@ -509,6 +550,10 @@ func (g *Game) open(panel string) {
 }
 
 func (g *Game) tap(L layout, x, y float64) {
+	g.press.x, g.press.y, g.press.t = x, y, g.t
+	if g.ad.on {
+		return // an ad is playing
+	}
 	if g.panel == "tree" {
 		g.tapTree(x, y)
 		return
@@ -521,7 +566,13 @@ func (g *Game) tap(L layout, x, y float64) {
 		g.tapPanel(L, x, y)
 		return
 	}
+	if g.tapTut(L, x, y) || g.tapVisitor(x, y) {
+		return
+	}
 	switch {
+	case L.handle.in(x, y):
+		g.st.DrawerShut = !g.st.DrawerShut
+		g.play("tap")
 	case L.split.in(x, y):
 		if len(g.blobs) < g.capacity() && g.cool < g.cooldown() {
 			g.play("tap")
@@ -538,6 +589,7 @@ func (g *Game) tap(L layout, x, y float64) {
 	case L.shop.in(x, y):
 		g.open("tree")
 	case L.index.in(x, y):
+		g.scroll = 0
 		g.open("index")
 	case L.rebirth.in(x, y):
 		g.open("rebirth")
@@ -549,20 +601,22 @@ func (g *Game) tap(L layout, x, y float64) {
 		g.confirm = false
 		g.open("settings")
 	case L.music.in(x, y):
+		g.scroll = 0
 		g.open("shop")
 	case L.gems.in(x, y):
 		g.open("index") // the DNA lab
-	case L.buy.in(x, y):
+	case L.buy.in(x, y) && g.drawerK > 0.5:
 		g.st.BuyMode = (g.st.BuyMode + 1) % len(buyModes)
 		g.play("tap")
-	default:
-		for i, c := range L.cards[:nUps] {
+	case L.drawer.in(x, y) && g.drawerK > 0.5:
+		for i, c := range L.cards {
 			if c.in(x, y) {
 				g.buyCard(i, false)
 				g.holdOn, g.holdT, g.repeatT = i, 0, 0
 				return
 			}
 		}
+	default:
 		// a biote: show its mutations
 		for i := range g.blobs {
 			bx, by, s := g.blobPos(L, i)
@@ -584,17 +638,25 @@ func (g *Game) Update() error {
 	}
 	g.t += dt
 	g.frame++
+	g.tickShop()
 	g.tickEvents()
+	g.tickVisitors()
 	g.m = g.computeMods()
 	g.hookUpdate()
+	g.tickTut()
+	want := 1.0
+	if g.st.DrawerShut {
+		want = 0
+	}
+	if g.drawerK += (want - g.drawerK) * math.Min(1, dt*12); math.Abs(want-g.drawerK) < 0.002 {
+		g.drawerK = want
+	}
 	L := g.lay()
 
 	presses, down, hx, hy := pointer()
-	for _, p := range presses {
-		g.tap(L, p[0], p[1])
-	}
+	g.pointerInput(L, presses, down, hx, hy)
 	if g.holdOn >= 0 {
-		if !down || !L.cards[g.holdOn].in(hx, hy) || g.panel != "" {
+		if !down || !L.cards[g.holdOn].in(hx, hy) || g.panel != "" || g.ad.on {
 			g.holdOn = -1
 		} else if g.holdT += dt; g.holdT > 0.4 {
 			for g.repeatT += dt; g.repeatT > 0.07; g.repeatT -= 0.07 {
@@ -605,7 +667,7 @@ func (g *Game) Update() error {
 			}
 		}
 	}
-	if g.panel == "" {
+	if g.panel == "" && !g.ad.on {
 		if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 			g.trySplit(true)
 		}
@@ -613,7 +675,7 @@ func (g *Game) Update() error {
 			g.sell()
 		}
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
+	if (inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyBackspace)) && !g.ad.on {
 		g.closePanel()
 	}
 
@@ -650,6 +712,11 @@ func (g *Game) Update() error {
 			p.y += p.vy
 			p.vy += 0.05 * g.u
 			p.vx *= 0.97
+		} else if p.r == -3 { // confetti flutters down
+			p.x += p.vx + math.Sin(p.age*7+p.tx)*0.6*g.u
+			p.y += p.vy
+			p.vy = math.Min(p.vy+0.03*g.u, 1.6*g.u)
+			p.vx *= 0.98
 		}
 		if p.age < p.life {
 			live = append(live, p)
@@ -680,4 +747,46 @@ func (g *Game) Update() error {
 		g.save()
 	}
 	return nil
+}
+
+// pointerInput hands this frame's presses to tap. In a panel with a scrolling list,
+// a press there waits to see if it becomes a drag (which scrolls) before it counts
+// as a tap; the mouse wheel scrolls too.
+func (g *Game) pointerInput(L layout, presses [][2]float64, down bool, hx, hy float64) {
+	scrolls := L.view.w > 0 && !g.ad.on
+	if scrolls {
+		if _, wy := ebiten.Wheel(); wy != 0 {
+			g.scroll -= wy * 30
+		}
+	}
+	for _, p := range presses {
+		if scrolls && (L.view.in(p[0], p[1]) || L.bar.in(p[0], p[1])) {
+			g.drag.on, g.drag.moved, g.drag.bar = true, false, L.bar.in(p[0], p[1])
+			g.drag.x, g.drag.y, g.drag.s0 = p[0], p[1], g.scroll
+			continue
+		}
+		g.tap(L, p[0], p[1])
+	}
+	if !g.drag.on {
+		return
+	}
+	switch {
+	case !scrolls:
+		g.drag.on = false
+	case down && g.drag.bar:
+		g.drag.moved = true
+		g.scroll = (hy - L.bar.y) / math.Max(1, L.bar.h) * L.scrollMax
+	case down:
+		if math.Abs(hy-g.drag.y) > 6*g.u {
+			g.drag.moved = true
+		}
+		if g.drag.moved {
+			g.scroll = g.drag.s0 - (hy-g.drag.y)/g.u
+		}
+	default:
+		g.drag.on = false
+		if !g.drag.moved {
+			g.tap(L, g.drag.x, g.drag.y)
+		}
+	}
 }
