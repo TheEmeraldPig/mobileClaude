@@ -18,7 +18,7 @@ import (
 
 type buffDef struct {
 	id, name, desc string
-	short          string // for narrow screens
+	short          string  // for narrow screens
 	secs           float64 // how long it lasts; 0 pays out at once
 	col            uint32
 }
