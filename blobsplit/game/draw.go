@@ -29,6 +29,8 @@ type layout struct {
 	panel, close, action rect
 	action2, action3     rect
 	action4              rect
+	action5, action6     rect
+	quests               rect
 	rows                 []rect // rows of the genome or shop
 	btns                 []rect // their buttons (and settings' YES / NO)
 	rowMut               []int  // the mutation of each genome row, or shop item
@@ -60,6 +62,7 @@ func (g *Game) lay() layout {
 	L.world = R(10, 264, leftW-6, 86)
 	L.sound = R(wu-38, 8, 28, 28)    // the settings gear
 	L.music = R(wu-38-70, 8, 66, 28) // the shop
+	L.quests = R(wu-38-70-36, 8, 32, 28)
 	L.challenge = R(wu/2-85, 4, 170, 40)
 	// the upgrades drawer slides in from the right; its tab stays on screen
 	off := (1 - g.drawerK) * (rightW + 14)
@@ -434,6 +437,13 @@ func (g *Game) drawHUD(dst *ebiten.Image, L layout) {
 	r = g.pop(L.sound)
 	bevel(dst, r, skDark, p)
 	icon(dst, "gear", r.cx(), r.cy(), 16*u)
+	r = g.pop(L.quests)
+	bevel(dst, r, skViolet, p)
+	icon(dst, "quest", r.cx(), r.cy(), 18*u)
+	say(dst, "QUESTS", face(fSmall, 6*u), r.cx(), r.y+r.h+7*u, alCenter, colW, math.Round(u))
+	if g.claimable() > 0 {
+		badge(dst, r.x+r.w-3*u, r.y+2*u, u, g.t)
+	}
 	g.drawChallengeButton(dst, g.pop(L.challenge), p)
 	g.drawBuffs(dst, L.grid, L.challenge.y+L.challenge.h+3*u)
 

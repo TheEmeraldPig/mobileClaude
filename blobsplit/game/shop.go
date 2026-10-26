@@ -23,10 +23,24 @@ const tokensPerDollar = 1000
 // Purchase asks the store to charge for the item sku and calls done with whether it
 // went through. ShowAd plays a rewarded ad and calls done with whether it was
 // watched. Either may call done from any goroutine, now or later.
+//
+// The other hooks are for Google Play's rules: PriceOf gives the store's price for an
+// item in the player's own currency (shown instead of the US price), Restore lists
+// the items this Google account already owns (so permanent perks come back after a
+// reinstall), OpenURL opens a web page, and AdChoices shows the ad consent form
+// (Google's UMP SDK) again.
 var (
-	Purchase func(sku string, done func(ok bool))
-	ShowAd   func(done func(ok bool))
+	Purchase  func(sku string, done func(ok bool))
+	ShowAd    func(done func(ok bool))
+	PriceOf   func(sku string) string
+	Restore   func(done func(skus []string))
+	OpenURL   func(url string)
+	AdChoices func()
 )
+
+// PrivacyURL is the privacy policy, which Google Play needs a link to in the app and
+// on the store listing.
+const PrivacyURL = "https://github.com/TheEmeraldPig/mobileClaude/blob/claude/focused-feynman-r5rtss/blobsplit/store/privacy-policy.md"
 
 const (
 	tabBoosts = iota
@@ -78,7 +92,31 @@ var shopItems = []shopItem{
 
 func (it *shopItem) tokens() int { return it.cents * tokensPerDollar / 100 }
 
-func (it *shopItem) price() string { return fmt.Sprintf("$%d.%02d", it.cents/100, it.cents%100) }
+// price is the item's price: the store's, in the player's currency, when it is known.
+func (it *shopItem) price() string {
+	if PriceOf != nil {
+		if p := PriceOf(it.id); p != "" {
+			return p
+		}
+	}
+	return fmt.Sprintf("$%d.%02d", it.cents/100, it.cents%100)
+}
+
+// restorePurchases asks the store which items this account owns and gives back
+// their permanent perks (one-off items like time skips aren't restored).
+func (g *Game) restorePurchases() {
+	if Restore == nil {
+		g.notice("NOTHING TO RESTORE: PURCHASES ARRIVE WITH THE GOOGLE PLAY RELEASE.")
+		g.play("deny")
+		return
+	}
+	g.notice("RESTORING PURCHASES...")
+	Restore(func(skus []string) {
+		for _, id := range skus {
+			g.restored <- id
+		}
+	})
+}
 
 func shopByID(id string) *shopItem {
 	for i := range shopItems {
@@ -228,6 +266,15 @@ func (g *Game) tickShop() {
 			continue
 		case ok := <-g.adDone:
 			g.finishAd(ok)
+			continue
+		case id := <-g.restored:
+			if it := shopByID(id); it != nil && len(it.perks) > 0 && !g.owned(it) {
+				for _, p := range it.perks {
+					g.st.Perks[p] = true
+				}
+				g.notice("RESTORED: " + upper(it.name))
+				g.save()
+			}
 			continue
 		default:
 		}

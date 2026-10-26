@@ -72,6 +72,8 @@ func (g *Game) layPanel(L *layout, wu float64) {
 		L.action = R(px+pw/2-130, py+54, 260, 38)
 		L.action2 = R(px+pw/2-130, py+98, 260, 38)
 		L.action4 = R(px+pw/2-130, py+142, 260, 38)
+		L.action5 = R(px+pw/2-130, py+186, 127, 38) // privacy
+		L.action6 = R(px+pw/2+3, py+186, 127, 38)   // restore purchases
 		L.action3 = R(px+pw/2-110, py+ph-60, 220, 44)
 		L.btns = []rect{R(px+pw/2-130, py+ph-60, 120, 44), R(px+pw/2+10, py+ph-60, 120, 44)} // YES, NO
 	case "shop":
@@ -88,6 +90,11 @@ func (g *Game) layPanel(L *layout, wu float64) {
 			L.btns = append(L.btns, R(px+12+rw-8-104-6-72, y+7, 72, 32), R(px+12+rw-8-104, y+7, 104, 32)) // dollars, tokens
 			L.rowMut = append(L.rowMut, i)
 		}
+	case "quests":
+		g.layQuests(L, R, px, py, pw)
+	case "privacy":
+		L.action = R(px+pw/2-130, py+ph-56, 125, 38)
+		L.action2 = R(px+pw/2+5, py+ph-56, 125, 38)
 	case "away", "visitor":
 		L.action = R(wu/2-170, py+ph-70, 160, 50)
 		L.action2 = R(wu/2+10, py+ph-70, 160, 50)
@@ -143,6 +150,10 @@ func (g *Game) tapPanel(L layout, x, y float64) {
 			g.st.Tut = 0 // replay the tutorial
 			g.closePanel()
 			g.play("tap")
+		case L.action5.in(x, y):
+			g.open("privacy")
+		case L.action6.in(x, y):
+			g.restorePurchases()
 		case !g.confirm && L.action3.in(x, y):
 			g.confirm = true // it asks again before anything is deleted
 			g.play("deny")
@@ -158,6 +169,24 @@ func (g *Game) tapPanel(L layout, x, y float64) {
 			if inList(b) {
 				g.buyItem(shopItems[L.rowMut[i/2]].id, i%2 == 0)
 			}
+		}
+	case "quests":
+		for i, b := range L.btns {
+			if b.in(x, y) {
+				g.claimQuest(i)
+			}
+		}
+		if L.action.in(x, y) {
+			g.claimQuest(4)
+		}
+	case "privacy":
+		switch {
+		case L.action.in(x, y) && OpenURL != nil:
+			OpenURL(PrivacyURL)
+			g.play("tap")
+		case L.action2.in(x, y) && AdChoices != nil:
+			AdChoices()
+			g.play("tap")
 		}
 	case "away":
 		switch {
@@ -200,7 +229,8 @@ func (g *Game) drawPanel(dst *ebiten.Image, L layout) {
 	fill(dst, 0, 0, g.W, g.H, color.NRGBA{10, 5, 25, 150})
 	bevel(dst, L.panel, skDark, p)
 	title := map[string]string{"index": "GENOME", "rebirth": "REBIRTH", "blob": "BIOTE", "world": "THE WORLD",
-		"settings": "SETTINGS", "shop": "SHOP", "away": "WELCOME BACK", "visitor": "A VISITOR!"}[g.panel]
+		"settings": "SETTINGS", "shop": "SHOP", "away": "WELCOME BACK", "visitor": "A VISITOR!",
+		"quests": "QUESTS", "privacy": "PRIVACY"}[g.panel]
 	say(dst, title, face(fBig, 22*u), L.panel.cx(), L.panel.y+22*u, alCenter, colT, math.Round(2*u))
 	bevel(dst, L.close, skOrange, p)
 	say(dst, "X", face(fBig, 16*u), L.close.cx(), L.close.cy()-u, alCenter, colW, math.Round(1.5*u))
@@ -310,7 +340,11 @@ func (g *Game) drawPanel(dst *ebiten.Image, L layout) {
 		}
 		bevel(dst, g.pop(L.action4), skViolet, p)
 		say(dst, "REPLAY TUTORIAL", face(fBig, 16*u), L.action4.cx(), L.action4.cy()-u, alCenter, colW, math.Round(1.5*u))
-		say(dst, "VERSION "+Version, face(fSmall, 6*u), L.panel.cx(), L.action4.y+L.action4.h+14*u, alCenter, soft, math.Round(u))
+		bevel(dst, g.pop(L.action5), skViolet, p)
+		say(dst, "PRIVACY", face(fBig, 15*u), L.action5.cx(), L.action5.cy()-u, alCenter, colW, math.Round(1.5*u))
+		bevel(dst, g.pop(L.action6), skViolet, p)
+		say(dst, "RESTORE PURCHASES", face(fSmall, 7*u), L.action6.cx(), L.action6.cy(), alCenter, colW, math.Round(u))
+		say(dst, "VERSION "+Version, face(fSmall, 6*u), L.panel.cx(), L.action5.y+L.action5.h+12*u, alCenter, soft, math.Round(u))
 		danger := skin{rgb(0xc8303a), rgb(0xff7a7a), rgb(0x701820)}
 		if g.confirm {
 			say(dst, "DELETE YOUR WHOLE SAVE? THIS CAN'T BE UNDONE.", face(fSmall, 8*u), L.panel.cx(), L.btns[0].y-16*u, alCenter, rgb(0xff8a8a), math.Round(u))
@@ -346,7 +380,17 @@ func (g *Game) drawPanel(dst *ebiten.Image, L layout) {
 			}
 			bevel(clip, row, sk, p)
 			say(clip, it.name, face(fBig, 15*u), row.x+10*u, row.y+14*u, alLeft, colW, math.Round(1.5*u))
-			say(clip, it.desc, face(fSmall, 6*u), row.x+10*u, row.y+32*u, alLeft, soft, math.Round(u))
+			if it.id == "card" || it.id == "starter" {
+				// random items bought with real money show their odds (a Play rule)
+				say(clip, it.desc, face(fSmall, 6*u), row.x+10*u, row.y+27*u, alLeft, soft, math.Round(u))
+				odds, f := g.cardOddsText(false), face(fSmall, 5*u)
+				if textW(odds, f) > L.btns[2*k].x-row.x-16*u {
+					odds = g.cardOddsText(true)
+				}
+				say(clip, odds, f, row.x+10*u, row.y+38*u, alLeft, colT, math.Round(u))
+			} else {
+				say(clip, it.desc, face(fSmall, 6*u), row.x+10*u, row.y+32*u, alLeft, soft, math.Round(u))
+			}
 			if it.tab == tabBundles && len(it.perks) > 1 {
 				g.shimmer(clip, row, float64(k)*0.5)
 			}
@@ -360,6 +404,29 @@ func (g *Game) drawPanel(dst *ebiten.Image, L layout) {
 		}
 		g.drawScrollBar(dst, L)
 		say(dst, "1000 TOKENS = $1.  EARN TOKENS BY REBIRTHING WITH MORE MONEY THAN YOU NEED.", face(fSmall, 6*u), L.panel.cx(), L.panel.y+L.panel.h-11*u, alCenter, soft, math.Round(u))
+
+	case "quests":
+		g.drawQuests(dst, L)
+
+	case "privacy":
+		y := L.panel.y + 50*u
+		w := L.panel.w - 32*u
+		for _, para := range privacyText {
+			y = g.wrapSay(dst, para, lx, y, w, 7, colW) + 4*u
+		}
+		say(dst, PrivacyURL, face(fSmall, 5*u), L.panel.cx(), L.action.y-12*u, alCenter, soft, math.Round(u))
+		for _, b := range []struct {
+			r     rect
+			label string
+			on    bool
+		}{{L.action, "FULL POLICY", OpenURL != nil}, {L.action2, "AD CHOICES", AdChoices != nil}} {
+			sk := skGrey
+			if b.on {
+				sk = skViolet
+			}
+			bevel(dst, g.pop(b.r), sk, p)
+			say(dst, b.label, face(fBig, 14*u), b.r.cx(), b.r.cy()-u, alCenter, colW, math.Round(1.5*u))
+		}
 
 	case "away":
 		cx := L.panel.cx()
@@ -505,9 +572,13 @@ func (g *Game) cardText(dst *ebiten.Image, c *cardDef, cx, y, w float64) {
 // price (green when you have the tokens). above, if set, is written over them.
 func (g *Game) drawPriceButtons(dst *ebiten.Image, it *shopItem, real, tok rect, p float64, above string) {
 	u := g.u
-	bevel(dst, real, skGold, p)
+	sk := skGold
+	if Purchase == nil {
+		sk = skGrey // the store isn't connected yet
+	}
+	bevel(dst, real, sk, p)
 	say(dst, it.price(), face(fBig, 15*u), real.cx(), real.cy()-u, alCenter, colW, math.Round(1.5*u))
-	sk := skGrey
+	sk = skGrey
 	if g.st.Tokens >= it.tokens() {
 		sk = skGreen
 	}
@@ -536,4 +607,11 @@ func (g *Game) drawScrollBar(dst *ebiten.Image, L layout) {
 	th := math.Max(16*g.u, b.h*k)
 	ty := b.y + (b.h-th)*(g.scroll/L.scrollMax)
 	bevel(dst, rect{b.x, ty, b.w, th}, skViolet, math.Max(1, math.Round(g.u)))
+}
+
+// privacyText is the in-game summary of the privacy policy (store/privacy-policy.md).
+var privacyText = []string{
+	"BIOTE HAS NO ACCOUNTS AND COLLECTS NO PERSONAL DATA. YOUR SAVE STAYS ON THIS DEVICE, AND RESET SAVE IN SETTINGS DELETES IT.",
+	"REWARDED ADS ARE ALWAYS YOUR CHOICE, AND NO ADS REMOVES THEM. ADS AND PURCHASES ARE HANDLED BY GOOGLE (ADMOB AND GOOGLE PLAY BILLING), WHICH MAY USE YOUR DEVICE'S ADVERTISING ID AND PURCHASE RECORDS UNDER GOOGLE'S OWN PRIVACY POLICY. WHERE THE LAW REQUIRES IT, YOU ARE ASKED FIRST, AND AD CHOICES LETS YOU CHANGE YOUR ANSWER.",
+	"CARD PACKS GIVE A RANDOM CARD; THE SHOP SHOWS THE CURRENT ODDS. QUESTIONS: OPEN AN ISSUE ON THE GAME'S GITHUB PAGE.",
 }

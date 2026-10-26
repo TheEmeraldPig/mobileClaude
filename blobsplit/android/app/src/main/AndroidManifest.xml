@@ -4,8 +4,11 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <!-- a short buzz when a rare blob appears -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- appCategory="game" keeps the landscape lock on tablets and foldables: from
+         Android 16 (targetSdk 36) large screens ignore it for apps that aren't games -->
     <application
         android:allowBackup="true"
+        android:appCategory="game"
         android:icon="@mipmap/ic_launcher"
         android:label="Biote"
         android:theme="@style/BlobTheme">

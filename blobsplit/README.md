@@ -29,10 +29,11 @@ An idle mobile game made with Go and [Ebitengine](https://ebitengine.org), built
   - MORE: No Ads ($9.99: every ad button gives its reward at once), a skill point, a card pack.
   - When you can't afford a rebirth, the rebirth screen offers REBIRTH NOW for $0.99; the CHALLENGE screen offers to skip 10 floors.
   - Real money and ads go through the `Purchase` and `ShowAd` hooks in `shop.go`, which the Android app has to set once Google Play Billing and AdMob are added. Until then the dollar buttons say payments aren't connected (items are bought with tokens), and an ad is a 3 second placeholder before its reward.
+- **Quests** (`quests.go`, the QUESTS button next to the shop): three daily quests, one paying a skill point, one DNA (more as your best floor grows) and one 40 tokens, picked from the date and reset at local midnight. Claiming all three pays a bonus of 50 tokens and 5 DNA. A quick quest (a few DNA or 10 tokens) is always running: claim it and the next comes 5 minutes later. Quests count splits, sells, mutations, rooms, visitors, minutes played, upgrade levels, and making a rare biote, so they reward playing rather than idling. The button shows "!" when one can be claimed.
 - **Idle gains**: when you come back, you get 25% of your recent income per second for the time away (up to 8 hours; cards and the Night Watch item raise it), shown on a welcome-back screen with COLLECT or "x2" for watching an ad.
 - **Visitors** (`extras.go`): every minute or two a glowing orb drifts across the screen. Tap it for a buff: Double Cash (value x2), Lucky Star (mutation chance x3), Split Rush (splits 2x faster) or Piggy Bank (2 minutes of income now). Half are gifts (take it, or watch an ad to double it); half need an ad. Running buffs show under the CHALLENGE button with their time left, and are saved.
 - **Animations**: buttons squash when pressed, SELL throbs when the board is full, affordable upgrades shimmer, confetti falls for cleared rooms, floors, rebirths and purchases, and the board shakes when a floor is cleared.
-- **Settings** (the gear, top right): music, sound, version, and RESET SAVE, which asks again before deleting anything.
+- **Settings** (the gear, top right): music, sound, replay tutorial, PRIVACY (the policy in short, a link to the full one and the ad consent form), RESTORE PURCHASES, version, and RESET SAVE, which asks again before deleting anything.
 - **AUTO** split and sell work from the start at half speed; the Fast Auto skills make them full speed.
 - **Pacing**: tuned with a bot (`sim_test.go`, `BLOB_SIM=minutes go test -run TestSim -v ./game`) that plays the real rules: the first card (10 floors) takes about an hour, rebirths come roughly every 1.5 hours. Value and its cost grow by about the same factor a level (`valueStep`), so floors take a steady time rather than hitting a wall.
 - **Rebirth**: costs $25K, then 10x more each time. It resets money, biotes, upgrades and your floor (back to floor 1), doubles biote value for good and pays 1 skill point, DNA (1 per floor cleared that run) and tokens. Cards, DNA, tokens, your best floor and skills are kept.
@@ -94,6 +95,20 @@ The workflow also runs the APK on an emulator and saves a screenshot as the `bio
 
 Each build's version code is the workflow run number, so it always goes up, as Play requires.
 
+## Google Play policies
+
+What the game already does, and what still has to be done before ads and purchases go live:
+
+- **Privacy policy**: `store/privacy-policy.md`, linked from Settings > PRIVACY (`PrivacyURL` in `shop.go`). Play needs the same link on the store listing. It points at this branch on GitHub; once the game is merged, change `PrivacyURL` to the `main` branch (or a GitHub Pages copy) so the link never breaks.
+- **Payments**: digital items must be sold through Google Play Billing. The game calls `Purchase(sku)` with the item ids in `shopItems` (`xmoney`, `noads`, `skip1`, ...); create in-app products with the same ids in the Play Console. Permanent items (boosts, bundles, No Ads) are non-consumable and come back with RESTORE PURCHASES (`Restore`); skips, points and card packs are consumable. Set `PriceOf` so the shop shows Google's local price. Until `Purchase` is set the dollar buttons are grey and only show a notice.
+- **Random items (loot boxes)**: the Card Pack and Starter Pack give a random card, so the shop shows the current odds of each rarity next to them (`rarityOdds`), worked out by the same code that picks the card.
+- **Ads**: only rewarded ads, always started by the player, with the reward shown first, never during play, and removable with No Ads. With AdMob, use Google's UMP SDK for consent in the EEA/UK and set `AdChoices` to show its privacy options form again (Settings > PRIVACY > AD CHOICES). The AdMob SDK adds the `AD_ID` permission; declare it in the Play Console's advertising ID form.
+- **Target audience**: set it to 13 and over (not designed for children). Rewarded ads and paid random items bring in the stricter Families policy if children are a target audience.
+- **Store listing and forms**: say the app "Contains ads" and has "In-app purchases". In the content rating questionnaire, answer yes to in-game purchases and to purchasable random items; there is no real gambling. In the data safety form: no data is collected by the game itself; with AdMob, declare device or other IDs (advertising), app interactions and diagnostics, collected by the ad SDK and shared for advertising, encrypted in transit, and that users can't request deletion beyond resetting the advertising ID. Without ads or billing, the answer is "no data collected".
+- **Account deletion**: not needed, as there are no accounts; RESET SAVE deletes all local data.
+- **Android 16**: the app targets API 36 and sets `android:appCategory="game"`, which keeps it in landscape on tablets and foldables (other apps lose their orientation lock on large screens).
+- **Fair play**: real-money buttons are clearly priced, quests and visitors never need money, and the token price of every item is shown next to its dollar price.
+
 ## Testing without a phone
 
 ```sh
@@ -104,9 +119,9 @@ BLOB_NOAUDIO=1 BLOB_DEMO=1 BLOB_SHOT=shot.png BLOB_SIZE=800x360 xvfb-run -a ./bs
 
 - `BLOB_SHOT=file.png` saves a screenshot after `BLOB_SHOT_AT` frames (default 90) and quits; screenshot runs never touch the save.
 - `BLOB_DEMO=1` starts with a late-game board; `BLOB_FRESH=1` starts a new game.
-- `BLOB_PANEL=tree|challenge|index|rebirth|blob|world|shop|away|visitor` opens a screen (`BLOB_SEL=n` picks the biote or card); `BLOB_DO=split,split,sell,buy0,win` runs actions, one every 20 frames (also `visitor`, `ad`, `buff`, `away`, `gift`, `offer`, `tab0`-`tab3`).
+- `BLOB_PANEL=tree|challenge|index|rebirth|blob|world|shop|away|visitor|quests|settings|privacy` opens a screen (`BLOB_SEL=n` picks the biote or card); `BLOB_DO=split,split,sell,buy0,win` runs actions, one every 20 frames (also `visitor`, `ad`, `buff`, `away`, `gift`, `offer`, `tab0`-`tab3`, `quests`).
 - `BLOB_TUT=n` shows tutorial step n (demo and panel runs skip the tutorial otherwise); `BLOB_DRAWER=0` shuts the upgrades drawer; `BLOB_SCROLL=units` scrolls a panel's list.
 - `BLOB_CLOCK=0.75` sets the time of day (0.25 midday, 0.75 midnight); `BLOB_EVENT=meteor` starts an event.
 - `BLOB_SIZE=WxH` sets the window size (800x360 is a phone in landscape).
 
-`go test ./...` (under `xvfb-run -a` on a headless Linux) checks number formatting, upgrade curves, the 1/15 mutation chance, stacking and inheriting, floors and rooms, cards, the skill tree, rebirth, day/night and events, loading Blob Split saves, updating before the screen size is known, the shop and paid skips, ads, buffs, the tutorial, and the drawer layout at phone, tablet and PC sizes.
+`go test ./...` (under `xvfb-run -a` on a headless Linux) checks number formatting, upgrade curves, the 1/15 mutation chance, stacking and inheriting, floors and rooms, cards, the skill tree, rebirth, day/night and events, loading Blob Split saves, updating before the screen size is known, the shop and paid skips, ads, buffs, the tutorial, quests, card odds, restoring purchases, and the drawer layout at phone, tablet and PC sizes.

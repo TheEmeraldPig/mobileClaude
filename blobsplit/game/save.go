@@ -59,6 +59,13 @@ type State struct {
 	NextVisit  float64            `json:"nextVisit"`  // seconds until the next visitor
 	PtFrac     float64            `json:"ptFrac"`     // part skill point carried over (x1.5 boost)
 
+	// quests
+	QuestDay   int     `json:"questDay"` // the day the daily quests are for
+	Quests     []quest `json:"quests"`
+	QuestBonus bool    `json:"questBonus"` // the all-three bonus was claimed
+	Quick      *quest  `json:"quick"`      // the quick quest, nil while waiting for the next
+	QuickWait  float64 `json:"quickWait"`  // seconds until the next quick quest
+
 	// from older versions
 	OldBlobs []int          `json:"blobs,omitempty"`
 	OldGemLv map[string]int `json:"gemLv,omitempty"`

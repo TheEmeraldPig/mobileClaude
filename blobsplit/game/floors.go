@@ -164,6 +164,7 @@ func (g *Game) clearRoom() {
 	} else {
 		s.Room++
 	}
+	g.questAdd(qRoom, 1)
 	g.resetRoom()
 	g.floats = append(g.floats, floater{s: msg, x: g.W / 2, y: g.H * 0.3, c: colG, size: 24})
 	if s.Room == 0 { // a whole floor
@@ -189,15 +190,7 @@ func (g *Game) awardCard() {
 		g.st.Gems += 25 // every card is unlocked already
 		return
 	}
-	total := 0.0
-	w := make([]float64, len(left))
-	for i, c := range left {
-		w[i] = cardRarities[c.rar].odds
-		if g.has("market") && c.rar > 0 {
-			w[i] *= 1.5 + 0.5*float64(c.rar)
-		}
-		total += w[i]
-	}
+	w, total := g.cardWeights(left)
 	x := rand.Float64() * total
 	pick := left[len(left)-1]
 	for i := range left {
@@ -208,6 +201,54 @@ func (g *Game) awardCard() {
 	}
 	g.st.Cards = append(g.st.Cards, pick.id)
 	g.banner.r, g.banner.t, g.banner.text = pick.mut, g.t, cardRarities[pick.rar].name+" CARD: "+pick.name
+}
+
+// cardWeights is how likely each card in left is to be won next.
+func (g *Game) cardWeights(left []cardDef) (w []float64, total float64) {
+	w = make([]float64, len(left))
+	for i, c := range left {
+		w[i] = cardRarities[c.rar].odds
+		if g.has("market") && c.rar > 0 {
+			w[i] *= 1.5 + 0.5*float64(c.rar)
+		}
+		total += w[i]
+	}
+	return w, total
+}
+
+// rarityOdds is the chance, right now, that the next card won is of each rarity.
+// The shop shows these for the Card Pack, which is bought with real money.
+func (g *Game) rarityOdds() []float64 {
+	var left []cardDef
+	for _, c := range cards {
+		if !g.hasCard(c.id) {
+			left = append(left, c)
+		}
+	}
+	out := make([]float64, len(cardRarities))
+	w, total := g.cardWeights(left)
+	for i, c := range left {
+		out[c.rar] += w[i] / total
+	}
+	return out
+}
+
+// cardOddsText writes rarityOdds, e.g. "ODDS NOW:  COMMON 50%  UNCOMMON 28% ...",
+// with names cut to 4 letters when short is set.
+func (g *Game) cardOddsText(short bool) string {
+	s := "ODDS NOW:"
+	for i, p := range g.rarityOdds() {
+		pc := fmt.Sprintf("%.1f", p*100)
+		if p >= 0.1 || p == 0 {
+			pc = fmt.Sprintf("%.0f", p*100)
+		}
+		name := cardRarities[i].name
+		if short {
+			name = name[:min(4, len(name))]
+		}
+		s += fmt.Sprintf("  %s %s%%", name, pc)
+	}
+	return s
 }
 
 func upper(s string) string {

@@ -18,7 +18,7 @@ import (
 //	BLOB_DO=split,sell  actions run one every 20 frames: split, sell, buy0-2, rebirth, mode, win
 //	BLOB_SIZE=1280x720  window size;  BLOB_FRESH=1 ignores the save;  BLOB_NOAUDIO=1
 //	BLOB_TUT=2          tutorial step;  BLOB_DRAWER=0 closes the upgrades drawer;  BLOB_SCROLL=60
-//	BLOB_DO actions also: visitor, ad, buff (all buffs on), away, gift, offer, tab1-3
+//	BLOB_DO actions also: visitor, ad, buff (all buffs on), away, gift, offer, tab1-3, quests
 var (
 	shotPath = os.Getenv("BLOB_SHOT")
 	shotAt   = 90
@@ -126,6 +126,12 @@ func (g *Game) hookUpdate() {
 			}
 		case a == "away":
 			g.giveIdle(5000)
+		case a == "quests": // finish two daily quests and the quick one
+			for i := 0; i < 2; i++ {
+				g.questAdd(g.st.Quests[i].Kind, g.st.Quests[i].Target)
+			}
+			g.claimQuest(0)
+			g.questAdd(g.st.Quick.Kind, g.st.Quick.Target)
 		case a == "gift", a == "offer":
 			g.offer = visitor{buff: 0, gift: a == "gift"}
 			g.panel = "visitor"

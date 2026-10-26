@@ -423,12 +423,121 @@ func TestDrawerLayout(t *testing.T) {
 			if L.grid.x+L.grid.w > L.handle.x || L.sell.x+L.sell.w > L.handle.x {
 				t.Fatalf("%v drawer %v: board reaches the drawer tab", sz, k)
 			}
-			if L.challenge.x < L.money.x+L.money.w || L.challenge.x+L.challenge.w > L.music.x {
+			if L.challenge.x < L.money.x+L.money.w || L.challenge.x+L.challenge.w > L.quests.x || L.quests.x+L.quests.w > L.music.x {
 				t.Fatalf("%v: challenge button overlaps the top bar", sz)
 			}
 			if k == 0 && L.handle.x+L.handle.w > g.W+1 {
 				t.Fatalf("%v: closed drawer tab is off screen", sz)
 			}
 		}
+	}
+}
+
+// Daily quests pay a skill point, DNA and tokens, then a bonus; quick quests come back.
+func TestQuests(t *testing.T) {
+	g := testGame(t)
+	s := &g.st
+	if len(s.Quests) != 3 || s.Quick == nil {
+		t.Fatalf("quests: %d daily, quick %v", len(s.Quests), s.Quick)
+	}
+	for i, q := range s.Quests {
+		if q.Reward != i || q.Kind == s.Quests[(i+1)%3].Kind {
+			t.Fatalf("quest %d: %+v", i, q)
+		}
+	}
+	g.claimQuest(0)
+	if s.Quests[0].Claimed {
+		t.Fatal("claimed an unfinished quest")
+	}
+	pts, dna, tok := s.Points, s.Gems, s.Tokens
+	for i := range s.Quests {
+		q := s.Quests[i]
+		g.questAdd(q.Kind, q.Target)
+		g.claimQuest(i)
+	}
+	if s.Points != pts+1 || s.Gems != dna+s.Quests[1].Amount || s.Tokens != tok+s.Quests[2].Amount {
+		t.Fatalf("rewards: points %d DNA %d tokens %d", s.Points, s.Gems, s.Tokens)
+	}
+	g.claimQuest(4)
+	if !s.QuestBonus || s.Tokens != tok+s.Quests[2].Amount+bonusTokens {
+		t.Fatal("bonus not paid")
+	}
+	g.claimQuest(4)
+	if s.Tokens != tok+s.Quests[2].Amount+bonusTokens {
+		t.Fatal("bonus paid twice")
+	}
+	// the quick quest, then a wait, then a new one
+	q := s.Quick
+	g.questAdd(q.Kind, q.Target)
+	g.claimQuest(3)
+	if s.Quick != nil || s.QuickWait <= 0 {
+		t.Fatal("quick quest didn't wait")
+	}
+	s.QuickWait = 0
+	g.checkQuests()
+	if s.Quick == nil {
+		t.Fatal("no new quick quest")
+	}
+	// a new day brings new daily quests
+	s.QuestDay--
+	g.checkQuests()
+	if s.QuestBonus || s.Quests[0].Claimed {
+		t.Fatal("quests didn't reset for the new day")
+	}
+}
+
+// Splitting, selling and buying count towards quests.
+func TestQuestCounting(t *testing.T) {
+	g := testGame(t)
+	g.st.Quests = []quest{{Kind: qSplit, Target: 2}, {Kind: qSell, Target: 1}, {Kind: qUpgrade, Target: 1}}
+	g.st.Quick = &quest{Kind: qRare, Target: 1e12}
+	g.cool = 99
+	g.trySplit(true)
+	g.cool = 99
+	g.trySplit(true)
+	g.sell()
+	g.st.Money = 1e6
+	g.buyCard(2, false)
+	for i, q := range g.st.Quests {
+		if !q.done() {
+			t.Fatalf("quest %d not done: %+v", i, q)
+		}
+	}
+	if g.st.Quick.done() {
+		t.Fatal("rare quest done without a rare biote")
+	}
+}
+
+// The Card Pack's odds add up and follow what can still be won.
+func TestCardOdds(t *testing.T) {
+	g := testGame(t)
+	sum := 0.0
+	for _, p := range g.rarityOdds() {
+		sum += p
+	}
+	if math.Abs(sum-1) > 1e-9 {
+		t.Fatalf("odds add up to %v", sum)
+	}
+	// with every common card owned, commons can't come up
+	for _, c := range cards {
+		if c.rar == 0 {
+			g.st.Cards = append(g.st.Cards, c.id)
+		}
+	}
+	if g.rarityOdds()[0] != 0 {
+		t.Fatal("owned commons still have odds")
+	}
+}
+
+// Restoring purchases gives back permanent perks only.
+func TestRestore(t *testing.T) {
+	g := testGame(t)
+	Restore = func(done func([]string)) { done([]string{"noads", "skip24", "evolve"}) }
+	defer func() { Restore = nil }()
+	money := g.st.Money
+	g.restorePurchases()
+	g.tickShop()
+	if !g.st.Perks["noads"] || !g.st.Perks["xmoney"] || !g.st.Perks["xluck"] || g.st.Money != money {
+		t.Fatalf("restore: perks %v money %v", g.st.Perks, g.st.Money)
 	}
 }

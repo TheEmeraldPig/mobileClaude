@@ -113,6 +113,7 @@ func (g *Game) tapVisitor(x, y float64) bool {
 	}
 	g.offer = g.vis
 	g.vis.on = false
+	g.questAdd(qVisitor, 1)
 	g.panel = "visitor"
 	g.play("buy")
 	return true

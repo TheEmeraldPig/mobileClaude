@@ -94,6 +94,7 @@ type Game struct {
 	ad          adState
 	paid        chan string // items whose real-money purchase went through
 	adDone      chan bool   // ads that finished (whether they were watched)
+	restored    chan string // items the store says this account owns
 	vis, offer  visitor     // the visitor on screen, and the one tapped
 	shopTab     int
 	drawerK     float64 // the upgrades drawer: 0 closed, 1 open
@@ -104,13 +105,14 @@ type Game struct {
 	}
 	press  struct{ x, y, t float64 } // the last press, for squashing buttons
 	shakeT float64                   // the board shakes from this time
+	playT  float64                   // seconds played towards the next minute (quests)
 }
 
 func NewGame() *Game {
 	initFonts()
 	initSprites()
 	initAudio()
-	g := &Game{st: loadState(), holdOn: -1, paid: make(chan string, 8), adDone: make(chan bool, 8), shakeT: -10}
+	g := &Game{st: loadState(), holdOn: -1, paid: make(chan string, 8), adDone: make(chan bool, 8), restored: make(chan string, 64), shakeT: -10}
 	g.press.t = -10
 	if !g.st.DrawerShut {
 		g.drawerK = 1
@@ -125,6 +127,7 @@ func NewGame() *Game {
 	g.sky.init()
 	g.hookInit()
 	g.m = g.computeMods()
+	g.checkQuests()
 	g.checkAway()
 	g.updateMusic()
 	current = g
@@ -265,7 +268,7 @@ func (g *Game) trySplit(manual bool) {
 	}
 	// each new biote goes right after the one it split from, so they sit side by side
 	best := 0
-	var gains []int
+	var gains, kids []int
 	next := make([]blob, 0, n+add)
 	for i, p := range g.blobs {
 		next = append(next, p)
@@ -278,6 +281,7 @@ func (g *Game) trySplit(manual bool) {
 			near = append(near, g.blobs[j].m)
 		}
 		m := g.childMask(p.m, near...)
+		kids = append(kids, m)
 		next = append(next, blob{m: m, born: g.t, squash: -10, phase: rand.Float64() * 7, fx: p.fx, fy: p.fy, mt: g.t})
 		for _, r := range maskList(m &^ p.m) {
 			g.st.Found[r]++
@@ -291,6 +295,13 @@ func (g *Game) trySplit(manual bool) {
 	g.blobs = next
 	for _, r := range gains {
 		g.gained(r)
+	}
+	g.questAdd(qSplit, 1)
+	g.questAdd(qMutate, float64(len(gains)))
+	for _, m := range kids {
+		if m != 0 {
+			g.questAdd(qRare, comboOdds(m))
+		}
 	}
 	g.play("split")
 	if best > 0 {
@@ -349,6 +360,7 @@ func (g *Game) sell() {
 	g.cool = 0 // the split timer starts again
 	g.full = 0
 	g.play("sell")
+	g.questAdd(qSell, 1)
 	g.roomSale(v, mutated)
 }
 
@@ -507,6 +519,7 @@ func (g *Game) buyCard(i int, repeat bool) bool {
 	}
 	g.st.Money -= cost
 	*g.upLv(i) += n
+	g.questAdd(qUpgrade, float64(n))
 	g.play("buy")
 	r := g.lay().cards[i]
 	for k := 0; k < 8+min(n, 25); k++ {
@@ -603,6 +616,9 @@ func (g *Game) tap(L layout, x, y float64) {
 	case L.music.in(x, y):
 		g.scroll = 0
 		g.open("shop")
+	case L.quests.in(x, y):
+		g.checkQuests()
+		g.open("quests")
 	case L.gems.in(x, y):
 		g.open("index") // the DNA lab
 	case L.buy.in(x, y) && g.drawerK > 0.5:
@@ -644,6 +660,7 @@ func (g *Game) Update() error {
 	g.m = g.computeMods()
 	g.hookUpdate()
 	g.tickTut()
+	g.tickQuests()
 	want := 1.0
 	if g.st.DrawerShut {
 		want = 0
