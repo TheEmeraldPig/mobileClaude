@@ -11,8 +11,9 @@ var Version = "dev"
 // StartFullscreen reports the saved full screen setting.
 func StartFullscreen() bool { return prefs.Full }
 
-// SaveNow writes the save game straight away (used when an app is sent to the background).
-func SaveNow() { saveGame() }
+// SaveNow writes the settings straight away (used when an app is sent to the background).
+// Characters are saved by the server.
+func SaveNow() { savePrefs() }
 
 // WindowIcons draws the mote as the window/taskbar icon in a few sizes.
 func WindowIcons() []image.Image {

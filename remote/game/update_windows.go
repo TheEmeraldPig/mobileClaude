@@ -124,7 +124,7 @@ func pollRelease() {
 }
 
 func applyUpdate(newExe string) {
-	saveGame()
+	savePrefs()
 	exe, err := os.Executable()
 	if err != nil {
 		return

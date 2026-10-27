@@ -20,8 +20,10 @@
 - Every push to `mote/` builds and releases `Mote.exe`, `Mote-steam.exe` and `Mote.apk` through `.github/workflows/mote.yml`.
 - Check layouts by running under Xvfb with the test hooks in `game/testhooks.go` (`MOTE_SCRIPT`, `MOTE_TOUCH=1`, `MOTE_NOAUDIO=1`).
 
-## remote/ (the new game "Remote", built on a copy of Mote's engine)
+## remote/ (the new game "Remote": a pixel MMO built on a copy of Mote's engine)
 
 - A separate game: a copy of `mote/` (not a shared package), renamed so it can't clash with Mote. See the table at the top of `remote/README.md`. Never edit `mote/` for Remote's sake.
 - Remote's releases (`.github/workflows/remote.yml`) are tagged `remote-build-N` and must stay `--latest=false`; its updaters list the releases instead of reading `/releases/latest`, which belongs to Mote.
-- Test hooks use `REMOTE_SCRIPT`, `REMOTE_SIZE`, `REMOTE_TOUCH`, `REMOTE_NOAUDIO`.
+- `remote/mmo` is shared by the game and the server (islands, petals, creatures, characters, messages) and must not import Ebitengine. Island generation is seeded (rules at the top of `mmo/isles.go`); `mmo/isles_test.go` pins each island's checksum, so update it and say so when generation changes on purpose.
+- The server (`remote/srv`, run by `remote/server`) owns characters, creatures, fights and loot. The game only moves its own mote. New character state goes in `mmo.Char`. Bump `mmo.Protocol` when old games can no longer talk to the server.
+- Test with `go test ./mmo ./srv` and `xvfb-run -a go test ./game`, and run the game under Xvfb with `REMOTE_SCRIPT` (`solo` runs the server inside the game). Check both the PC and phone (`REMOTE_TOUCH=1`) layouts.

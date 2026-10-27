@@ -26,15 +26,15 @@ jobs:
           cache-dependency-path: remote/go.sum
       - name: Install libraries for tests
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxxf86vm-dev libasound2-dev xvfb
-      - name: Test
-        run: xvfb-run -a go test ./game 
+      - name: Test (game, islands, server)
+        run: xvfb-run -a go test ./game ./mmo ./srv && go build -o /dev/null ./server 
       - name: Build Remote.exe
         run: |
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
-            -ldflags "-s -w -H windowsgui -X github.com/TheEmeraldPig/mobileClaude/remote/game.Version=${{ github.run_number }} -X github.com/TheEmeraldPig/mobileClaude/remote/game.RelayURL=${{ vars.REMOTE_RELAY_URL }}" \
+            -ldflags "-s -w -H windowsgui -X github.com/TheEmeraldPig/mobileClaude/remote/game.Version=${{ github.run_number }} -X github.com/TheEmeraldPig/mobileClaude/remote/game.ServerURL=${{ vars.REMOTE_SERVER_URL }}" \
             -o Remote.exe ./cmd/remote
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -tags steam \
-            -ldflags "-s -w -H windowsgui -X github.com/TheEmeraldPig/mobileClaude/remote/game.Version=${{ github.run_number }} -X github.com/TheEmeraldPig/mobileClaude/remote/game.RelayURL=${{ vars.REMOTE_RELAY_URL }}" \
+            -ldflags "-s -w -H windowsgui -X github.com/TheEmeraldPig/mobileClaude/remote/game.Version=${{ github.run_number }} -X github.com/TheEmeraldPig/mobileClaude/remote/game.ServerURL=${{ vars.REMOTE_SERVER_URL }}" \
             -o Remote-steam.exe ./cmd/remote
       - uses: actions/upload-artifact@v4
         with:
@@ -42,6 +42,21 @@ jobs:
           path: |
             remote/Remote.exe
             remote/Remote-steam.exe
+
+  # The game server's Docker image (what Render runs)
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the server image
+        working-directory: remote
+        run: docker build -f server/Dockerfile -t remote-server .
+      - name: Start it and check it answers
+        run: |
+          docker run -d --rm -p 8080:8080 --name rs remote-server
+          for i in $(seq 1 20); do curl -sf localhost:8080/ && break; sleep 1; done
+          curl -sf localhost:8080/ | grep "Remote server"
+          docker stop rs
 
   android:
     runs-on: ubuntu-latest
@@ -67,7 +82,7 @@ jobs:
           mkdir -p android/app/libs
           go install github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@v2.8.8
           ebitenmobile bind -target android -androidapi 23 -javapkg com.theemeraldpig.remote \
-            -ldflags "-X github.com/TheEmeraldPig/mobileClaude/remote/game.Version=${{ github.run_number }} -X github.com/TheEmeraldPig/mobileClaude/remote/game.RelayURL=${{ vars.REMOTE_RELAY_URL }}" \
+            -ldflags "-X github.com/TheEmeraldPig/mobileClaude/remote/game.Version=${{ github.run_number }} -X github.com/TheEmeraldPig/mobileClaude/remote/game.ServerURL=${{ vars.REMOTE_SERVER_URL }}" \
             -o android/app/libs/remote.aar ./mobile
       - uses: gradle/actions/setup-gradle@v4
         with:
@@ -112,14 +127,12 @@ jobs:
             adb shell am start -n com.theemeraldpig.remote/.MainActivity
             sleep 40
             adb exec-out screencap -p > shot-menu.png
-            # tap New world (second button on a fresh install's main menu)
-            adb shell input swipe 450 150 450 150 600
-            sleep 30
-            adb exec-out screencap -p > shot-later.png
-            # then Create world at the bottom of that screen, and look at the game itself
-            adb shell input swipe 320 272 320 272 600
+            # tap Play solo (second button on the main menu), then look at the game itself
+            adb shell input swipe 450 140 450 140 600
             sleep 45
             adb exec-out screencap -p > shot-game.png
+            sleep 15
+            adb exec-out screencap -p > shot-later.png
             adb logcat -d > logcat.txt
             PID=$(adb shell pidof com.theemeraldpig.remote || true); echo "Remote pid: $PID"
             if [ -n "$PID" ]; then grep " $PID " logcat.txt | tail -150; fi
@@ -135,7 +148,7 @@ jobs:
             logcat.txt
 
   release:
-    needs: [windows, android]
+    needs: [windows, android, server]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

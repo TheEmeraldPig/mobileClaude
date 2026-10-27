@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 
+	"github.com/TheEmeraldPig/mobileClaude/remote/mmo"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
@@ -18,7 +19,6 @@ var (
 	cam                struct{ x, y float64 }
 	worldImg           *ebiten.Image
 	worldPix           []byte
-	autosaveAt         int
 )
 
 var bgRGB = [3]int{16, 18, 22}
@@ -34,18 +34,16 @@ func (g *Game) Update() error {
 		return nil
 	}
 	defer CatchCrash()
-	if ebiten.IsWindowBeingClosed() { // closing the window saves first
-		saveGame()
+	if ebiten.IsWindowBeingClosed() {
+		savePrefs()
 		return ebiten.Termination
 	}
 	frame++
 	ops = ops[:0]
-	netUpdate()     // other players' changes first...
-	netWatchBegin() // ...then remember the area around the mote before it acts
+	netUpdate()
 	runScript()
 	readPointers(cur != scPlaying)
 
-	// keyboard shortcuts
 	if inpututil.IsKeyJustPressed(ebiten.KeyF11) {
 		prefs.Full = !ebiten.IsFullscreen()
 		ebiten.SetFullscreen(prefs.Full)
@@ -55,7 +53,7 @@ func (g *Game) Update() error {
 		switch cur {
 		case scPlaying:
 			openScreen(scPause)
-		case scPause, scInv, scChest, scShop:
+		case scPause, scPetals, scTravel:
 			play()
 		case scSettings:
 			if settingsFrom == scMain {
@@ -63,198 +61,117 @@ func (g *Game) Update() error {
 			} else {
 				openScreen(scPause)
 			}
-		case scSeed, scWorlds, scMultiplayer:
-			hostAfterOpen = false
+		case scName:
 			openScreen(scMain)
-		case scBook:
-			openScreen(bookFrom)
-		case scCraft:
-			if craftStation == "" {
-				openScreen(scInv)
-			} else {
-				play()
-			}
 		}
-	} else if bindJustPressed("inv") && (cur == scPlaying || cur == scInv || cur == scCraft || cur == scChest) && listening == "" {
-		if cur == scPlaying {
-			openScreen(scInv)
-		} else {
-			play()
+	} else if cur == scPlaying || cur == scPetals || cur == scTravel {
+		if bindJustPressed("petals") {
+			toggleScreen(scPetals)
+		} else if bindJustPressed("map") {
+			toggleScreen(scTravel)
 		}
 	}
+	myMode = mmo.ModeNormal
 	if cur == scPlaying {
 		input.left, input.right, input.lev = bindDown("left"), bindDown("right") || scriptRight, bindDown("lev") || scriptLev
-		for i := 0; i < hotbarN; i++ {
+		attack := mouseAttack || held("attack") || scriptAttack
+		defend := held("defend") || (!isTouch && ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight))
+		switch {
+		case attack:
+			myMode = mmo.ModeAttack
+		case defend:
+			myMode = mmo.ModeDefend
+		}
+		for i := range mmo.Emotes {
 			if inpututil.IsKeyJustPressed(ebiten.Key1 + ebiten.Key(i)) {
-				if selected == i {
-					selected = -1
-				} else {
-					selected = i
-				}
-				showItemName()
-				sfx("click")
+				sendEmote(i)
 			}
-		}
-		// Q drops one of the selected item, Ctrl+Q the whole stack
-		if bindJustPressed("drop") && selected >= 0 && inv[selected] != nil {
-			n := 1
-			if ebiten.IsKeyPressed(ebiten.KeyControl) {
-				n = inv[selected].N
-			}
-			dropSlot(selected, n)
-		}
-		if _, wy := ebiten.Wheel(); wy != 0 {
-			d := 1
-			if wy > 0 {
-				d = -1
-			}
-			if selected < 0 {
-				if d > 0 {
-					selected = 0
-				} else {
-					selected = hotbarN - 1
-				}
-			} else {
-				selected = (selected + d + hotbarN) % hotbarN
-			}
-			showItemName()
-			sfx("click")
-		}
-		// the mouse also aims while held
-		if useActive && !isTouch && !scriptAim {
-			aimSX, aimSY = hoverX, hoverY
-			updateShape()
-		}
-		// right-click opens a station
-		if !isTouch && inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
-			x, y := int(math.Floor((cam.x+hoverX/zoom)/CELL)), int(math.Floor((cam.y+hoverY/zoom)/CELL))
-			rightOnObj = true
-			if t := traderAt(x, y, false); t != nil {
-				if traderInReach(t) {
-					openShop(t.house.kind)
-				} else {
-					toast("Get closer to talk to " + traderKinds[t.house.kind].name)
-				}
-			} else if x >= 0 && x < W && y >= 0 && y < H && isDoor(grid[y*W+x]) {
-				if cellInBuildReach(x, y) {
-					toggleDoor(x, y)
-				}
-			} else if o := objAt(x, y); o != nil {
-				if objInReach(o) {
-					openStation(o.kind)
-				} else {
-					toast("Get closer to use the " + stations[o.kind].name)
-				}
-			} else {
-				rightOnObj = false
-			}
-		}
-		// holding right-click with a pickaxe mines the background walls
-		if !isTouch {
-			held := selected >= 0 && inv[selected] != nil && isPick(inv[selected].ID)
-			if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) && held && !rightOnObj && !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-				backHeld, useActive = true, true
-				aimSX, aimSY = hoverX, hoverY
-			} else if backHeld {
-				backHeld, useActive = false, false
-			}
-			if !ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
-				rightOnObj = false
-			}
-		}
-		buildKeys()
-		if bindJustPressed("craft") && heldBuildKind() != buildPaint {
-			openHandCrafting()
 		}
 	} else {
 		input = gameInput{}
 	}
 
-	if !paused() {
+	if netState == netOnline && curIsle != nil && cur != scDead {
 		worldTime = math.Mod(worldTime+1.0/dayFrames, 1)
 		updatePlayer()
-		followPlayer()
-		useHeld()
-		netWatchEnd() // whatever the mote changed goes to the other players
-		updateEntities()
-		updateTraders()
-		checkObjects()
-		healWear()
-		updateParticles()
+	} else if cur == scMain {
+		worldTime = math.Mod(worldTime+1.0/dayFrames, 1)
 	}
-	setHum(player.lifting && !paused(), player.energy)
+	updateRemote()
+	updateParticles()
+	setHum(player.lifting && cur != scMain, player.energy)
 	peekSX += (peekX - peekSX) * 0.04
 	peekSY += (peekY - peekSY) * 0.04
-	placeCamera()
-	if !paused() {
-		stepSim()
+	if cur == scMain && netState == netOff {
+		menuCamera()
+	} else {
+		placeCamera()
 	}
 
-	// UI for this frame
 	switch cur {
 	case scMain:
 		mainMenu()
-	case scSeed:
+	case scName:
 		mainMenuArt()
-		seedMenu()
+		nameMenu()
 	case scPlaying:
-		traderLabels()
-		peerLabels()
+		worldLabels()
 		drawPopups()
 		hud()
 	case scPause:
 		pauseMenu()
-	case scInv:
-		invMenu()
+	case scPetals:
+		petalsMenu()
+	case scTravel:
+		travelMenu()
 	case scSettings:
 		if settingsFrom == scMain {
 			mainMenuArt()
 		}
 		settingsMenu()
 	case scDead:
-		deathMenu()
-	case scCraft:
-		craftMenu()
-	case scWorlds:
-		mainMenuArt()
-		worldsMenu()
-	case scChest:
-		storageMenu()
-	case scShop:
-		shopMenu()
-	case scBook:
-		if bookFrom == scMain {
-			mainMenuArt()
-		}
-		bookMenu()
-	case scMultiplayer:
-		mainMenuArt()
-		multiplayerMenu()
-	}
-	if cur != scMultiplayer {
-		stopFinding()
+		worldLabels()
+		deadMenu()
+	case scAway:
+		awayMenu()
 	}
 	shake *= 0.86
 	drawToast()
-
-	if frame >= autosaveAt {
-		autosaveAt = frame + 60*20
-		saveGame()
-	}
 	checkForUpdate()
 	return nil
 }
 
-// screen shake strength in world px, set by explosions and hits
+func toggleScreen(s screen) {
+	if cur == s {
+		play()
+	} else {
+		openScreen(s)
+	}
+}
+
+// screen shake strength in world px
 var shake float64
 
 func placeCamera() {
 	cam.x = player.x + player.w/2 + peekSX/zoom - logicalW/2/zoom
 	cam.y = player.y + player.h/2 + peekSY/zoom - logicalH/2/zoom
-	if shake > 0.3 && !paused() {
+	if shake > 0.3 {
 		cam.x += (rand.Float64()*2 - 1) * shake
 		cam.y += (rand.Float64()*2 - 1) * shake
 	}
+	clampCamera()
+}
+
+// Behind the main menu: Haven, drifting slowly along
+func menuCamera() {
+	if curIsle == nil {
+		loadIsle("haven")
+		isleID = "haven"
+	}
+	sx, sy := curIsle.SpawnPos()
+	cam.x = sx - logicalW/2/zoom + math.Sin(float64(frame)*0.0015)*500
+	cam.y = sy - logicalH/2/zoom - 30
+	clampCamera()
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
@@ -289,30 +206,15 @@ func (g *Game) Layout(outW, outH int) (int, int) {
 // NewGame sets everything up; shared by the desktop main() and the Android wrapper.
 func NewGame() *Game {
 	loadPrefs()
-	ensureIdentity()
 	ebiten.SetWindowClosingHandled(true)
 	initFonts()
-	initItems()
 	initAudio()
 	setVolumes()
 	applyFOV()
-	// enough loaded width for the widest field of view plus looking around
-	initWorld(2844)
-	loadWorldList()
-	if last := lastWorld(); last != nil && openWorld(*last) {
-		cur = scMain
-		if os.Getenv("REMOTE_RESUME") == "1" || hasArg("--resume") {
-			play()
-			toast("Updated to the newest version")
-		}
-	} else {
-		// a world to show behind the main menu; it isn't saved
-		createWorld(prefs.Seed)
-		world = WorldInfo{}
-		player.maxHP, player.hp = 10, 10
-	}
+	initWorld()
+	loadIsle("haven")
+	isleID = "haven"
 	clearPointers()
-	placeCamera()
 	return &Game{}
 }
 

@@ -29,14 +29,11 @@ type Player struct {
 	blink, nextBlink  int
 	idle              int
 	emptyWarned       bool
-	hp                int // in half-hearts
-	maxHP             int
 	lavaTimer         int
-	invuln            int
-	regen             int
+	invuln            int // frames left flashing after a hit
 }
 
-var player = Player{w: sprW * CELL, h: sprH * CELL, face: 1, energy: 1, nextBlink: 120, hp: 10, maxHP: 10}
+var player = Player{w: sprW * CELL, h: sprH * CELL, face: 1, energy: 1, nextBlink: 120}
 
 var px0, px1, py0, py1 int
 
@@ -52,7 +49,7 @@ func inPlayer(x, y int) bool { return x >= px0 && x <= px1 && y >= py0 && y <= p
 func hits(x, y float64) bool {
 	x0, x1 := int(math.Floor(x/CELL)), int(math.Floor((x+player.w-0.01)/CELL))
 	y0, y1 := int(math.Floor(y/CELL)), int(math.Floor((y+player.h-0.01)/CELL))
-	if x0 < 0 || x1 >= W || y1 >= H {
+	if x0 < 0 || x1 >= W || y1 >= H { // the island's ends are walls
 		return true
 	}
 	for cy := max(0, y0); cy <= y1; cy++ {
@@ -113,28 +110,6 @@ func pushOut() {
 	p.vx, p.vy = 0, 0
 }
 
-func hurtPlayer(dmg, dir int) {
-	p := &player
-	if p.invuln > 0 || p.hp <= 0 {
-		return
-	}
-	dmg = max(1, int(math.Ceil(float64(dmg)*modeDamage[world.Mode]))-armorLevel())
-	p.hp -= dmg
-	popDamage(dmg, p.x+p.w/2, p.y, true)
-	p.invuln = 60
-	shake = math.Max(shake, 5)
-	p.regen = 0
-	if dir == 0 {
-		dir = -p.face
-	}
-	p.vx, p.vy = float64(-dir)*4.5, -4
-	burst(10, (p.x+p.w/2)/CELL, (p.y+p.h/2)/CELL, [3]int{240, 122, 106}, 1.4, 1.4, 22)
-	sfx("hurt")
-	if p.hp <= 0 {
-		die()
-	}
-}
-
 func unstick() {
 	for i := 0; i < H*CELL && hits(player.x, player.y); i++ {
 		player.y--
@@ -181,20 +156,13 @@ func updatePlayer() {
 	if p.invuln > 0 {
 		p.invuln--
 	}
-	// lava burns
+	// lava throws the mote up (the server works out the burns)
 	if cellAt(p.x+p.w/2, p.y+p.h-2) == LAVA || cellAt(p.x+p.w/2, p.y+p.h/2) == LAVA {
 		if p.lavaTimer++; p.lavaTimer%30 == 1 {
-			hurtPlayer(2, 0)
 			p.vy = -6
 		}
 	} else {
 		p.lavaTimer = 0
-	}
-	if p.hp < p.maxHP {
-		if p.regen++; p.regen >= 60*8 { // a half heart every 8 seconds
-			p.hp++
-			p.regen = 0
-		}
 	}
 	wasInWater, wasOnGround := p.inWater, p.onGround
 	p.inWater = cellAt(p.x+p.w/2, p.y+p.h/2) == WATER

@@ -1,0 +1,22 @@
+# Render blueprint for the Remote game server (see server/README.md).
+# On render.com: New > Blueprint, pick this repository, and set the Blueprint path to
+# remote/render.yaml. Mote's own blueprint is the render.yaml at the repository's root.
+services:
+  - type: web
+    name: remote-server
+    runtime: docker
+    plan: free
+    dockerfilePath: ./remote/server/Dockerfile
+    dockerContext: ./remote
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: REMOTE_SECRET # signs the character backups the games keep; must not change
+        generateValue: true
+    buildFilter:
+      paths:
+        - remote/mmo/**
+        - remote/srv/**
+        - remote/server/**
+        - remote/go.mod
+        - remote/go.sum

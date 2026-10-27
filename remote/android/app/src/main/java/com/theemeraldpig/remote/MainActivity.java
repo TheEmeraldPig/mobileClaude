@@ -1,8 +1,6 @@
 package com.theemeraldpig.remote;
 
 import android.app.Activity;
-import android.content.Context;
-import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.view.View;
 
@@ -13,38 +11,19 @@ import go.Seq;
 public class MainActivity extends Activity {
     private MoteView view;
     private Updater updater;
-    private WifiManager.MulticastLock wifiLock;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         // Ebitengine needs the app context to read the screen size and density
         Seq.setContext(getApplicationContext());
-        // Tell the game where to keep its settings and save, before its first frame
+        // Tell the game where to keep its settings, before its first frame
         Mobile.setDataDir(getFilesDir().getAbsolutePath());
         setContentView(R.layout.main);
         view = findViewById(R.id.ebitenview);
         hideSystemBars();
         updater = new Updater(this);
         updater.start();
-        // Many phones drop Wi-Fi broadcasts to save battery unless an app asks for
-        // them; multiplayer finds worlds on the same Wi-Fi through them
-        try {
-            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-            if (wm != null) {
-                wifiLock = wm.createMulticastLock("remote-find-worlds");
-                wifiLock.setReferenceCounted(false);
-                wifiLock.acquire();
-            }
-        } catch (Exception e) {
-            // finding worlds may not work, but joining by address still does
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-        if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
-        super.onDestroy();
     }
 
     @Override

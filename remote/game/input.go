@@ -10,7 +10,8 @@ import (
 
 // Input: keyboard, mouse and touch, turned into game actions.
 // Each pointer (the mouse, or one finger) gets a role when it goes down:
-// the UI, the joystick, or the world (use an item / look around).
+// the UI, the joystick, a hold button (attack, defend), or the world (the mouse
+// attacks there; a finger looks around).
 
 var isTouch = runtime.GOOS == "android" || runtime.GOOS == "ios"
 
@@ -50,11 +51,26 @@ const (
 	roleUI
 	roleStick
 	roleWorld
+	roleHold
 )
 
 type pointerInfo struct {
 	role         pointerRole
 	x, y, sx, sy float64
+	hold         string
+}
+
+// Buttons that act while held (laid out by the HUD each frame)
+var holdRects = map[string]Rect{}
+
+// Whether a hold button is held down by any finger
+func held(name string) bool {
+	for _, p := range pointers {
+		if p.role == roleHold && p.hold == name {
+			return true
+		}
+	}
+	return false
 }
 
 var pointers = map[int]*pointerInfo{}
@@ -157,6 +173,12 @@ func readPointers(menuOpen bool) {
 						break
 					}
 				}
+				for name, h := range holdRects {
+					if h.Has(r.x, r.y) {
+						p.role, p.hold = roleHold, name
+						break
+					}
+				}
 			}
 			switch p.role {
 			case roleUI:
@@ -237,68 +259,18 @@ func releaseStick() {
 	stick = stickState{id: -2}
 }
 
-// ---- World pointer: use the selected item, or look around ----
+// ---- World pointer: the mouse attacks, a finger looks around ----
 
 var (
 	peekID         = -99
-	useID          = -99
 	peekX, peekY   float64 // target, screen px
 	peekSX, peekSY float64 // smoothed
+	mouseAttack    bool
 )
 
-// A quick tap on a station opens it (while a pickaxe held on it mines it)
-var tapObj struct {
-	id     int
-	o      *Obj
-	frame  int
-	sx, sy float64
-}
-
 func startWorldPointer(id int, x, y float64) {
-	// tapping a chest within reach opens it, whatever you are holding
-	aimSX, aimSY = x, y
-	inReach := aimCell()
-	if inReach && aimX >= 0 && aimX < W && aimY >= 0 && aimY < H && grid[aimY*W+aimX] == CHEST {
-		openChest(aimX, aimY)
-		return
-	}
-	if inReach && aimX >= 0 && aimX < W && aimY >= 0 && aimY < H && isDoor(grid[aimY*W+aimX]) &&
-		(selected < 0 || inv[selected] == nil || !isPick(inv[selected].ID)) {
-		toggleDoor(aimX, aimY)
-		return
-	}
-	if t := traderAt(aimX, aimY, true); t != nil && (selected < 0 || inv[selected] == nil || !isPick(inv[selected].ID)) {
-		openShop(t.house.kind)
-		return
-	}
-	tapObj.o = nil
-	if o := objAt(aimX, aimY); o != nil && objInReach(o) {
-		if selected < 0 || inv[selected] == nil || !isPick(inv[selected].ID) {
-			openStation(o.kind)
-			return
-		}
-		tapObj.id, tapObj.o, tapObj.frame, tapObj.sx, tapObj.sy = id, o, frame, x, y
-	}
-	if selected >= 0 && inv[selected] != nil && useID == -99 {
-		useID, useActive, useTick = id, true, 0
-		aimSX, aimSY = x, y
-		if items[inv[selected].ID].once {
-			useOnce()
-		} else if usesShapes(heldBuildKind()) {
-			beginAction()
-			if buildShape != shapeBrush {
-				startShape()
-			}
-		}
-		return
-	}
-	// no pickaxe at all: an empty hand digs, so you can never get stuck
-	if (selected < 0 || inv[selected] == nil) && !hasPickaxe() && useID == -99 {
-		useID, useActive, handMining, useTick = id, true, true, 0
-		if frame-handHintAt > 600 {
-			handHintAt = frame
-			toast("No pickaxe: digging by hand. Craft a wooden pickaxe from 8 wood")
-		}
+	if id == mouseID {
+		mouseAttack = true
 		return
 	}
 	if peekID == -99 {
@@ -307,43 +279,19 @@ func startWorldPointer(id int, x, y float64) {
 	}
 }
 
-var handHintAt = -10000
-
 func moveWorldPointer(id int, x, y float64) {
 	if id == peekID {
 		setPeek(x, y)
 	}
-	if id == useID {
-		aimSX, aimSY = x, y
-		updateShape()
-	}
 }
 
 func endWorldPointer(id int) {
+	if id == mouseID {
+		mouseAttack = false
+	}
 	if id == peekID {
 		peekID, peekX, peekY = -99, 0, 0
 	}
-	if id == useID {
-		finishShape()
-		endAction()
-		useID, useActive, handMining = -99, false, false
-	}
-	if tapObj.o != nil && tapObj.id == id {
-		o := tapObj.o
-		tapObj.o = nil
-		if frame-tapObj.frame < 14 && math.Hypot(aimSX-tapObj.sx, aimSY-tapObj.sy) < 12 && objStillThere(o) {
-			openStation(o.kind)
-		}
-	}
-}
-
-func objStillThere(o *Obj) bool {
-	for _, p := range objs {
-		if p == o {
-			return true
-		}
-	}
-	return false
 }
 
 func setPeek(x, y float64) {
@@ -357,8 +305,6 @@ func clearPointers() {
 	}
 	ptr = uiPointer{}
 	releaseStick()
-	peekID, useID, useActive, peekX, peekY = -99, -99, false, 0, 0
-	handMining = false
-	shapeOn, shapeCells = false, nil
-	tapObj.o = nil
+	peekID, peekX, peekY = -99, 0, 0
+	mouseAttack = false
 }

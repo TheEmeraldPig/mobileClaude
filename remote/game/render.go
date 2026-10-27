@@ -3,6 +3,7 @@ package game
 import (
 	"math"
 
+	"github.com/TheEmeraldPig/mobileClaude/remote/mmo"
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
@@ -99,12 +100,7 @@ func lightAt(x, y int) int {
 	return int(light[ly*lightW+lx]) * lightMax / lightFine
 }
 
-func playerLightLevel() int {
-	if countItem("lantern") > 0 {
-		return 60
-	}
-	return 42
-}
+func playerLightLevel() int { return 42 }
 
 func computeLight(ox, oy, vw, vh int) {
 	const m = lightReach // light from beyond the screen edge can still reach in (any less and lights pop in at the edges)
@@ -241,25 +237,21 @@ func computeLight(ox, oy, vw, vh int) {
 			}
 		}
 	}
-	objLights(func(lx, ly, lvl int) {
-		c, r := lx-lightX0, ly-lightY0
-		if c >= 0 && r >= 0 && c < lightW && r < lightH {
-			seed(r*lightW+c, lvl, srcFurnace)
-		}
-	})
-	entityLights(func(lx, ly, lvl int, src uint8) {
+	pointLight := func(lx, ly, lvl int, src uint8) {
 		c, r := lx-lightX0, ly-lightY0
 		if c >= 0 && r >= 0 && c < lightW && r < lightH {
 			seed(r*lightW+c, lvl, src)
 		}
-	})
-	pcx, pcy := int((player.x+player.w/2)/CELL)-lightX0, int((player.y+player.h/2)/CELL)-lightY0
-	if pcx >= 0 && pcy >= 0 && pcx < lightW && pcy < lightH {
-		src := uint8(srcMote)
-		if countItem("lantern") > 0 {
-			src = srcLantern
+	}
+	entityLights(pointLight)
+	petalLights(pointLight)
+	if cur != scDead {
+		pointLight(int((player.x+player.w/2)/CELL), int((player.y+player.h/2)/CELL), playerLightLevel(), srcMote)
+	}
+	for _, o := range others { // other motes glow too
+		if o.seen > 0 && o.st.Flags&mmo.FlagDead == 0 {
+			pointLight(int((o.x+mmo.MoteW/2)/CELL), int((o.y+mmo.MoteH/2)/CELL), playerLightLevel(), srcMote)
 		}
-		seed(pcy*lightW+pcx, playerLightLevel(), src)
 	}
 	type step struct{ dc, dr, air, solid int }
 	steps := [8]step{{-1, 0, costAir, costSolid}, {1, 0, costAir, costSolid}, {0, -1, costAir, costSolid}, {0, 1, costAir, costSolid},
@@ -569,12 +561,10 @@ func drawWorld(screen *ebiten.Image) {
 			wx := ox + x
 			o := (y*vw + x) * 4
 			var t uint8 = STONE
-			var wl, pt, wpt uint8
 			sh := 0
 			if wx >= 0 && wx < W && wy >= 0 && wy < H {
 				i := wy*W + wx
 				t, sh = grid[i], int(shade[i])
-				wl, pt, wpt = wall[i], paint[i], wpaint[i]
 			} else if wy < 0 {
 				t = EMPTY
 			}
@@ -583,8 +573,6 @@ func drawWorld(screen *ebiten.Image) {
 			case t == EMPTY || t == WATER || t == TORCH || t == GLASS || t == LAVA || t == DOOROPEN:
 				var bg [3]int
 				switch {
-				case wl != 0:
-					bg = wallPixel(wl, wpt, wx, wy, sh)
 				case openSky:
 					bg = skyPixel(x, y, vw, vh, ox+baseChunk*CW, oy)
 					sky[y*vw+x] = t == EMPTY
@@ -594,7 +582,7 @@ func drawWorld(screen *ebiten.Image) {
 					bg = shadeRGB(bg, caveOcclusion(wx, wy))
 				}
 				// grass blades poke up from the grass
-				if t == EMPTY && wl == 0 {
+				if t == EMPTY {
 					if g, ok := grassBlade(wx, wy); ok {
 						bg = g
 						sky[y*vw+x] = false
@@ -603,7 +591,7 @@ func drawWorld(screen *ebiten.Image) {
 				if t == WATER {
 					wc := blockRGB[WATER]
 					wc = [3]int{wc[0] + sh/2, wc[1] + sh/2, wc[2] + sh/2}
-					if openSky && wl == 0 { // under the sky: tint the sky's own colour
+					if openSky { // under the sky: tint the sky's own colour
 						wc = shadeRGB(wc, 0.4+0.6*daylight())
 						sky[y*vw+x] = true
 					}
@@ -612,9 +600,6 @@ func drawWorld(screen *ebiten.Image) {
 						wc = mix(wc, [3]int{200, 230, 255}, 0.35)
 					}
 					bg = mix(bg, wc, 0.78)
-				}
-				if t == DOOROPEN {
-					bg = doorPixel(t, wx, wy, bg, 1)
 				}
 				if t == GLASS {
 					g := blockRGB[GLASS]
@@ -637,20 +622,8 @@ func drawWorld(screen *ebiten.Image) {
 				if isOre(t) { // ores sparkle a little
 					c = shadeRGB(c, 0.9+0.2*float64((sh+10)%3)/2)
 				}
-				if pt != 0 {
-					c = mix(c, paintRGB[pt], 0.7)
-				}
 				c = [3]int{c[0] + sh, c[1] + sh, c[2] + sh}
 				c = blockTexture(c, t, wx, wy)
-				if t == DOOR {
-					set(o, doorPixel(t, wx, wy, c, 1))
-					continue
-				}
-				if len(mineDmg) > 0 && wx >= 0 && wx < W && wy >= 0 && wy < H {
-					if k := crackAt(wy*W + wx); k > 0 && crackPattern(wx+baseChunk*CW, wy) < k {
-						c = shadeRGB(c, 0.45) // cracks spread as the block wears down
-					}
-				}
 				// bevels: a lit top edge, shaded undersides and sides
 				if isSolid(t) {
 					up, up2 := gridAt(wx, wy-1), gridAt(wx, wy-2)
@@ -706,31 +679,18 @@ func drawWorld(screen *ebiten.Image) {
 		pix[o], pix[o+1], pix[o+2] = clamp8(c[0]+s), clamp8(c[1]+s), clamp8(c[2]+s)
 		sky[y*vw+x] = false
 	}
-	drawObjects(lit, ox, oy)
-	drawTraders(lit, put, ox, oy)
-	drawEntities(lit, put, ox, oy)
 	blend := func(x, y int, c [3]int, a float64) { emit(x, y, vw, vh, c, a) }
-	drawHologram(blend, ox, oy)
-	drawStationHologram(blend, ox, oy)
-	drawDoorHologram(blend, ox, oy)
-	drawBuildHologram(blend, ox, oy)
-	drawPeers(put, ox, oy)
-	if netRole != netOff && netMyID > 0 { // guests are drawn in their own colour
-		t := tintFor(netMyID)
-		sb, sl := pcol['B'], pcol['L']
-		pcol['B'], pcol['L'] = t[0], t[1]
-		drawPlayer(put, ox, oy)
-		pcol['B'], pcol['L'] = sb, sl
-	} else {
+	drawEntities(lit, put, blend, ox, oy)
+	drawOthers(put, ox, oy)
+	if cur != scDead && cur != scMain {
 		drawPlayer(put, ox, oy)
 	}
-	drawHeld(put, ox, oy)
+	drawPetals(put, ox, oy)
 	for _, q := range parts {
 		put(int(math.Floor(q.x))-ox, int(math.Floor(q.y))-oy, q.c, 0)
 	}
-	drawEnergy(put, ox, oy)
-	if cur == scPlaying {
-		drawAim(put, ox, oy)
+	if cur != scDead && cur != scMain {
+		drawEnergy(put, ox, oy)
 	}
 	buildLightMap(ox, oy, vw, vh, func(x, y int) bool { return sky[y*vw+x] })
 	worldImg.WritePixels(pix)
@@ -842,30 +802,6 @@ func blockTexture(c [3]int, t uint8, wx, wy int) [3]int {
 		}
 		if leafPocket(gx, wy) {
 			c = shadeRGB(c, 0.78)
-		}
-	}
-	return c
-}
-
-func wallPixel(wl, wpt uint8, wx, wy, sh int) [3]int {
-	c := blockRGB[wl]
-	if wpt != 0 {
-		c = mix(c, paintRGB[wpt], 0.7)
-	}
-	c = shadeRGB([3]int{c[0] + sh/2, c[1] + sh/2, c[2] + sh/2}, 0.5)
-	gx := wx + baseChunk*CW
-	switch wl {
-	case BRICK, STONE, OBSIDIAN: // mortar lines
-		if wy%4 == 0 || (gx+(wy/4)*3)%8 == 0 {
-			c = shadeRGB(c, 0.7)
-		}
-	case PLANK: // boards
-		if wy%5 == 0 {
-			c = shadeRGB(c, 0.72)
-		}
-	case GLASS:
-		if (gx+wy)%6 == 0 {
-			c = mix(c, [3]int{220, 240, 255}, 0.3)
 		}
 	}
 	return c
