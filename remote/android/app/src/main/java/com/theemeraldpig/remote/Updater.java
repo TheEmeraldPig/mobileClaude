@@ -91,7 +91,8 @@ public class Updater {
                 }
                 if (latest > installedBuild() && latest != skipped && apk != null) {
                     final String url = apk;
-                    main.post(() -> offer(latest, url));
+                    final int build = latest;
+                    main.post(() -> offer(build, url));
                 } else {
                     busy = false;
                 }
