@@ -134,7 +134,8 @@ func nameMenu() {
 	y += 52
 	// letters on screen, for phones (and mice)
 	rows := []string{"QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"}
-	kw := math.Min(52, (r.W-36-9*6)/10)
+	// the widest row is the last: half a key of indent per row, 7 letters, Space and <
+	kw := math.Min(52, math.Min((r.W-36-9*6)/10, (r.W-36-8*6)/11))
 	for i, row := range rows {
 		rx := x + float64(i)*kw*0.5
 		for _, ch := range row {

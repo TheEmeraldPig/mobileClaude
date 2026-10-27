@@ -128,7 +128,7 @@ jobs:
             sleep 40
             adb exec-out screencap -p > shot-menu.png
             # tap Play solo (second button on the main menu), then look at the game itself
-            adb shell input swipe 450 140 450 140 600
+            adb shell input swipe 450 104 450 104 600
             sleep 45
             adb exec-out screencap -p > shot-game.png
             sleep 15
