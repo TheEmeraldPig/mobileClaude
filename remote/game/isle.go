@@ -12,7 +12,7 @@ import (
 var (
 	curIsle   *mmo.Isle
 	isleCache = map[string]*mmo.Isle{}
-	skyTop    []int // per column: the first block from the top that stops light (open sky above it)
+	skyTop    []int // per column: where the open sky ends (the first block that stops light, or the ground line if lower)
 )
 
 // Build (or reuse) an island and copy it into the grid the renderer draws
@@ -44,7 +44,7 @@ func loadIsle(id string) {
 		for y < H && !blocksLight(grid[y*W+x]) && grid[y*W+x] != WATER {
 			y++
 		}
-		skyTop[x] = y
+		skyTop[x] = max(y, is.SurfAt(x)) // and arches and overhangs on the ground keep their sky
 	}
 	parts = parts[:0]
 	popups = popups[:0]
