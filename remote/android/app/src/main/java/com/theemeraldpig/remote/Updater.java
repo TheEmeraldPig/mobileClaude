@@ -25,7 +25,7 @@ import java.net.URL;
 
 // Keeps the sideloaded app up to date. Android doesn't let an app replace itself
 // silently (only app stores can), so this does the rest: it checks the GitHub releases
-// when the game starts and every few minutes, downloads a newer Mote.apk in the
+// when the game starts and every few minutes, downloads a newer Remote.apk in the
 // background, and hands it to Android's installer, which asks you to tap Update once.
 public class Updater {
     // Mote shares this repository and owns its "latest" release, so Remote lists the
@@ -123,7 +123,7 @@ public class Updater {
             .show();
     }
 
-    // Android 8+ asks once whether Mote may install updates
+    // Android 8+ asks once whether Remote may install updates
     private boolean canInstall() {
         if (Build.VERSION.SDK_INT >= 26 && !act.getPackageManager().canRequestPackageInstalls()) {
             new AlertDialog.Builder(act)

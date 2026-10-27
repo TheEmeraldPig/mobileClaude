@@ -137,6 +137,8 @@ jobs:
             PID=$(adb shell pidof com.theemeraldpig.remote || true); echo "Remote pid: $PID"
             if [ -n "$PID" ]; then grep " $PID " logcat.txt | tail -150; fi
             grep -E "GoLog|Remote|FATAL|DEBUG  :|libc  " logcat.txt | tail -100 || true
+            # a Java crash: show its stack trace
+            grep -A40 "FATAL EXCEPTION" logcat.txt | head -80 || true
             adb shell dumpsys activity top | grep -iE "ACTIVITY|remote" | head -5 || true
             for f in shot-menu.png shot-later.png shot-game.png; do echo "== $f"; python3 remote/android/tools/shrink_png.py $f 192 || true; done
       - uses: actions/upload-artifact@v4

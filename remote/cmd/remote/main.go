@@ -1,4 +1,4 @@
-// Mote: a falling-sand pixel game with a little levitating creature.
+// Remote: a pixel MMO with a little levitating creature and its petals.
 // Desktop entry point (Windows, Linux, macOS). Build with:
 //
 //	go build -ldflags "-H windowsgui -X github.com/TheEmeraldPig/mobileClaude/remote/game.Version=42" -o Remote.exe ./cmd/remote
