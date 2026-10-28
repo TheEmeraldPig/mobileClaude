@@ -8,7 +8,7 @@ import (
 // The game and the server must build the same islands. These checksums pin each
 // island's terrain: if one changes on purpose, update it here (every player's island
 // changes too).
-var isleSums = map[string]uint32{"haven": 131437615, "meadow": 4071738268, "hollow": 256280075, "ember": 105501581}
+var isleSums = map[string]uint32{"haven": 131437615, "meadow": 1672584056, "quarry": 849878547, "hollow": 4043564861, "ember": 1146150333}
 
 func TestIslesAreStable(t *testing.T) {
 	for _, d := range Isles {
@@ -25,7 +25,7 @@ func TestIslesAreStable(t *testing.T) {
 		t.Logf("%s: %d", d.ID, ha.Sum32())
 		// the spawn point stands on solid ground with room for a mote above
 		x, y := a.SpawnPos()
-		if !a.BoxFree(x, y, MoteW, MoteH) {
+		if !a.BoxFree(x, y, PlayerW, PlayerH) {
 			t.Errorf("%s: no room at the spawn point", d.ID)
 		}
 		if !a.Solid(a.SpawnX, a.SpawnY) {

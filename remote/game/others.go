@@ -22,6 +22,7 @@ type other struct {
 	walk       float64
 	blink      int
 	orbit      float64
+	swing      float64 // < 0: not swinging; 0..1 through a swing
 	emote      int
 	emoteUntil int
 }
@@ -35,7 +36,7 @@ var (
 func otherFor(id int) *other {
 	o := others[id]
 	if o == nil {
-		o = &other{id: id, orbit: mmo.OrbitNormal}
+		o = &other{id: id, orbit: mmo.OrbitNormal, swing: -1}
 		others[id] = o
 	}
 	return o
@@ -141,6 +142,14 @@ func updateRemote() {
 			o.blink = 7
 		}
 		o.orbit += (float64(o.st.Orbit) - o.orbit) * 0.3
+		if o.swing >= 0 {
+			if o.swing += 1.0 / 14; o.swing > 1 {
+				o.swing = -1
+			}
+		}
+		if o.st.Flags&mmo.FlagSwing != 0 && o.swing < 0 {
+			o.swing = 0
+		}
 	}
 	myOrbit += (mmo.OrbitFor(myMode) - myOrbit) * math.Min(1, 10.0/60)
 }
@@ -179,7 +188,7 @@ func petalsOf(cx, cy, orbit float64, load []mmo.PetalID, alive int) []petalDraw 
 }
 
 func myPetals() []petalDraw {
-	if me == nil || cur == scDead {
+	if !mmo.PetalsOn || me == nil || cur == scDead {
 		return nil
 	}
 	return petalsOf(player.x+player.w/2, player.y+player.h/2, myOrbit, me.Load, myAlive)
@@ -188,10 +197,13 @@ func myPetals() []petalDraw {
 func allPetals() []petalDraw {
 	out := myPetals()
 	for _, o := range others {
+		if !mmo.PetalsOn {
+			break
+		}
 		if o.info == nil || o.seen == 0 || o.st.Flags&mmo.FlagDead != 0 {
 			continue
 		}
-		out = append(out, petalsOf(o.x+mmo.MoteW/2, o.y+mmo.MoteH/2, o.orbit, o.info.Load, o.st.Alive)...)
+		out = append(out, petalsOf(o.x+mmo.PlayerW/2, o.y+mmo.PlayerH/2, o.orbit, o.info.Load, o.st.Alive)...)
 	}
 	return out
 }
@@ -256,30 +268,26 @@ func petalLights(seed func(lx, ly, lvl int, src uint8)) {
 // ---- Drawing other motes ----
 
 func drawOthers(put func(x, y int, c [3]int, s int), ox, oy int) {
-	if len(others) == 0 {
-		return
-	}
-	saved, sb, sl := player, pcol['B'], pcol['L']
-	defer func() { player, pcol['B'], pcol['L'] = saved, sb, sl }()
 	for _, o := range others {
 		if o.seen == 0 || o.st.Flags&mmo.FlagDead != 0 {
 			continue
 		}
-		t := tintFor(o.id)
-		pcol['B'], pcol['L'] = t[0], t[1]
-		player.x, player.y = o.x, o.y
-		player.vx, player.vy = float64(o.st.VX)/60, float64(o.st.VY)/60
-		player.face = o.st.Face
-		if player.face == 0 {
-			player.face = 1
+		look := mmo.DefaultLook
+		if o.info != nil {
+			look = o.info.Look
 		}
-		player.lifting, player.onGround = o.st.Flags&mmo.FlagLift != 0, o.st.Flags&mmo.FlagGround != 0
-		player.walk, player.blink, player.invuln, player.squash, player.idle = o.walk, o.blink, 0, 0, 0
-		drawPlayer(put, ox, oy)
+		face := o.st.Face
+		if face == 0 {
+			face = 1
+		}
+		ground, lift := o.st.Flags&mmo.FlagGround != 0, o.st.Flags&mmo.FlagLift != 0
+		ps := pose{face: face, legs: legFrame(ground, lift, float64(o.st.VX)/60, o.walk), blink: o.blink > 0, swing: o.swing, tool: o.st.Tool,
+			aim: float64(o.st.Aim) * math.Pi / 180}
+		drawBody(put, ox, oy, o.x, o.y, look, ps)
 	}
 }
 
-// Name tags, health bars and emotes over the motes, and labels over creatures
+// Name tags, health bars and emotes over the players, and labels over creatures
 func worldLabels() {
 	label := func(x, y float64) (float64, float64) { return (x - cam.x) * zoom, (y - cam.y) * zoom }
 	for _, o := range others {
@@ -287,7 +295,7 @@ func worldLabels() {
 			continue
 		}
 		t := tintFor(o.id)
-		sx, sy := label(o.x+mmo.MoteW/2, o.y-6)
+		sx, sy := label(o.x+mmo.PlayerW/2, o.y-6)
 		name := o.info.Name + "  Lv " + itoa(o.info.Level)
 		hp, mhp := o.st.HP, max(1, o.st.MaxHP)
 		col := color.NRGBA{uint8(t[1][0]), uint8(t[1][1]), uint8(t[1][2]), 255}

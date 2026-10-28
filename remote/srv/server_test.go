@@ -127,8 +127,9 @@ func TestJoinFightAndLoot(t *testing.T) {
 		s.mu.Lock()
 		mx, my = m.x+m.w/2, m.y+m.h/2
 		s.mu.Unlock()
-		// sit on top of the creature: the petals circle 30 px out, so they sweep over it
-		tc.send(mmo.CMsg{T: "in", Epoch: is.Epoch, X: mx - mmo.MoteW/2 + 30, Y: my - mmo.MoteH/2})
+		// stand just left of the creature and swing the sword at it
+		tc.send(mmo.CMsg{T: "in", Epoch: is.Epoch, X: mx - mmo.PlayerW/2 - 24, Y: my - mmo.PlayerH/2})
+		tc.send(mmo.CMsg{T: "swing", Aim: 0.01})
 		select {
 		case msg := <-tc.msgs:
 			if msg != nil && msg.T == "loot" {
@@ -141,7 +142,7 @@ func TestJoinFightAndLoot(t *testing.T) {
 		}
 	}
 	if !got {
-		t.Fatal("petals never killed the creature")
+		t.Fatal("the sword never killed the creature")
 	}
 	ch := tc.want("char")
 	if ch.Char.Kills != 1 || ch.Char.XP <= 0 && ch.Char.Level == 1 {
@@ -187,5 +188,80 @@ func TestAwayGains(t *testing.T) {
 	t.Logf("3h on Greenreach at level 1: %d kills, %d XP, %d coins, %v", a.Kills, a.XP, a.Coins, a.Petals)
 	if mmo.AwayGains(c, mmo.IsleByID("haven"), 3*3600, roll) != nil {
 		t.Error("gains in the safe town")
+	}
+}
+
+// Mining: a block on Stonecrop turns into worn stone and the player gets the resource;
+// Haven can't be mined; mined blocks grow back
+func TestMining(t *testing.T) {
+	s, url, stop := startServer(t, tmpDir(t))
+	defer stop()
+	tc := dial(t, url)
+	tc.send(mmo.CMsg{T: "hello", Ver: mmo.Protocol, Key: "miner-key-0123456789", Name: "Miner"})
+	tc.want("welcome")
+	is := tc.want("isle")
+	// Haven: refused (the game is told the block is still there)
+	s.mu.Lock()
+	hv := s.isles["haven"].isle
+	hx, hy := hv.SpawnX, hv.SpawnY
+	s.mu.Unlock()
+	tc.send(mmo.CMsg{T: "mine", CX: hx, CY: hy})
+	if e := tc.want("edits"); e.Edits[0].T != hv.At(hx, hy) || hv.At(hx, hy) == mmo.WORNSTONE {
+		t.Fatalf("Haven was mined: %+v", e.Edits)
+	}
+	tc.send(mmo.CMsg{T: "travel", Isle: "quarry"})
+	is = tc.want("isle")
+	s.mu.Lock()
+	sim := s.isles["quarry"]
+	q := sim.isle
+	// the first stone below the spawn point
+	x, y := q.SpawnX+4, q.SpawnY
+	for q.At(x, y) != mmo.STONE {
+		y++
+	}
+	s.mu.Unlock()
+	px := float64(x*mmo.Cell) - mmo.PlayerW/2
+	py := float64(y*mmo.Cell) - mmo.PlayerH - 10
+	tc.send(mmo.CMsg{T: "in", Epoch: is.Epoch, X: px, Y: py})
+	time.Sleep(100 * time.Millisecond)
+	tc.send(mmo.CMsg{T: "in", Epoch: is.Epoch, X: px, Y: py})
+	time.Sleep(600 * time.Millisecond)
+	tc.send(mmo.CMsg{T: "mine", CX: x, CY: y})
+	e := tc.want("edits")
+	worn := false
+	for _, ed := range e.Edits {
+		worn = worn || ed.X == x && ed.Y == y && ed.T == mmo.WORNSTONE
+	}
+	if !worn || len(e.Edits) < 5 {
+		t.Fatalf("mining gave %+v", e.Edits)
+	}
+	if ch := tc.want("char"); ch.Char.Items["stone"] != 1 {
+		t.Fatalf("no stone in the bag: %v", ch.Char.Items)
+	}
+	// worn stone can't be mined again
+	time.Sleep(600 * time.Millisecond)
+	tc.send(mmo.CMsg{T: "mine", CX: x, CY: y})
+	if e := tc.want("edits"); e.Edits[0].T != mmo.WORNSTONE {
+		t.Fatalf("worn stone was mined: %+v", e.Edits)
+	}
+	// and it grows back
+	s.mu.Lock()
+	for i := range sim.regrow {
+		sim.regrow[i].at = s.t
+	}
+	s.mu.Unlock()
+	e = tc.want("edits")
+	back := false
+	for _, ed := range e.Edits {
+		back = back || ed.X == x && ed.Y == y && ed.T == mmo.STONE
+	}
+	if !back {
+		t.Fatalf("didn't grow back: %+v", e.Edits)
+	}
+	s.mu.Lock()
+	n := len(sim.edits)
+	s.mu.Unlock()
+	if n != 0 {
+		t.Errorf("%d edits left after growing back", n)
 	}
 }

@@ -29,13 +29,18 @@ const (
 	OBSIDIAN  = 27
 	BEDROCK   = 28
 	SANDSTONE = 32
+	// What mined blocks turn into: they stay put and can't be mined again (until they grow back)
+	WORNSTONE   = 33
+	PACKEDDIRT  = 34
+	DULLCRYSTAL = 35
+	OLDWOOD     = 36 // a mined tree trunk (you can walk through it)
 )
 
 // Solid blocks stop motes and creatures
 func IsSolid(t uint8) bool {
 	switch t {
 	case SAND, STONE, BRICK, CRYSTAL, DIRT, GRASS, PLANK, GLASS, OBSIDIAN, BEDROCK, SANDSTONE,
-		COAL, COPPER, IRON, GOLD:
+		COAL, COPPER, IRON, GOLD, WORNSTONE, PACKEDDIRT, DULLCRYSTAL:
 		return true
 	}
 	return false
@@ -47,8 +52,8 @@ const (
 	GH   = 1600 // island height in cells
 )
 
-// The mote's size in world px (10x13 cells)
+// A player's size in world px (10x18 cells)
 const (
-	MoteW = 20.0
-	MoteH = 26.0
+	PlayerW = 20.0
+	PlayerH = 36.0
 )

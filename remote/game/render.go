@@ -250,7 +250,7 @@ func computeLight(ox, oy, vw, vh int) {
 	}
 	for _, o := range others { // other motes glow too
 		if o.seen > 0 && o.st.Flags&mmo.FlagDead == 0 {
-			pointLight(int((o.x+mmo.MoteW/2)/CELL), int((o.y+mmo.MoteH/2)/CELL), playerLightLevel(), srcMote)
+			pointLight(int((o.x+mmo.PlayerW/2)/CELL), int((o.y+mmo.PlayerH/2)/CELL), playerLightLevel(), srcMote)
 		}
 	}
 	type step struct{ dc, dr, air, solid int }
@@ -686,6 +686,7 @@ func drawWorld(screen *ebiten.Image) {
 		drawPlayer(put, ox, oy)
 	}
 	drawPetals(put, ox, oy)
+	drawMineTarget(put, blend, ox, oy)
 	for _, q := range parts {
 		put(int(math.Floor(q.x))-ox, int(math.Floor(q.y))-oy, q.c, 0)
 	}

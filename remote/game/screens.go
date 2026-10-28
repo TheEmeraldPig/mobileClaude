@@ -60,8 +60,12 @@ func mainMenu() {
 	if name == "" {
 		name = "Pick a name"
 	}
-	if Button(Rect{cx, y, colW, bh}, "Name: "+name, styleSlate, true, icoBag) {
+	half := (colW - 12) / 2
+	if Button(Rect{cx, y, half, bh}, name, styleSlate, true, nil) {
 		openName(false)
+	}
+	if Button(Rect{cx + half + 12, y, half, bh}, "Character", styleSlate, true, nil) {
+		openLook(scMain)
 	}
 	y += bh + 16
 	if Button(Rect{cx, y, colW, bh}, "Settings", styleSlate, true, icoGear) {
@@ -178,7 +182,7 @@ func nameMenu() {
 // ---- Pause ----
 
 func pauseMenu() {
-	r := sheet(760, 400)
+	r := sheet(760, 440)
 	if _, cl := head(r, "MENU", false); cl {
 		play()
 		return
@@ -191,8 +195,13 @@ func pauseMenu() {
 		return
 	}
 	y += bh + gap
-	if Button(Rect{x, y, lw, bh}, "Petals", styleViolet, true, icoBag) {
-		openScreen(scPetals)
+	if Button(Rect{x, y, lw, bh}, "Bag", styleViolet, true, icoBag) {
+		openScreen(scBag)
+		return
+	}
+	y += bh + gap
+	if Button(Rect{x, y, lw, bh}, "Character", styleViolet, true, icoBag) {
+		openLook(scPause)
 		return
 	}
 	y += bh + gap
@@ -221,14 +230,14 @@ func pauseMenu() {
 	b := prefs.Binds
 	if isTouch {
 		Label("TOUCH CONTROLS", kr.X+12, kr.Y+16)
-		rows = [][2]string{{"Move", "Joystick left / right"}, {"Levitate", "Push the joystick up"}, {"Attack", "Hold the sword"},
-			{"Defend", "Hold the shield"}, {"Petals", "Bag button, or tap the petal bar"}, {"Travel", "Map button"},
-			{"Emotes", "Speech button"}, {"Look around", "Touch the world"}}
+		rows = [][2]string{{"Move", "Joystick left / right"}, {"Jump / hover", "Push the joystick up"}, {"Use tool", "Hold the big button"},
+			{"Switch tool", "Small button, or the tool bar"}, {"Dig a spot", "Touch it with the pickaxe"}, {"Bag", "Bag button"},
+			{"Travel", "Map button"}, {"Emotes", "Speech button"}}
 	} else {
 		Label("KEYBOARD AND MOUSE", kr.X+12, kr.Y+16)
-		rows = [][2]string{{"Move", keyLabel(b["left"]) + " / " + keyLabel(b["right"]) + " or arrows"}, {"Levitate", keyLabel(b["lev"]) + ", Up or Space"},
-			{"Attack", "Hold the left mouse button"}, {"Defend", "Hold the right mouse button"}, {"Petals", keyLabel(b["petals"])},
-			{"Travel", keyLabel(b["map"])}, {"Emotes", "1-6"}, {"Menu", "Esc"}, {"Full screen", "F11"}}
+		rows = [][2]string{{"Move", keyLabel(b["left"]) + " / " + keyLabel(b["right"]) + " or arrows"}, {"Jump / hover", keyLabel(b["lev"]) + ", Up or Space"},
+			{"Use tool", "Hold the left mouse button"}, {"Sword / pickaxe", "1 / 2, " + keyLabel(b["swap"]) + " or scroll"}, {"Bag", keyLabel(b["bag"])},
+			{"Travel", keyLabel(b["map"])}, {"Emotes", "3-8"}, {"Menu", "Esc"}, {"Full screen", "F11"}}
 	}
 	ry := kr.Y + 40
 	step := math.Min(26, (kr.H-48)/float64(len(rows)))
@@ -593,5 +602,192 @@ func serverSettings(x, y float64, r Rect) {
 			savePrefs()
 		}
 		wrapText("Type to change the address (for your own server). Default goes back to the official one.", x, y+64, r.W-36, 12, colMuted, text.AlignStart)
+	}
+}
+
+// ---- Bag: resources from mining ----
+
+func bagMenu() {
+	r := sheet(760, 400)
+	if _, cl := head(r, "BAG", false); cl {
+		play()
+		return
+	}
+	if me == nil {
+		return
+	}
+	x, y := r.X+18, r.Y+62
+	Text(fmt.Sprintf("%s  -  level %d  -  %s coins", me.Name, me.Level, mmo.FmtNum(me.Coins)), x, y, 14, colInk, text.AlignStart)
+	if Button(Rect{r.X + r.W - 18 - 150, y - 16, 150, 32}, "Character", styleViolet, true, icoBag) {
+		openLook(scBag)
+		return
+	}
+	y += 30
+	Label("RESOURCES", x, y)
+	y += 16
+	ss := 64.0
+	cols := int((r.W - 36 + 10) / (ss + 10))
+	n := 0
+	for _, res := range mmo.Resources {
+		cnt := me.Items[res.ID]
+		if cnt <= 0 {
+			continue
+		}
+		cr := Rect{x + float64(n%cols)*(ss+10), y + float64(n/cols)*(ss+22), ss, ss}
+		res := res
+		ops = append(ops, func(dst *ebiten.Image) {
+			bevel(dst, cr, colPanelLo, color.NRGBA{10, 8, 23, 255}, colPanelHi, false)
+			resourceIcon(dst, cr.X+cr.W/2, cr.Y+cr.H/2-4, cr.W*0.45, res.Col)
+			drawText(dst, mmo.FmtNum(int64(cnt)), cr.X+cr.W-6, cr.Y+10, textOpt{size: 12, align: text.AlignEnd, shadow: true})
+			drawText(dst, res.Name, cr.X+cr.W/2, cr.Y+cr.H+9, textOpt{size: 11, align: text.AlignCenter, col: colMuted})
+		})
+		n++
+	}
+	if n == 0 {
+		wrapText("Nothing yet. Mining islands like Stonecrop can be mined with the pickaxe: each dig gives you a resource and leaves worn rock behind, which grows back later.",
+			x, y+14, r.W-36, 13, colMuted, text.AlignStart)
+	}
+}
+
+// A lump of a resource: a rough round nugget with a highlight
+func resourceIcon(dst *ebiten.Image, cx, cy, size float64, c [3]int) {
+	rows := []string{"..oooo..", ".oLBBBo.", "oLBBBBSo", "oBBBBBSo", "oBBBBSSo", ".oBSSSo.", "..oooo.."}
+	p := size / 8
+	for y, row := range rows {
+		for x := 0; x < len(row); x++ {
+			var k [3]int
+			switch row[x] {
+			case 'o':
+				k = outlineRGB
+			case 'B':
+				k = c
+			case 'L':
+				k = mix(c, [3]int{255, 255, 255}, 0.5)
+			case 'S':
+				k = shadeRGB(c, 0.7)
+			default:
+				continue
+			}
+			fill(dst, cx-size/2+float64(x)*p, cy-size/2+float64(y)*p, p, p, color.RGBA{uint8(k[0]), uint8(k[1]), uint8(k[2]), 255})
+		}
+	}
+}
+
+// ---- Character: how you look ----
+
+var lookFrom = scMain
+
+func openLook(from screen) {
+	lookFrom = from
+	openScreen(scLook)
+}
+
+func closeLook() {
+	savePrefs()
+	if netState == netOnline {
+		send(mmo.CMsg{T: "look", Look: prefs.Look})
+	}
+	switch lookFrom {
+	case scMain:
+		openScreen(scMain)
+	case scBag:
+		openScreen(scBag)
+	default:
+		play()
+	}
+}
+
+// Draw a character big, for menus: (cx, top) is the middle of its head's top
+func drawCharacterArt(dst *ebiten.Image, cx, top, scale float64, l mmo.Look, p pose) {
+	for _, q := range bodyPixels(l, p) {
+		x := q.x
+		if p.face < 0 {
+			x = sprW - 1 - q.x
+		}
+		fill(dst, cx+(float64(x)-sprW/2)*scale, top+float64(q.y)*scale, scale, scale, color.RGBA{uint8(q.c[0]), uint8(q.c[1]), uint8(q.c[2]), 255})
+	}
+}
+
+func lookMenu() {
+	r := sheet(820, 440)
+	if back, cl := head(r, "CHARACTER", true); back || cl {
+		closeLook()
+		return
+	}
+	l := prefs.Look
+	// the preview walks on the spot
+	compact := (r.H-134)/7 < 30 // short screens: two columns of options
+	pw := math.Min(260, r.W*0.32)
+	if compact {
+		pw = r.W * 0.22
+	}
+	pr := Rect{r.X + 18, r.Y + 60, pw, r.H - 78}
+	Inset(pr, colPanelLo)
+	legs := []string{"stand", "a", "stand", "b"}[(frame/12)%4]
+	if (frame/240)%2 == 0 {
+		legs = "stand"
+	}
+	scale := math.Floor(math.Min(pr.W/14, (pr.H-20)/(sprH+bodyTop+2)))
+	look := *l
+	face := 1
+	if (frame/480)%2 == 1 {
+		face = -1
+	}
+	ops = append(ops, func(dst *ebiten.Image) {
+		drawCharacterArt(dst, pr.X+pr.W/2, pr.Y+(pr.H-(sprH-bodyTop)*scale)/2, scale, look, pose{face: face, legs: legs, swing: -1, blink: frame%200 < 7})
+	})
+	// the options
+	type opt struct {
+		name  string
+		v     *int
+		n     int
+		label func(int) string
+	}
+	num := func(i int) string { return fmt.Sprint(i + 1) }
+	opts := []opt{
+		{"SKIN", &l.Skin, len(mmo.SkinTones), num},
+		{"EYES", &l.Eyes, len(mmo.EyeColours), num},
+		{"FEATURE", &l.Feature, len(mmo.Features), func(i int) string { return mmo.Features[i] }},
+		{"HAIR", &l.Hair, len(mmo.HairStyles), func(i int) string { return mmo.HairStyles[i] }},
+		{"HAIR COLOUR", &l.HairCol, len(mmo.HairColours), num},
+		{"SHIRT", &l.Shirt, len(mmo.ClothColours), num},
+		{"TROUSERS", &l.Pants, len(mmo.ClothColours), num},
+	}
+	x := pr.X + pr.W + 24
+	w := r.X + r.W - 18 - x
+	cols, perCol := 1, len(opts)
+	if compact {
+		cols, perCol = 2, (len(opts)+1)/2
+	}
+	cw := (w - 16*float64(cols-1)) / float64(cols)
+	rh := math.Min(40, (r.H-78-56)/float64(perCol))
+	for i, o := range opts {
+		ox := x + float64(i/perCol)*(cw+16)
+		y := r.Y + 62 + float64(i%perCol)*rh
+		bh, bw, vw := rh-8, 36.0, 138.0
+		if compact { // the name above, the arrows below it
+			Label(o.name, ox, y+4)
+			y += 12
+			bh, bw, vw = rh-16, 34, cw-68
+		} else {
+			Label(o.name, ox, y+rh/2-2)
+		}
+		bx := ox + cw - (2*bw + vw)
+		if Button(Rect{bx, y, bw, bh}, "<", styleSlate, true, nil) {
+			*o.v = (*o.v - 1 + o.n) % o.n
+		}
+		Text(o.label(*o.v), bx+bw+vw/2, y+bh/2, 13, colInk, text.AlignCenter)
+		if Button(Rect{bx + bw + vw, y, bw, bh}, ">", styleSlate, true, nil) {
+			*o.v = (*o.v + 1) % o.n
+		}
+	}
+	bw := (w - 12) / 2
+	if Button(Rect{x, r.Y + r.H - 56, bw, 42}, "Random", styleSlate, true, icoWorld) {
+		for _, o := range opts {
+			*o.v = (*o.v + 1 + int(uint32(frame*2654435761+len(o.name)*40503)%uint32(o.n))) % o.n
+		}
+	}
+	if Button(Rect{x + bw + 12, r.Y + r.H - 56, bw, 42}, "Done", styleGold, true, icoPlay) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
+		closeLook()
 	}
 }

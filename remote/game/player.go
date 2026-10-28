@@ -4,14 +4,16 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+
+	"github.com/TheEmeraldPig/mobileClaude/remote/mmo"
 )
 
-// The mote: a little one-eyed levitating creature drawn with world pixels.
+// Your character: walking, jumping, and a short alien hover (hold jump in the air).
+// It's drawn in body.go.
 
 const (
-	sprW        = 10
-	sprH        = 13
-	levSeconds  = 5.0
+	jumpSpeed   = 6.2 // px per frame: a jump clears a bit more than the character's height
+	levSeconds  = 2.5 // a full hover bar lasts this long
 	speed       = 2.5
 	refillGnd   = 1.0 / 120 // full in ~2s on the ground
 	refillAir   = 1.0 / 900 // full in ~15s while airborne
@@ -24,7 +26,8 @@ type Player struct {
 	onGround, inWater bool
 	face              int
 	energy            float64
-	lifting           bool
+	lifting           bool // hovering
+	jumpHeld          bool
 	walk, squash      float64
 	blink, nextBlink  int
 	idle              int
@@ -183,19 +186,31 @@ func updatePlayer() {
 	}
 	p.vx += (dir*sp - p.vx) * 0.35
 
-	// Levitation: a full bar lasts levSeconds; refills fast on the ground and slowly in the air
+	// Jumping, and hovering: holding jump on the way down slows the fall to a gentle
+	// glide (and a slight rise) while the hover bar lasts
 	wantLift := input.lev || stick.up
-	p.lifting = wantLift && p.energy > 0
+	if wantLift && !p.jumpHeld && (p.onGround || p.inWater) {
+		p.vy = -jumpSpeed
+		if p.inWater {
+			p.vy = -jumpSpeed * 0.6
+		}
+		p.jumpHeld = true
+		sfx("step")
+	}
+	if !wantLift {
+		p.jumpHeld = false
+	}
+	p.lifting = wantLift && !p.onGround && p.vy > -1.5 && p.energy > 0
 	if p.lifting {
 		p.energy = math.Max(0, p.energy-1/(levSeconds*60))
-		p.vy += (-2.2 - p.vy) * 0.15
+		p.vy += (-0.9 - p.vy) * 0.12
 		p.emptyWarned = false
 		if rand.Float64() < 0.6 {
 			c := glowRGB
 			if rand.Float64() < 0.5 {
 				c = tipRGB
 			}
-			burst(1, p.x/CELL+2+rand.Float64()*6, (p.y+p.h)/CELL, c, 0.4, -0.3, 22)
+			burst(1, p.x/CELL+3+rand.Float64()*4, (p.y+p.h)/CELL, c, 0.4, -0.3, 22)
 		}
 	} else {
 		if p.inWater {
@@ -210,7 +225,7 @@ func updatePlayer() {
 		} else {
 			p.energy = math.Min(1, p.energy+refillAir)
 		}
-		if wantLift && !p.emptyWarned {
+		if wantLift && !p.onGround && p.vy > 0 && p.energy == 0 && !p.emptyWarned {
 			sfx("empty")
 			p.emptyWarned = true
 		}
@@ -308,145 +323,60 @@ func updatePlayer() {
 	updatePlayerCells()
 }
 
-// ---- Sprite ----
-
-// Facing right. O outline, B body, L highlight, A antenna, T antenna tip. The eye is added per frame.
-var moteBody = []string{
-	"....T.....",
-	"....A.....",
-	"..OOOOOO..",
-	".OBBBBBBO.",
-	"OBLLBBBBBO",
-	"OBLBBBBBBO",
-	"OBBBBBBBBO",
-	"OBBBBBBBBO",
-	"OBBBBBBBBO",
-	"OBBBBBBBBO",
-	".OBBBBBBO.",
-	"..OOOOOO..",
-}
-
-var moteFeet = map[string]string{"stand": "..OO..OO..", "a": ".OO....OO.", "b": "...OOOO...", "tuck": ".........."}
+// ---- Drawing ----
 
 var (
 	glowRGB = [3]int{201, 167, 255}
 	tipRGB  = [3]int{255, 222, 120}
-	pcol    = map[byte][3]int{'O': {34, 28, 64}, 'B': {124, 98, 255}, 'L': {196, 180, 255}, 'A': {34, 28, 64},
-		'W': {246, 246, 252}, 'E': {18, 16, 30}, 'T': tipRGB}
-	pShade = func() []int {
-		s := make([]int, sprW*sprH)
-		for i := range s {
-			s[i] = rand.Intn(12) - 6
-		}
-		return s
-	}()
 )
 
-func playerFrame(blink, lookUp bool, feet string, sway int) [][]byte {
-	rows := make([][]byte, 0, sprH)
-	for _, r := range moteBody {
-		rows = append(rows, []byte(r))
+// The look your character has (from the server once online, else from Settings)
+func myLook() mmo.Look {
+	if me != nil {
+		return me.Look
 	}
-	if sway != 0 {
-		rows[0][4] = '.'
-		rows[0][4+sway] = 'T'
+	return *prefs.Look
+}
+
+func legFrame(onGround, lifting bool, vx, walk float64) string {
+	switch {
+	case !onGround || lifting:
+		return "air"
+	case math.Abs(vx) > 0.3:
+		if int(walk)%2 == 1 {
+			return "a"
+		}
+		return "b"
 	}
-	if blink {
-		for x := 5; x <= 7; x++ {
-			rows[6][x] = 'O'
-		}
-	} else {
-		for y := 5; y <= 7; y++ {
-			for x := 5; x <= 7; x++ {
-				rows[y][x] = 'W'
-			}
-		}
-		py := 6
-		if lookUp {
-			py = 5
-		}
-		for y := py; y <= py+1; y++ {
-			for x := 6; x <= 7; x++ {
-				rows[y][x] = 'E'
-			}
-		}
-	}
-	return append(rows, []byte(moteFeet[feet]))
+	return "stand"
 }
 
 func drawPlayer(put func(x, y int, c [3]int, s int), ox, oy int) {
 	p := &player
-	stretch := 0.0
-	if !p.onGround && !p.lifting && p.vy > 3 {
-		stretch = math.Min(0.2, (p.vy-3)*0.04)
-	}
-	breathe := 0
-	if p.onGround && p.idle > 20 && frame%90 < 25 {
-		breathe = 1
-	}
-	tw := max(6, int(math.Round(sprW*(1+p.squash*0.7-stretch*0.5))))
-	th := max(8, int(math.Round(sprH*(1-p.squash+stretch)))-breathe)
-	bob := 0
-	if p.lifting {
-		bob = int(math.Round(math.Sin(float64(frame) * 0.2)))
-	}
-	bx := int(math.Round(p.x/CELL)) - ox + (sprW-tw)/2
-	by := int(math.Round(p.y/CELL)) - oy + (sprH - th) + bob
-	sway := 0
-	if math.Abs(p.vx) > 0.5 {
-		sway = -1
-	} else if p.idle > 60 && (frame>>4)%4 == 0 {
-		sway = 1
-	}
-	feet := "stand"
-	if p.lifting || (!p.onGround && !p.inWater) {
-		feet = "tuck"
-	} else if math.Abs(p.vx) > 0.3 {
-		if int(p.walk)%2 == 1 {
-			feet = "a"
-		} else {
-			feet = "b"
-		}
-	}
 	if p.invuln > 0 && (p.invuln/4)%2 == 0 {
 		return
 	}
-	rows := playerFrame(p.blink > 0, p.lifting, feet, sway)
-	tipPulse := int(math.Round(math.Sin(float64(frame)*0.08)*20)) - 10
-	if p.lifting {
-		tipPulse = 30
+	ps := pose{face: p.face, legs: legFrame(p.onGround, p.lifting, p.vx, p.walk), blink: p.blink > 0, swing: -1, tool: myTool}
+	if useSwing >= 0 {
+		ps.swing, ps.aim = useSwing, useAim
 	}
-	for ty := 0; ty < th; ty++ {
-		sy := min(sprH-1, int((float64(ty)+0.5)*sprH/float64(th)))
-		for tx := 0; tx < tw; tx++ {
-			sxr := min(sprW-1, int((float64(tx)+0.5)*sprW/float64(tw)))
-			sx := sxr
-			if p.face < 0 {
-				sx = sprW - 1 - sxr
-			}
-			ch := rows[sy][sx]
-			if ch == '.' {
-				continue
-			}
-			s := pShade[sy*sprW+sx]
-			if ch == 'T' {
-				s = tipPulse
-			} else if ch == 'W' || ch == 'E' {
-				s = 0
-			}
-			put(bx+tx, by+ty, pcol[ch], s)
-		}
+	if p.onGround && p.idle > 20 && frame%90 < 25 {
+		ps.bob = 1 // breathing
 	}
+	drawBody(put, ox, oy, p.x, p.y, myLook(), ps)
 }
 
-// Small levitation bar drawn in world pixels just under the mote
+// The small hover bar under the character (only while it isn't full)
 func drawEnergy(put func(x, y int, c [3]int, s int), ox, oy int) {
 	p := &player
+	if p.energy >= 1 {
+		return
+	}
 	const w = 12
 	x0 := int(math.Round(p.x/CELL)) - ox + (sprW-w)/2
 	y0 := int(math.Round(p.y/CELL)) - oy + sprH + 2
 	fill := int(math.Round(p.energy * (w - 2)))
-	col := pcol['B']
+	col := glowRGB
 	if p.energy < 0.2 {
 		col = [3]int{240, 122, 106}
 	}
@@ -458,7 +388,7 @@ func drawEnergy(put func(x, y int, c [3]int, s int), ox, oy int) {
 			}
 			c := [3]int{19, 16, 39}
 			if edge {
-				c = pcol['O']
+				c = outlineRGB
 			} else if x-1 < fill {
 				c = col
 			}

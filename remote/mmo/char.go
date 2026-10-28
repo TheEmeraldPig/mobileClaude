@@ -16,8 +16,10 @@ type Char struct {
 	Level int             `json:"lvl"`
 	XP    int64           `json:"xp"` // towards the next level
 	Coins int64           `json:"coins"`
-	Inv   map[PetalID]int `json:"inv"`  // petals in the bag (not counting equipped ones)
-	Load  []PetalID       `json:"load"` // equipped petal in each slot ("" = empty)
+	Look  Look            `json:"look"`
+	Items map[string]int  `json:"items"` // resources from mining
+	Inv   map[PetalID]int `json:"inv"`   // petals in the bag (kept for when petals come back)
+	Load  []PetalID       `json:"load"`  // equipped petal in each slot ("" = empty)
 	Isle  string          `json:"isle"`
 	Kills int64           `json:"kills"`
 	Seen  int64           `json:"seen"` // unix time last online
@@ -25,7 +27,7 @@ type Char struct {
 }
 
 func NewChar(id, name string) *Char {
-	c := &Char{ID: id, Name: name, Level: 1, Inv: map[PetalID]int{}, Isle: "haven"}
+	c := &Char{ID: id, Name: name, Level: 1, Inv: map[PetalID]int{}, Items: map[string]int{}, Isle: "haven", Look: DefaultLook}
 	for i := 0; i < SlotsAt(1); i++ {
 		c.Load = append(c.Load, MakePetal("spark", 0))
 	}
@@ -41,6 +43,15 @@ func (c *Char) Normalize() {
 	if c.Inv == nil {
 		c.Inv = map[PetalID]int{}
 	}
+	if c.Items == nil {
+		c.Items = map[string]int{}
+	}
+	for id, n := range c.Items {
+		if n <= 0 || ResourceByID(id) == nil {
+			delete(c.Items, id)
+		}
+	}
+	c.Look.Valid()
 	for id, n := range c.Inv {
 		if n <= 0 || !id.Valid() {
 			delete(c.Inv, id)
@@ -236,7 +247,7 @@ func AwayGains(c *Char, d *IsleDef, secs int64, roll func() float64) *Away {
 	}
 	hp, xp, coins = hp/wsum, xp/wsum, coins/wsum
 	// fighting idle is slower than playing: at best one creature every 20 seconds
-	perSec := math.Min(1.0/20, LoadoutPower(c.Load)/hp/30)
+	perSec := math.Min(1.0/20, FightPower(c)/hp/30)
 	if c.Level < d.Level {
 		perSec *= math.Max(0.1, 1-0.15*float64(d.Level-c.Level))
 	}
@@ -253,7 +264,7 @@ func AwayGains(c *Char, d *IsleDef, secs int64, roll func() float64) *Away {
 			top = r
 		}
 	}
-	for i := int64(0); i < min(kills/8, 400); i++ {
+	for i := int64(0); PetalsOn && i < min(kills/8, 400); i++ {
 		mc := pickMob(d, roll())
 		m := MobByID(mc)
 		kind := m.Drops[int(roll()*float64(len(m.Drops)))%len(m.Drops)]

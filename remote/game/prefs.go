@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"github.com/TheEmeraldPig/mobileClaude/remote/mmo"
 )
 
 // Settings, stored as JSON in the user's config folder (on Android, the app's files
@@ -29,10 +31,11 @@ type Prefs struct {
 	Key      string            `json:"key"`     // this device's secret sign-in key (one account per device for now)
 	Server   string            `json:"server"`  // game server, if not the built-in one
 	Backups  map[string]string `json:"backups"` // signed character backups, by server
+	Look     *mmo.Look         `json:"look"`    // how your character looks (sent to the server)
 }
 
 var prefs = Prefs{FOV: 3, SfxVol: 4, MusicVol: 3, StickX: 0.12, StickY: 0.62, BtnSide: "right", Full: true, UISize: 1, Tips: true,
-	Binds: map[string]string{"left": "A", "right": "D", "lev": "W", "petals": "E", "map": "M"}}
+	Binds: map[string]string{"left": "A", "right": "D", "lev": "W", "bag": "E", "map": "M", "swap": "Q"}}
 
 // DataDir can be set before the game starts (the Android wrapper does this).
 var DataDir string
@@ -66,6 +69,11 @@ func loadPrefs() {
 	prefs.SfxVol = max(0, min(5, prefs.SfxVol))
 	prefs.UISize = max(0, min(3, prefs.UISize))
 	prefs.MusicVol = max(0, min(5, prefs.MusicVol))
+	if prefs.Look == nil {
+		l := mmo.DefaultLook
+		prefs.Look = &l
+	}
+	prefs.Look.Valid()
 	if prefs.Backups == nil {
 		prefs.Backups = map[string]string{}
 	}

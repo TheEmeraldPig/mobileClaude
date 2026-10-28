@@ -20,6 +20,7 @@ const (
 	BiomeMeadow
 	BiomeHollow
 	BiomeEmber
+	BiomeQuarry
 )
 
 type IsleDef struct {
@@ -36,11 +37,14 @@ type IsleDef struct {
 	CavernTop       int     // how far below the ground caverns start
 	CaveTop         int     // how far below the ground tunnels may reach (a few still break through)
 	Crystals        float64 // chance of a crystal on a cave wall spot
+	Ores            float64 // share of stone regions with an ore clump (0 = the usual 0.3)
 	Trees           float64 // share of tree spots that get a tree
 	Mobs            []MobChance
 	MaxMobs         int
 	Rarity          [NRarity]float64 // weights for a creature's rarity
 	Boss            string           // a boss creature that comes back every few minutes
+	Mine            string           // mining rules (MineRules); "" = can't be mined
+	Regrow          float64          // seconds before a mined block grows back
 	MapX, MapY      float64          // where it sits on the travel map (0-1)
 }
 
@@ -58,6 +62,11 @@ var Isles = []*IsleDef{
 		Caves: 26, Cavern: 0.66, CavernTop: 40, CaveTop: 22, Crystals: 0.15, Trees: 0.7,
 		Mobs:    []MobChance{{"skitter", 40}, {"gloom", 35}, {"bat", 25}},
 		MaxMobs: 70, Rarity: [NRarity]float64{70, 25, 5}, MapX: 0.22, MapY: 0.35},
+	{ID: "quarry", Name: "Stonecrop", Blurb: "A rocky island you can mine: stone, ores, crystals and wood. Mined blocks grow back after 10 minutes.",
+		Seed: 7005, Level: 1, Biome: BiomeQuarry, Ground: 300, Water: 360, Hills: 90, Ocean: 200,
+		Caves: 40, Cavern: 0.62, CavernTop: 25, CaveTop: 12, Crystals: 0.3, Trees: 0.5, Ores: 0.6,
+		Mobs:    []MobChance{{"skitter", 70}, {"bat", 30}},
+		MaxMobs: 25, Rarity: [NRarity]float64{80, 20}, Mine: "quarry", Regrow: 600, MapX: 0.4, MapY: 0.2},
 	{ID: "hollow", Name: "Glimmer Hollow", Blurb: "Dark crystal caves. Bring light.",
 		Seed: 7003, Level: 8, Biome: BiomeHollow, Ground: 300, Water: 350, Hills: 70, Ocean: 200,
 		Caves: 60, Cavern: 0.56, CavernTop: 10, Crystals: 0.55, Trees: 0.25,
@@ -122,7 +131,7 @@ func (is *Isle) BoxFree(x, y, w, h float64) bool {
 
 // SpawnPos is where a mote appears, in world px (its top-left corner)
 func (is *Isle) SpawnPos() (float64, float64) {
-	return float64(is.SpawnX*Cell) - MoteW/2, float64(is.SpawnY*Cell) - MoteH - 2
+	return float64(is.SpawnX*Cell) - PlayerW/2, float64(is.SpawnY*Cell) - PlayerH - 2
 }
 
 // BuildIsle generates an island from its definition (about a quarter of a second)
@@ -235,7 +244,7 @@ func (g gen) caves(is *Isle) {
 		y := float64(is.Surf[int(x)]) + 6 + r()*260
 		a := r() * math.Pi * 2
 		length := 140 + r()*260
-		base := 5 + r()*4
+		base := 8 + r()*4
 		top := d.CaveTop
 		if k%6 == 0 {
 			top = 0 // an entrance from the surface
@@ -305,7 +314,11 @@ func (g gen) ores(is *Isle) {
 	kinds := []uint8{COAL, COPPER, IRON, GOLD}
 	for rx := 0; rx <= GW/region; rx++ {
 		for ry := 0; ry <= GH/region; ry++ {
-			if g.hash01(rx, ry, 41) > 0.3 {
+			share := 0.3
+			if is.Def.Ores > 0 {
+				share = is.Def.Ores
+			}
+			if g.hash01(rx, ry, 41) > share {
 				continue
 			}
 			cx := float64(rx*region) + 2 + g.hash01(rx, ry, 42)*(region-4)

@@ -4,6 +4,8 @@ import (
 	"math"
 	"runtime"
 
+	"github.com/TheEmeraldPig/mobileClaude/remote/mmo"
+
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
@@ -266,11 +268,17 @@ var (
 	peekX, peekY   float64 // target, screen px
 	peekSX, peekSY float64 // smoothed
 	mouseAttack    bool
+	touchAimID     int
 )
 
 func startWorldPointer(id int, x, y float64) {
 	if id == mouseID {
 		mouseAttack = true
+		return
+	}
+	// a finger on the world with the pickaxe in hand digs there
+	if myTool == mmo.ToolPickaxe && cur == scPlaying && !touchAimOn {
+		touchAimOn, touchAimX, touchAimY, touchAimID = true, x, y, id
 		return
 	}
 	if peekID == -99 {
@@ -280,12 +288,18 @@ func startWorldPointer(id int, x, y float64) {
 }
 
 func moveWorldPointer(id int, x, y float64) {
+	if touchAimOn && id == touchAimID {
+		touchAimX, touchAimY = x, y
+	}
 	if id == peekID {
 		setPeek(x, y)
 	}
 }
 
 func endWorldPointer(id int) {
+	if touchAimOn && id == touchAimID {
+		touchAimOn = false
+	}
 	if id == mouseID {
 		mouseAttack = false
 	}
@@ -306,5 +320,5 @@ func clearPointers() {
 	ptr = uiPointer{}
 	releaseStick()
 	peekID, peekX, peekY = -99, 0, 0
-	mouseAttack = false
+	mouseAttack, touchAimOn = false, false
 }

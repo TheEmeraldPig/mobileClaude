@@ -243,7 +243,7 @@ func netUpdate() {
 			fl |= mmo.FlagGround
 		}
 		send(mmo.CMsg{T: "in", Epoch: epoch, X: player.x, Y: player.y, VX: player.vx * 60, VY: player.vy * 60,
-			Face: player.face, Mode: myMode, Flags: fl})
+			Face: player.face, Mode: myMode, Flags: fl, Tool: myTool})
 	}
 }
 
@@ -251,7 +251,7 @@ func handle(m *mmo.SMsg) {
 	switch m.T {
 	case "open":
 		netStatus = "Signing in..."
-		send(mmo.CMsg{T: "hello", Ver: mmo.Protocol, Key: prefs.Key, Name: prefs.Name, Backup: prefs.Backups[netURL]})
+		send(mmo.CMsg{T: "hello", Ver: mmo.Protocol, Key: prefs.Key, Name: prefs.Name, Backup: prefs.Backups[netURL], Look: prefs.Look})
 	case "fail":
 		// a connection that was working dropped (a phone went to sleep, the Wi-Fi blinked):
 		// try once more straight away
@@ -272,6 +272,8 @@ func handle(m *mmo.SMsg) {
 		netStatus = ""
 		myID, me, awayNews = m.ID, m.Char, m.Away
 		prefs.Name = me.Name
+		l := me.Look
+		prefs.Look = &l
 		keepBackup(m.Backup)
 		srvT, srvTFrame = m.Time, frame
 	case "backup":
@@ -342,6 +344,8 @@ func handle(m *mmo.SMsg) {
 		sfx("levelup")
 	case "msg":
 		toast(m.Text)
+	case "edits":
+		applyEdits(m.Edits)
 	}
 }
 

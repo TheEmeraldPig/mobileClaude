@@ -31,6 +31,8 @@ var (
 	shotPath                             string
 	scriptRight, scriptLev, scriptAttack bool
 	scriptLeft                           bool
+	scriptAimOn                          bool
+	scriptAimDX, scriptAimDY             float64
 )
 
 func init() {
@@ -93,6 +95,28 @@ func runScript() {
 			sendEmote(n)
 		case "petals":
 			openScreen(scPetals)
+		case "bag":
+			openScreen(scBag)
+		case "look": // the character screen; look=SKIN:EYES:FEATURE:HAIR:HAIRCOL:SHIRT:PANTS sets it
+			if arg != "" {
+				var v [7]int
+				fmt.Sscanf(strings.ReplaceAll(arg, ":", " "), "%d %d %d %d %d %d %d", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6])
+				prefs.Look = &mmo.Look{Skin: v[0], Eyes: v[1], Feature: v[2], Hair: v[3], HairCol: v[4], Shirt: v[5], Pants: v[6]}
+				prefs.Look.Valid()
+				if netState == netOnline {
+					send(mmo.CMsg{T: "look", Look: prefs.Look})
+				}
+			} else {
+				openLook(scMain)
+			}
+		case "tool":
+			n, _ := strconv.Atoi(arg)
+			selectTool(n)
+		case "aimat": // aimat=DX:DY aims the mouse at a point relative to the character's centre (world px)
+			a, b, _ := strings.Cut(arg, ":")
+			dx, _ := strconv.ParseFloat(a, 64)
+			dy, _ := strconv.ParseFloat(b, 64)
+			scriptAimOn, scriptAimDX, scriptAimDY = true, dx, dy
 		case "map":
 			openScreen(scTravel)
 		case "pause":
@@ -124,6 +148,9 @@ func runScript() {
 			}
 			fmt.Printf("frame %d net=%d isle=%s hp=%.0f/%.0f lvl=%d xp=%d coins=%d kills=%d mobs=%d others=%d player=(%.0f,%.0f) status=%q\n",
 				frame, netState, isleID, myHP, myMaxHP, lvl, xp, coins, kills, len(ents), len(others), player.x, player.y, netStatus)
+			if me != nil {
+				fmt.Printf("  items %v\n", me.Items)
+			}
 			for _, o := range others {
 				name := "?"
 				if o.info != nil {

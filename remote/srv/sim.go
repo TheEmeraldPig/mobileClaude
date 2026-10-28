@@ -18,6 +18,8 @@ type IsleSim struct {
 	spawnT  float64
 	bossT   float64
 	idle    float64
+	edits   map[int]uint8 // mined cells (cell index -> block now)
+	regrow  []regrow      // in the order they grow back
 }
 
 type Mob struct {
@@ -57,11 +59,14 @@ type petal struct {
 }
 
 func newIsleSim(d *mmo.IsleDef) *IsleSim {
-	return &IsleSim{def: d, isle: mmo.BuildIsle(d), players: map[int]*Client{}, bossT: 90}
+	return &IsleSim{def: d, isle: mmo.BuildIsle(d), players: map[int]*Client{}, bossT: 90, edits: map[int]uint8{}}
 }
 
 func (is *IsleSim) join(s *Server, c *Client) {
 	is.players[c.id] = c
+	if len(is.edits) > 0 {
+		c.send(&mmo.SMsg{T: "edits", Edits: is.allEdits()})
+	}
 	info := c.info()
 	for _, o := range is.players {
 		if o != c {
@@ -93,7 +98,7 @@ func (is *IsleSim) broadcastInfo(c *Client) {
 }
 
 func (c *Client) info() *mmo.PInfo {
-	return &mmo.PInfo{ID: c.id, Name: c.ch.Name, Level: c.ch.Level, Load: c.ch.Load}
+	return &mmo.PInfo{ID: c.id, Name: c.ch.Name, Level: c.ch.Level, Load: c.ch.Load, Look: c.ch.Look}
 }
 
 // The equipped petals, rebuilt after the loadout changes. Fresh ones start growing.
@@ -122,7 +127,7 @@ func (c *Client) makePetals(ready bool) {
 	}
 }
 
-func (c *Client) center() (float64, float64) { return c.x + mmo.MoteW/2, c.y + mmo.MoteH/2 }
+func (c *Client) center() (float64, float64) { return c.x + mmo.PlayerW/2, c.y + mmo.PlayerH/2 }
 
 // ---- Stepping ----
 
@@ -134,7 +139,7 @@ func (is *IsleSim) step(s *Server) {
 		is.stepMob(s, m)
 	}
 	for _, c := range is.players {
-		if !c.dead {
+		if !c.dead && mmo.PetalsOn {
 			is.petalHits(s, c)
 		}
 	}
@@ -156,6 +161,7 @@ func (is *IsleSim) stepPlayer(s *Server, c *Client) {
 	}
 	c.invuln -= dt
 	c.regenWait -= dt
+	c.swingT -= dt
 	mhp := c.ch.MaxHP()
 	heal := 0.0
 	if c.regenWait <= 0 {
@@ -163,6 +169,9 @@ func (is *IsleSim) stepPlayer(s *Server, c *Client) {
 	}
 	c.orbit += (mmo.OrbitFor(c.mode) - c.orbit) * math.Min(1, dt*10)
 	for _, p := range c.petals {
+		if !mmo.PetalsOn {
+			break
+		}
 		if p.reload > 0 {
 			if p.reload -= dt; p.reload <= 0 {
 				p.reload, p.hp = 0, p.kind.HP*mmo.Power(p.rar)
@@ -179,7 +188,7 @@ func (is *IsleSim) stepPlayer(s *Server, c *Client) {
 	c.hp = math.Min(mhp, c.hp+heal*dt)
 	// lava burns
 	c.lavaCD -= dt
-	if c.lavaCD <= 0 && is.touches(c.x, c.y, mmo.MoteW, mmo.MoteH, mmo.LAVA) {
+	if c.lavaCD <= 0 && is.touches(c.x, c.y, mmo.PlayerW, mmo.PlayerH, mmo.LAVA) {
 		c.lavaCD = 0.5
 		is.hurt(s, c, mhp*0.08, 0)
 	}
@@ -326,7 +335,7 @@ func (is *IsleSim) stepMob(s *Server, m *Mob) {
 		if c.dead || c.invuln > 0 {
 			continue
 		}
-		if c.x < m.x+m.w && c.x+mmo.MoteW > m.x && c.y < m.y+m.h && c.y+mmo.MoteH > m.y {
+		if c.x < m.x+m.w && c.x+mmo.PlayerW > m.x && c.y < m.y+m.h && c.y+mmo.PlayerH > m.y {
 			cx, _ := c.center()
 			is.hurt(s, c, k.Damage(m.rar), int(sign(cx-mx)))
 			m.bumpT = 0.5
@@ -460,7 +469,7 @@ func (is *IsleSim) reward(s *Server, m *Mob) {
 		}
 		l := &mmo.Loot{Mob: m.kind.ID, Rar: m.rar, XP: m.kind.XPFor(m.rar), Coins: m.kind.CoinsFor(m.rar),
 			X: int(m.x + m.w/2), Y: int(m.y + m.h/2)}
-		if s.rng.Float64() < m.kind.DropChance {
+		if mmo.PetalsOn && s.rng.Float64() < m.kind.DropChance {
 			r := m.rar
 			if !m.boss && r > 0 && s.rng.Float64() < 0.7 {
 				r--
@@ -468,7 +477,7 @@ func (is *IsleSim) reward(s *Server, m *Mob) {
 			kind := m.kind.Drops[s.rng.Intn(len(m.kind.Drops))]
 			l.Petals = append(l.Petals, mmo.MakePetal(kind, r))
 		}
-		if m.boss { // bosses also drop a second petal of their own rarity
+		if mmo.PetalsOn && m.boss { // bosses also drop a second petal of their own rarity
 			l.Petals = append(l.Petals, mmo.MakePetal(m.kind.Drops[s.rng.Intn(len(m.kind.Drops))], m.rar))
 		}
 		c.ch.Coins += l.Coins
@@ -600,6 +609,9 @@ func (is *IsleSim) sendSnaps(s *Server) {
 		if c.dead {
 			fl |= mmo.FlagDead
 		}
+		if c.swingT > 0 {
+			fl |= mmo.FlagSwing
+		}
 		alive := 0
 		for i, p := range c.petals {
 			if p.reload <= 0 && i < 30 {
@@ -607,7 +619,8 @@ func (is *IsleSim) sendSnaps(s *Server) {
 			}
 		}
 		ps = append(ps, mmo.PSnap{ID: c.id, X: int(c.x), Y: int(c.y), VX: int(c.vx), VY: int(c.vy), Face: c.face,
-			Flags: fl, HP: int(math.Ceil(c.hp)), MaxHP: int(c.ch.MaxHP()), Orbit: int(c.orbit), Alive: alive})
+			Flags: fl, HP: int(math.Ceil(c.hp)), MaxHP: int(c.ch.MaxHP()), Orbit: int(c.orbit), Alive: alive,
+			Tool: c.tool, Aim: int(math.Round(c.aim * 180 / math.Pi))})
 	}
 	for _, c := range is.players {
 		ms := make([]mmo.MSnap, 0, 64)

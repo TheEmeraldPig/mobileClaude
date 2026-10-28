@@ -25,6 +25,8 @@ const (
 	scDead
 	scAway
 	scName
+	scBag
+	scLook
 )
 
 var (
@@ -155,35 +157,22 @@ func mainMenuArt() {
 	})
 }
 
+// Your character, hovering on the main menu
 func drawMoteArt(dst *ebiten.Image, cx, top, h float64) {
-	px := h / 22
-	x0 := cx - 8*px
-	blink := frame%200 < 7
-	rows := playerFrame(blink, true, "tuck", 0)
+	sc := math.Floor(h / (sprH + bodyTop + 4))
 	bob := math.Round(math.Sin(float64(frame)*0.07) * 1.2)
-	for y, r := range rows[:12] {
-		for x, ch := range r {
-			if ch == '.' {
-				continue
-			}
-			c := pcol[ch]
-			if ch == 'T' {
-				c = [3]int{255, 222 + int(math.Sin(float64(frame)*0.1)*20), 120}
-				c[1] = min(255, c[1])
-			}
-			fill(dst, x0+float64(3+x)*px, top+float64(2+y)*px+bob*px, px, px, color.RGBA{uint8(c[0]), uint8(c[1]), uint8(c[2]), 255})
-		}
-	}
-	// falling sparkles
+	head := top + (bodyTop+1+bob)*sc
+	drawCharacterArt(dst, cx, head, sc, myLook(), pose{face: 1, legs: "air", swing: -1, blink: frame%200 < 7})
+	// sparkles falling from the hover
 	for k := 0; k < 4; k++ {
 		ph := float64((frame+k*17)%60) / 60
-		sx := x0 + float64(4+(k*5)%8)*px
-		sy := top + (15+ph*6+bob)*px
+		sx := cx + float64((k*3)%6-3)*sc
+		sy := head + (sprH+1+ph*4)*sc
 		c := tipRGB
 		if k%2 == 0 {
 			c = glowRGB
 		}
-		fill(dst, sx, sy, px, px, color.NRGBA{uint8(c[0]), uint8(c[1]), uint8(c[2]), uint8(255 * (1 - ph))})
+		fill(dst, sx, sy, sc, sc, color.NRGBA{uint8(c[0]), uint8(c[1]), uint8(c[2]), uint8(255 * (1 - ph))})
 	}
 }
 
@@ -304,7 +293,7 @@ func settingsMenu() {
 				savePrefs()
 			}
 		} else {
-			acts := [][2]string{{"left", "Move left"}, {"right", "Move right"}, {"lev", "Levitate"}, {"petals", "Petals"}, {"map", "Travel map"}}
+			acts := [][2]string{{"left", "Move left"}, {"right", "Move right"}, {"lev", "Jump / hover"}, {"bag", "Bag"}, {"map", "Travel map"}, {"swap", "Switch tool"}}
 			colW := (r.W - 36 - 30) / 2
 			for k, a := range acts {
 				ax := x + float64(k%2)*(colW+30)

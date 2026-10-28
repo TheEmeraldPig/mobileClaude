@@ -106,6 +106,7 @@ func (s *Server) step() {
 	s.t += dt
 	s.ticks++
 	for _, is := range s.isles {
+		is.regrowStep(s)
 		if len(is.players) > 0 {
 			is.idle = 0
 			is.step(s)
@@ -189,6 +190,11 @@ type Client struct {
 	lavaCD      float64
 	petals      []*petal
 	lastMsg     float64
+	tool        int
+	aim         float64 // radians, of the last swing
+	swingT      float64 // > 0 just after a swing (shown to others)
+	swungAt     float64
+	mineAt      float64
 	lastIn      float64
 	saveDirty   bool
 	backupDirty bool
@@ -384,6 +390,17 @@ func (s *Server) handle(c *Client, m *mmo.CMsg) {
 				o.send(&mmo.SMsg{T: "emote", ID: c.id, Emote: m.Emote})
 			}
 		}
+	case "swing":
+		c.isle.swing(s, c, m.Aim)
+	case "mine":
+		c.isle.mine(s, c, m.CX, m.CY)
+	case "look":
+		if m.Look != nil {
+			c.ch.Look = *m.Look
+			c.ch.Look.Valid()
+			s.charChanged(c)
+			c.isle.broadcastInfo(c)
+		}
 	case "name":
 		c.ch.Name = mmo.CleanName(m.Name)
 		s.charChanged(c)
@@ -418,6 +435,9 @@ func (s *Server) hello(c *Client, m *mmo.CMsg) {
 	}
 	if m.Name != "" {
 		ch.Name = mmo.CleanName(m.Name)
+	}
+	if m.Look != nil {
+		ch.Look = *m.Look
 	}
 	ch.Normalize()
 	var away *mmo.Away
@@ -466,8 +486,8 @@ func (s *Server) input(c *Client, m *mmo.CMsg) {
 	}
 	el := max(0.02, s.t-c.lastIn)
 	c.lastIn = s.t
-	x := max(0, min(float64(mmo.GW*mmo.Cell)-mmo.MoteW, m.X))
-	y := max(-200, min(float64(mmo.GH*mmo.Cell)-mmo.MoteH, m.Y))
+	x := max(0, min(float64(mmo.GW*mmo.Cell)-mmo.PlayerW, m.X))
+	y := max(-200, min(float64(mmo.GH*mmo.Cell)-mmo.PlayerH, m.Y))
 	dx, dy := x-c.x, y-c.y
 	lim := 900*el + 40
 	if d := dx*dx + dy*dy; d > lim*lim {
@@ -482,6 +502,10 @@ func (s *Server) input(c *Client, m *mmo.CMsg) {
 	}
 	c.mode = max(0, min(2, m.Mode))
 	c.flags = m.Flags & (mmo.FlagLift | mmo.FlagGround)
+	c.tool = max(0, min(1, m.Tool))
+	if m.Aim != 0 {
+		c.aim = m.Aim
+	}
 }
 
 func (s *Server) loadoutChanged(c *Client) {

@@ -53,8 +53,10 @@ func (g *Game) Update() error {
 		switch cur {
 		case scPlaying:
 			openScreen(scPause)
-		case scPause, scPetals, scTravel:
+		case scPause, scPetals, scTravel, scBag:
 			play()
+		case scLook:
+			closeLook()
 		case scSettings:
 			if settingsFrom == scMain {
 				openScreen(scMain)
@@ -64,26 +66,32 @@ func (g *Game) Update() error {
 		case scName:
 			openScreen(scMain)
 		}
-	} else if cur == scPlaying || cur == scPetals || cur == scTravel {
-		if bindJustPressed("petals") {
-			toggleScreen(scPetals)
+	} else if cur == scPlaying || cur == scBag || cur == scTravel {
+		if bindJustPressed("bag") {
+			toggleScreen(scBag)
 		} else if bindJustPressed("map") {
 			toggleScreen(scTravel)
 		}
 	}
 	myMode = mmo.ModeNormal
+	using := false
 	if cur == scPlaying {
 		input.left, input.right, input.lev = bindDown("left"), bindDown("right") || scriptRight, bindDown("lev") || scriptLev
-		attack := mouseAttack || held("attack") || scriptAttack
-		defend := held("defend") || (!isTouch && ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight))
-		switch {
-		case attack:
-			myMode = mmo.ModeAttack
-		case defend:
-			myMode = mmo.ModeDefend
+		using = mouseAttack || held("use") || touchAimOn || scriptAttack
+		if inpututil.IsKeyJustPressed(ebiten.Key1) {
+			selectTool(mmo.ToolSword)
 		}
-		for i := range mmo.Emotes {
-			if inpututil.IsKeyJustPressed(ebiten.Key1 + ebiten.Key(i)) {
+		if inpututil.IsKeyJustPressed(ebiten.Key2) {
+			selectTool(mmo.ToolPickaxe)
+		}
+		if bindJustPressed("swap") {
+			selectTool(1 - myTool)
+		}
+		if _, wy := ebiten.Wheel(); wy != 0 {
+			selectTool(1 - myTool)
+		}
+		for i := range mmo.Emotes { // 3-8
+			if inpututil.IsKeyJustPressed(ebiten.Key3 + ebiten.Key(i)) {
 				sendEmote(i)
 			}
 		}
@@ -98,6 +106,7 @@ func (g *Game) Update() error {
 		worldTime = math.Mod(worldTime+1.0/dayFrames, 1)
 	}
 	updateRemote()
+	updateTool(using)
 	updateParticles()
 	setHum(player.lifting && cur != scMain, player.energy)
 	peekSX += (peekX - peekSX) * 0.04
@@ -122,6 +131,13 @@ func (g *Game) Update() error {
 		pauseMenu()
 	case scPetals:
 		petalsMenu()
+	case scBag:
+		bagMenu()
+	case scLook:
+		if lookFrom == scMain {
+			mainMenuArt()
+		}
+		lookMenu()
 	case scTravel:
 		travelMenu()
 	case scSettings:

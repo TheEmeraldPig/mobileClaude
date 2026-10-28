@@ -43,41 +43,50 @@ const (
 	DOOR      = 30 // closed door (solid)
 	DOOROPEN  = 31 // open door (walk through it)
 	SANDSTONE = 32 // sand packed solid: it doesn't fall
+	// mined blocks turn into these (see mmo/mine.go)
+	WORNSTONE   = 33
+	PACKEDDIRT  = 34
+	DULLCRYSTAL = 35
+	OLDWOOD     = 36
 )
 
 var blockRGB = map[uint8][3]int{
-	SAND:      {226, 194, 107},
-	WATER:     {59, 142, 232},
-	STONE:     {120, 126, 140},
-	BRICK:     {176, 92, 72},
-	COAL:      {40, 40, 48},
-	COPPER:    {210, 126, 70},
-	IRON:      {214, 190, 172},
-	GOLD:      {246, 204, 70},
-	CRYSTAL:   {120, 232, 255},
-	TORCH:     {255, 204, 96},
-	DIRT:      {122, 86, 60},
-	GRASS:     {88, 168, 74},
-	WOOD:      {112, 78, 52},
-	LEAVES:    {58, 132, 66},
-	PLANK:     {178, 132, 84},
-	GLASS:     {190, 226, 240},
-	CHEST:     {170, 116, 52},
-	LAVA:      {250, 108, 40},
-	SOIL:      {84, 58, 40},
-	CROP1:     {110, 180, 80},
-	CROP2:     {150, 196, 80},
-	CROP3:     {232, 200, 90},
-	FLOWER:    {236, 120, 170},
-	BUSH:      {46, 112, 58},
-	GRAVE:     {150, 150, 162},
-	CORE:      {255, 120, 220},
-	OBSIDIAN:  {44, 30, 64},
-	BEDROCK:   {26, 24, 32},
-	FURNACE:   {96, 90, 104},
-	DOOR:      {150, 104, 62},
-	SANDSTONE: {204, 168, 96},
-	DOOROPEN:  {150, 104, 62},
+	SAND:        {226, 194, 107},
+	WATER:       {59, 142, 232},
+	STONE:       {120, 126, 140},
+	BRICK:       {176, 92, 72},
+	COAL:        {40, 40, 48},
+	COPPER:      {210, 126, 70},
+	IRON:        {214, 190, 172},
+	GOLD:        {246, 204, 70},
+	CRYSTAL:     {120, 232, 255},
+	TORCH:       {255, 204, 96},
+	DIRT:        {122, 86, 60},
+	GRASS:       {88, 168, 74},
+	WOOD:        {112, 78, 52},
+	LEAVES:      {58, 132, 66},
+	PLANK:       {178, 132, 84},
+	GLASS:       {190, 226, 240},
+	CHEST:       {170, 116, 52},
+	LAVA:        {250, 108, 40},
+	SOIL:        {84, 58, 40},
+	CROP1:       {110, 180, 80},
+	CROP2:       {150, 196, 80},
+	CROP3:       {232, 200, 90},
+	FLOWER:      {236, 120, 170},
+	BUSH:        {46, 112, 58},
+	GRAVE:       {150, 150, 162},
+	CORE:        {255, 120, 220},
+	OBSIDIAN:    {44, 30, 64},
+	BEDROCK:     {26, 24, 32},
+	FURNACE:     {96, 90, 104},
+	DOOR:        {150, 104, 62},
+	SANDSTONE:   {204, 168, 96},
+	DOOROPEN:    {150, 104, 62},
+	WORNSTONE:   {92, 94, 108},
+	PACKEDDIRT:  {90, 66, 50},
+	DULLCRYSTAL: {84, 118, 136},
+	OLDWOOD:     {82, 64, 52},
 }
 
 // Ores are drawn as specks of their colour in stone
@@ -85,7 +94,8 @@ func isOre(t uint8) bool { return t >= COAL && t <= GOLD }
 
 func isSolid(t uint8) bool {
 	switch t {
-	case SAND, STONE, BRICK, CRYSTAL, DIRT, GRASS, PLANK, GLASS, SOIL, GRAVE, CORE, OBSIDIAN, BEDROCK, DOOR, SANDSTONE:
+	case SAND, STONE, BRICK, CRYSTAL, DIRT, GRASS, PLANK, GLASS, SOIL, GRAVE, CORE, OBSIDIAN, BEDROCK, DOOR, SANDSTONE,
+		WORNSTONE, PACKEDDIRT, DULLCRYSTAL:
 		return true
 	}
 	return isOre(t)

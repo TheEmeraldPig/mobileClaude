@@ -4,7 +4,7 @@ package mmo
 // Positions are world px on the current island (a mote's top-left corner).
 
 // Protocol goes up when old games can no longer talk to the server
-const Protocol = 1
+const Protocol = 2
 
 // Client messages
 type CMsg struct {
@@ -26,6 +26,11 @@ type CMsg struct {
 	Slot2  int     `json:"slot2,omitempty"`
 	Petal  PetalID `json:"p,omitempty"`
 	Emote  int     `json:"emote,omitempty"`
+	Look   *Look   `json:"look,omitempty"` // hello, look
+	CX     int     `json:"cx,omitempty"`   // mine: the cell
+	CY     int     `json:"cy,omitempty"`
+	Aim    float64 `json:"aim,omitempty"`  // swing: radians
+	Tool   int     `json:"tool,omitempty"` // in: the tool in hand
 }
 
 // Server messages
@@ -52,12 +57,20 @@ type SMsg struct {
 	Text   string         `json:"text,omitempty"`
 	Online int            `json:"online,omitempty"`
 	Counts map[string]int `json:"counts,omitempty"` // players on each island
+	Edits  []Edit         `json:"edits,omitempty"`  // changed blocks on the island
 }
 
 const (
 	FlagLift   = 1
 	FlagGround = 2
 	FlagDead   = 4
+	FlagSwing  = 8 // swung their tool just now
+)
+
+// Tools in hand
+const (
+	ToolSword   = 0
+	ToolPickaxe = 1
 )
 
 // Another player, in a snapshot
@@ -73,6 +86,8 @@ type PSnap struct {
 	MaxHP int `json:"mh"`
 	Orbit int `json:"o"` // petal orbit radius, px
 	Alive int `json:"a"` // bit i: petal i is out
+	Tool  int `json:"tl,omitempty"`
+	Aim   int `json:"aim,omitempty"` // degrees
 }
 
 // A creature, in a snapshot
@@ -101,6 +116,7 @@ type PInfo struct {
 	Name  string    `json:"name"`
 	Level int       `json:"lvl"`
 	Load  []PetalID `json:"load"`
+	Look  Look      `json:"look"`
 }
 
 // Rewards from a kill
