@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"math/rand"
 	"os"
 	"strings"
 
@@ -784,7 +785,7 @@ func lookMenu() {
 	bw := (w - 12) / 2
 	if Button(Rect{x, r.Y + r.H - 56, bw, 42}, "Random", styleSlate, true, icoWorld) {
 		for _, o := range opts {
-			*o.v = (*o.v + 1 + int(uint32(frame*2654435761+len(o.name)*40503)%uint32(o.n))) % o.n
+			*o.v = rand.Intn(o.n)
 		}
 	}
 	if Button(Rect{x + bw + 12, r.Y + r.H - 56, bw, 42}, "Done", styleGold, true, icoPlay) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
