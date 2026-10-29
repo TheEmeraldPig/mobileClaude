@@ -91,6 +91,9 @@ func tableScreen() {
 	case "over":
 		overScreen()
 	}
+	if view == nil || me() == nil { // left the table (or the host closed it) this frame
+		return
+	}
 	if view.Phase != "lobby" && view.Phase != "over" {
 		menuButton()
 	}
@@ -141,6 +144,10 @@ func topStrip(y float64) float64 {
 			body = colPanelHi
 		}
 		pp := p
+		// what the drawing needs, read now: the match may be gone by the time it draws
+		showLives := view.Mode != ModeCoop || i == 0
+		maxLives := view.MaxLives
+		status := playerStatus(p)
 		ops = append(ops, func(dst *ebiten.Image) {
 			bevel(dst, r, body, colSlateHi, colPanelLo, false)
 			nameCol := color.Color(colInk)
@@ -156,13 +163,13 @@ func topStrip(y float64) float64 {
 			}
 			drawText(dst, name, r.X+8, r.Y+12, textOpt{size: 13, col: nameCol})
 			// lives
-			if view.Mode != ModeCoop || pp == view.Players[0] {
-				for l := 0; l < view.MaxLives && l < 5; l++ {
+			if showLives {
+				for l := 0; l < maxLives && l < 5; l++ {
 					drawHeart(dst, r.X+r.W-12-float64(l+1)*13, r.Y+6, 1.6, l < pp.Lives)
 				}
 			}
 			drawText(dst, fmt.Sprintf("$%d", pp.Money), r.X+8, r.Y+32, textOpt{size: 12, display: true, col: colT})
-			drawText(dst, playerStatus(pp), r.X+r.W-8, r.Y+32, textOpt{size: 12, col: colMuted, align: text.AlignEnd})
+			drawText(dst, status, r.X+r.W-8, r.Y+32, textOpt{size: 12, col: colMuted, align: text.AlignEnd})
 			if len(pp.OnMe) > 0 || len(pp.Active) > 0 {
 				drawText(dst, "HEXED", r.X+r.W/2, r.Y+32, textOpt{size: 9, display: true, col: rgb(0xb070ff), align: text.AlignCenter})
 			}
@@ -436,11 +443,12 @@ func draftScreen(p *PlayerState) {
 		}
 		hh := h
 		f := hands[h].fam
+		how := handHow(h, myRun.Rules)
 		ops = append(ops, func(dst *ebiten.Image) {
 			fcol := familyColors[f]
 			fill(dst, r.X+6, r.Y+6, 6, r.H-12, rgb(fcol[0]))
 			drawText(dst, hands[hh].name, r.X+20, r.Y+r.H/2-5, textOpt{size: 14, shadow: true})
-			drawText(dst, handHow(hh, myRun.Rules), r.X+20, r.Y+r.H/2+9, textOpt{size: 10, col: colL})
+			drawText(dst, how, r.X+20, r.Y+r.H/2+9, textOpt{size: 10, col: colL})
 			b, m := handLevel(hh, 1)
 			drawText(dst, fmt.Sprintf("%d x %d", b, m), r.X+r.W-10, r.Y+r.H/2, textOpt{size: 12, display: true, col: colT, align: text.AlignEnd})
 		})

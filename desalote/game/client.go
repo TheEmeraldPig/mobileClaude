@@ -228,7 +228,7 @@ func applyLobbyPrefs() {
 func leaveTable(reason string) {
 	netShutdown()
 	host, view, myRun, solo = nil, nil, nil, false
-	anim = nil
+	anim, ov, netStatus = nil, ovNone, ""
 	if reason != "" {
 		toast(reason)
 	}
