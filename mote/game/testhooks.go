@@ -238,6 +238,14 @@ func runScript() {
 			if len(worldList) > 0 {
 				openWorld(worldList[0])
 			}
+		case "crash": // make the game crash, to see the crash screen
+			var m map[string]int
+			m["boom"]++ // writing to a nil map panics
+		case "crashscroll": // crashscroll=N lines down
+			n, _ := strconv.Atoi(arg)
+			crashScroll = float64(n)
+		case "crashclose": // press Close on the crash screen
+			crashQuit = true
 		case "die":
 			player.invuln = 0
 			hurtPlayer(999, 1)
