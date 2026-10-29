@@ -140,7 +140,7 @@ func sortCards(c []Card) {
 
 // FlushSize: how many cards of one suit make a flush for this deck. It is the average
 // number of cards per suit the deck has, rounded down (3 clubs + 3 hearts -> 3;
-// 2 diamonds, 5 clubs, 3 hearts -> 3.33 -> 3), kept between 3 and 5.
+// 2 diamonds, 5 clubs, 3 hearts -> 3.33 -> 3). At most 5, since a play is 5 cards.
 func FlushSize(deck []Card) int {
 	n := suitCounts(deck)
 	total, suits := 0, 0
@@ -153,12 +153,12 @@ func FlushSize(deck []Card) int {
 	if suits == 0 {
 		return 5
 	}
-	return clampInt(total/suits, 3, 5)
+	return clampInt(total/suits, 1, 5)
 }
 
 // StraightSize: how many ranks in a row make a straight for this deck. It is the
-// average length of the runs of ranks in a row the deck has, rounded up, kept between
-// 3 and 5. An ace counts both low and high.
+// average length of the runs of ranks in a row the deck has, rounded up (at most 5,
+// since a play is 5 cards). An ace counts both low and high.
 func StraightSize(deck []Card) int {
 	runs := rankRuns(deck)
 	if len(runs) == 0 {
@@ -168,7 +168,7 @@ func StraightSize(deck []Card) int {
 	for _, l := range runs {
 		sum += l
 	}
-	return clampInt(int(math.Ceil(float64(sum)/float64(len(runs)))), 3, 5)
+	return clampInt(int(math.Ceil(float64(sum)/float64(len(runs)))), 1, 5)
 }
 
 // The lengths of the runs of ranks in a row in a deck. An ace also sits below the 2:

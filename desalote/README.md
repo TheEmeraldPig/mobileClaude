@@ -21,7 +21,7 @@ This repository also releases Mote, and Mote's updaters install the repository's
 - Each round you hold 7 cards and play up to 5 at a time, with 4 plays and 3 discards. When the pile runs out, the played cards are shuffled back in.
 - **Flush size** is the average number of cards per suit in your deck, rounded down: 3 clubs + 3 hearts = 3; 2 diamonds + 5 clubs + 3 hearts = 3.33, so 3.
 - **Straight size** is the average length of your deck's runs of ranks in a row, rounded up.
-- Both are kept between 3 and 5 (`FlushSize`, `StraightSize` in `game/cards.go`).
+- Neither is ever more than 5, since a play is at most 5 cards (`FlushSize`, `StraightSize` in `game/cards.go`). Across random decks the flush size is 3 (95%) or 4; the straight size is usually 2-4, sometimes 5.
 
 ### Hands
 - Everyone can always score **High Card** and **Pair**. These never count toward synergy.
@@ -29,7 +29,7 @@ This repository also releases Mote, and Mote's updaters install the repository's
   - **Same:** Two Pair, Three of a Kind, Full House, Four of a Kind. A Same deck always has at least 3 cards of one rank.
   - **Counting:** Straight, Skip Straight (ranks stepping by 2), Ladder (7 7 8 8).
   - **Suits:** Flush, Two Tone (4+ cards of exactly 2 suits), Rainbow (4 different suits).
-- You're offered 5 hands (3 from your family, 2 from the others) and pick 3 for the whole match, at least one from your family. Any other hand you play scores as the best of the hands you have.
+- You're offered 5 hands (3 from your family, 2 from the others) and pick 3 for the whole match, at least one from your family. Any other hand only counts as a Pair or High Card.
 - **Synergy:** when two picks share a family, all three score x1.2. When all three do, x1.5.
 - **Special hand:** Five of a Kind, Straight Flush or Flush House. Once a round, the game picks 5 cards from your hand (you don't choose) and briefly turns them into that hand. It scores big and doesn't use a play. Afterwards the cards go back to normal with +3 points each, for good. Five of a Kind always uses the deck's most common rank (ties at random). That makes it a little predictable, so it scores less than the other two.
 - A hand scores (hand base + the scoring cards' values) x the hand's Mult, then charms, hexes and synergy apply (`Run.score` in `game/run.go`).

@@ -5,7 +5,7 @@ import "sort"
 // Poker hands, grouped in three families. Every player can always score High Card and
 // Pair. At the start of a match each player is given a family and a special hand, and
 // picks three hands to play for the whole match (at least one from their own family);
-// any other hand they play scores as the best of the hands they do have. The more of
+// any other hand they play only counts as a Pair or High Card. The more of
 // the three picks share a family, the more all three score (synergy). High Card and
 // Pair never count toward synergy.
 
