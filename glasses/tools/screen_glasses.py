@@ -28,7 +28,7 @@ from PIL import Image
 
 
 def grab(monitor, max_side, quality):
-    with getattr(mss, "MSS", None or mss.mss)() as sct:
+    with getattr(mss, "MSS", mss.mss)() as sct:
         mons = sct.monitors   # [0] is every screen together, [1] the first screen, ...
         shot = sct.grab(mons[monitor if monitor < len(mons) else 1])
     img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
