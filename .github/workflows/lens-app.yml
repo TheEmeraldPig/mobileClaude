@@ -63,6 +63,7 @@ jobs:
           token = "test"
           TOML
           nohup python3 glasses/pi/lens.py --config /tmp/hub.toml > /tmp/hub.log 2>&1 &
+          echo $! > /tmp/hub.pid
           sleep 3
           curl -s localhost:8765/status
       - name: Enable KVM for the emulator
@@ -87,17 +88,27 @@ jobs:
             adb shell input swipe 540 1800 540 600 400
             sleep 3
             adb exec-out screencap -p > shot-panel-lower.png
-            pkill -f "glasses/pi/lens.py" || true
+            kill "$(cat /tmp/hub.pid)" || true
             adb shell am force-stop com.theemeraldpig.lens
             adb shell am start -n com.theemeraldpig.lens/.MainActivity
             sleep 12
             adb exec-out screencap -p > shot-offline.png
             adb logcat -d > logcat.txt
             grep -E "chromium|Lens|FATAL|AndroidRuntime" logcat.txt | tail -60 || true
-            for f in shot-panel.png shot-panel-lower.png shot-offline.png; do echo "== $f"; python3 mote/android/tools/shrink_png.py $f 200 || true; done
       - name: Hub log
         if: always()
         run: tail -40 /tmp/hub.log || true
+      # Screenshots go to the lens-ci-shots branch so they can be looked at without downloading artifacts.
+      - name: Push screenshots to the lens-ci-shots branch
+        if: always()
+        run: |
+          mkdir -p /tmp/shots && cp shot-*.png /tmp/shots/ 2>/dev/null || true
+          grep -E "chromium|FATAL|AndroidRuntime|lens" logcat.txt 2>/dev/null | tail -80 > /tmp/shots/logcat-excerpt.txt || true
+          cd /tmp/shots
+          git init -q && git checkout -q -b lens-ci-shots
+          git -c user.name=ci -c user.email=ci@localhost add -A
+          git -c user.name=ci -c user.email=ci@localhost commit -qm "Lens app emulator screenshots, run ${{ github.run_number }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" lens-ci-shots
       - uses: actions/upload-artifact@v4
         if: always()
         with:
