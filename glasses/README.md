@@ -114,6 +114,17 @@ The page shows each question as it's asked, the answer as it's written, and the 
 
 The page reads the hub's live event stream (`GET /events`). A display inside the glasses is planned as the next step and will read the same stream.
 
+### Testing without the glasses: your screen as the camera
+
+`tools/screen_glasses.py` stands in for the glasses on your computer: it sends a picture of your screen whenever the hub looks, tells the hub where it is, and the keyboard is the button. Handy for asking "what's this error?" while you're debugging, and for testing the hub and phone page before the glasses are built.
+
+```
+pip install mss pillow
+python3 glasses/tools/screen_glasses.py --hub http://<hub address>:8765 --token <your token>
+```
+
+Enter = button press (talk / stop), `p` = photo, `s` = stop, `q` = quit. The computer and the hub must be on the same Wi-Fi; on Windows, allow Python through the firewall on private networks when it asks. Everything on the screen goes to Claude when you ask, so keep private things off it while it runs. `--monitor 2` uses a second screen.
+
 ### The glasses (XIAO ESP32S3 Sense)
 
 1. Arduino IDE → install the **esp32** boards package by Espressif → board **XIAO_ESP32S3**, **Tools → PSRAM → OPI PSRAM**.
