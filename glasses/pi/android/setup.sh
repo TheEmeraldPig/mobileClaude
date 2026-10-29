@@ -14,7 +14,7 @@ pkg update -y
 pkg install -y python git curl proot-distro termux-api
 
 say "Ubuntu for Claude Code (Claude Code has no Android build)"
-[ -d "$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu" ] || proot-distro install ubuntu
+proot-distro login ubuntu -- true 2>/dev/null || proot-distro install ubuntu
 proot-distro login ubuntu -- bash -c '
   set -e
   if [ ! -x /root/.local/bin/claude ] || ! command -v python3 >/dev/null; then

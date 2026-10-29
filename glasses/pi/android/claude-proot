@@ -1,5 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/sh
 # Claude Code has no Android build, so it runs inside a small Ubuntu (proot-distro).
 # This wrapper makes it act like a normal `claude` command: same folder, same input and output.
-dir="$(pwd | sed "s#^$HOME#/root#")"
-exec proot-distro login ubuntu --termux-home --work-dir "$dir" -- /root/.local/bin/claude "$@"
+# Termux's home folder shows up inside Ubuntu as /termux-home (not over /root, where Claude Code lives).
+dir="$(pwd)"
+case "$dir" in
+  "$HOME"|"$HOME"/*) dir="/termux-home${dir#"$HOME"}" ;;
+  *) dir="/root" ;;
+esac
+exec proot-distro login ubuntu --bind "$HOME:/termux-home" --work-dir "$dir" -- /root/.local/bin/claude "$@"
