@@ -23,6 +23,8 @@ const (
 	triangle
 	noiseBand
 	noiseHigh
+	epiano // a soft electric piano: a sine with a quickly fading bell overtone
+	pluck  // a mellow plucked string: a triangle with a fast fade
 )
 
 type voice struct {
@@ -151,91 +153,113 @@ func setVolumes() {
 	syn.mu.Unlock()
 }
 
-// ---- Music: a slow card-room loop (Dm7, G7, Cmaj7, Am7), square lead, triangle arps and bass, soft drums ----
+// ---- Music: "Ember Lounge", a slow swung card-room groove ----
+// An 8-bar loop in A minor (Am9 Dm9 G9 Cmaj7 Fmaj7 Dm7 E7 Am): electric-piano chords
+// stabbing on the offbeats, a walking bass, brushed drums and a sparse plucked melody
+// that changes every time round.
 
-const bpm = 84
+const bpm = 86
 
 var stepSamples = int64(sampleRate * 60 / bpm / 4) // 16th notes
 
 var chords = []struct {
 	root  int
-	tones [3]int
-}{{38, [3]int{65, 69, 72}}, {43, [3]int{65, 71, 74}}, {48, [3]int{64, 67, 71}}, {45, [3]int{67, 72, 76}}}
+	tones [4]int
+}{
+	{45, [4]int{60, 64, 67, 71}}, // Am9
+	{38, [4]int{60, 64, 65, 69}}, // Dm9
+	{43, [4]int{59, 62, 65, 69}}, // G9
+	{48, [4]int{59, 64, 67, 71}}, // Cmaj7
+	{41, [4]int{57, 60, 64, 69}}, // Fmaj7
+	{38, [4]int{57, 60, 62, 65}}, // Dm7
+	{40, [4]int{56, 59, 62, 64}}, // E7
+	{45, [4]int{57, 60, 64, 69}}, // Am
+}
 
-var penta = []int{62, 64, 67, 69, 72, 74, 76}
+var penta = []int{69, 72, 74, 76, 79, 81, 84}
 
+// A new melody for the next two bars: a few notes, often resting
 func (s *synth) newPhrase() {
 	s.phrase = s.phrase[:0]
-	for b := 0; b < 4; b++ {
-		for st := 0; st < 16; st += 2 {
-			p := 0.55
-			if st%8 == 0 {
-				p = 0.2
-			}
-			if s.rnd.Float64() < p {
-				s.phrase = append(s.phrase, nil)
-				continue
-			}
-			var pool []int
-			if s.rnd.Float64() < 0.6 {
-				for _, t := range chords[b].tones {
-					pool = append(pool, t+12)
-				}
-			} else {
-				for _, t := range penta {
-					pool = append(pool, t+12)
-				}
-			}
-			l := 2
-			if s.rnd.Float64() < 0.3 {
-				l = 4
-			}
-			s.phrase = append(s.phrase, &note{pool[s.rnd.Intn(len(pool))], l})
+	for st := 0; st < 32; st += 2 {
+		if s.rnd.Float64() < 0.62 || st%16 == 14 {
+			s.phrase = append(s.phrase, nil)
+			continue
 		}
+		l := 2
+		if s.rnd.Float64() < 0.35 {
+			l = 4
+		}
+		s.phrase = append(s.phrase, &note{penta[s.rnd.Intn(len(penta))], l})
 	}
 }
 
-func (s *synth) mv(w wave, m int, dur, vol float64, glide float64) {
-	f1 := mtof(m)
-	if glide != 0 {
-		f1 *= glide
-	}
-	s.voices = append(s.voices, &voice{w: w, f0: mtof(m), f1: f1, dur: dur, vol: vol, music: true})
+// mv adds a music voice, starting delay seconds from now
+func (s *synth) mv(w wave, m int, dur, vol, delay float64) {
+	s.voices = append(s.voices, &voice{w: w, f0: mtof(m), f1: mtof(m), dur: dur, vol: vol, music: true, t: -delay})
 }
 
 func (s *synth) scheduleStep(i int) {
-	bar, st := (i/16)%4, i%16
+	bar, st := (i/16)%len(chords), i%16
 	ch := chords[bar]
+	next := chords[(bar+1)%len(chords)]
 	stepSec := float64(stepSamples) / sampleRate
-	if st == 0 && bar == 0 {
-		if s.phraseBar%2 == 0 {
-			s.newPhrase()
+	swing := 0.0
+	if st%4 == 2 { // the offbeat 8ths come a little late
+		swing = stepSec * 0.35
+	}
+	if st == 0 && bar%2 == 0 {
+		s.newPhrase()
+		s.phraseBar = bar
+	}
+	// electric piano: a soft held chord on the one, stabs on the "and" of 2 and on 4
+	if st == 0 {
+		for _, t := range ch.tones {
+			s.mv(epiano, t, stepSec*12, 0.065, 0)
 		}
-		s.phraseBar++
+	}
+	if st == 6 || (st == 12 && bar%2 == 1) {
+		for k, t := range ch.tones {
+			s.mv(epiano, t, stepSec*2.5, 0.09, swing+float64(k)*0.006)
+		}
+	}
+	// walking bass: root, fifth, octave, then a step into the next chord
+	switch st {
+	case 0:
+		s.mv(sine, ch.root, stepSec*3.6, 0.5, 0)
+	case 4:
+		s.mv(sine, ch.root+7, stepSec*3.6, 0.42, 0)
+	case 8:
+		s.mv(sine, ch.root+12, stepSec*3.6, 0.4, 0)
+	case 12:
+		approach := next.root - 1
+		if (bar+i/128)%2 == 1 {
+			approach = next.root + 2
+		}
+		s.mv(sine, approach, stepSec*3.4, 0.4, 0)
+	}
+	// melody, from the phrase for these two bars
+	if st%2 == 0 {
+		k := ((bar-s.phraseBar+len(chords))%2)*8 + st/2
+		if k < len(s.phrase) {
+			if n := s.phrase[k]; n != nil {
+				s.mv(pluck, n.m, stepSec*float64(n.len)*1.6, 0.11, swing)
+			}
+		}
+	}
+	// brushed drums: a soft kick, a rim click on 2 and 4, a swung shaker
+	if st == 0 || st == 10 {
+		s.voices = append(s.voices, &voice{w: sine, f0: 90, f1: 40, dur: 0.22, vol: 0.4, music: true})
+	}
+	if st == 4 || st == 12 {
+		s.voices = append(s.voices, &voice{w: noiseBand, f0: 2200, f1: 1600, dur: 0.07, vol: 0.12, music: true})
 	}
 	if st%2 == 0 {
-		s.mv(triangle, ch.tones[[4]int{0, 1, 2, 1}[(st/2)%4]], stepSec*1.6, 0.05, 0) // arp
-	}
-	if st == 0 || st == 6 || st == 8 || st == 14 { // bass
-		off := -12
-		if st == 8 {
-			off = 0
+		v := 0.025
+		if st%4 == 2 {
+			v = 0.04
 		}
-		s.mv(triangle, ch.root+off+12, stepSec*3, 0.16, 0)
-	}
-	if st%2 == 0 && len(s.phrase) > bar*8+st/2 { // lead
-		if n := s.phrase[bar*8+st/2]; n != nil {
-			s.mv(square, n.m, stepSec*float64(n.len)*0.9, 0.035, 0)
-		}
-	}
-	if st == 0 || st == 8 { // kick
-		s.mv(sine, 40, 0.18, 0.5, 0.4)
-	}
-	if st == 4 || st == 12 { // snare
-		s.voices = append(s.voices, &voice{w: noiseHigh, f0: 1800, f1: 1800, dur: 0.12, vol: 0.09, music: true})
-	}
-	if st%4 == 2 { // hat
-		s.voices = append(s.voices, &voice{w: noiseHigh, f0: 7000, f1: 7000, dur: 0.04, vol: 0.05, music: true})
+		s.voices = append(s.voices, &voice{w: noiseHigh, f0: 8000, f1: 8000, dur: 0.05, vol: v, music: true, t: -swing})
 	}
 }
 
@@ -274,10 +298,14 @@ func (s *synth) Read(p []byte) (int, error) {
 			}
 			var smp float64
 			switch v.w {
-			case sine, square, triangle:
+			case sine, square, triangle, epiano, pluck:
 				v.phase += freq * dt
 				v.phase -= math.Floor(v.phase)
 				switch v.w {
+				case epiano:
+					smp = math.Sin(v.phase*2*math.Pi) + 0.45*math.Sin(v.phase*4*math.Pi)*math.Exp(-v.t*9) + 0.12*math.Sin(v.phase*6*math.Pi)*math.Exp(-v.t*14)
+				case pluck:
+					smp = (4*math.Abs(v.phase-0.5) - 1) * math.Exp(-v.t*3)
 				case sine:
 					smp = math.Sin(v.phase * 2 * math.Pi)
 				case square:

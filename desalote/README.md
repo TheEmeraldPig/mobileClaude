@@ -1,6 +1,6 @@
 # Desalote
 
-A multiplayer poker-hand scoring card game for 1-4 players, in the spirit of Balatro but with its own rules: a locked 13-card deck, hands picked for the whole match, synergy between them, special hands, charms instead of jokers, a live auction shop, a charm market between players, and hexes to curse your rivals. It reuses Mote's engine (Go + [Ebitengine](https://ebitengine.org)): the pixel UI, the synthesised sound, the multiplayer hub and the Android wrapper. Nothing is shared with Mote's code at build time; the parts were copied.
+A multiplayer poker-hand scoring card game for 1-4 players, in the spirit of Balatro but with its own rules: a locked 13-card deck, hands picked for the whole match, synergy between them, special hands, charms instead of jokers, a live auction shop, a charm market between players, and hexes to curse your rivals. It reuses Mote's engine (Go + [Ebitengine](https://ebitengine.org)): the immediate-mode UI, the synthesised sound, the multiplayer hub and the Android wrapper. Nothing is shared with Mote's code at build time; the parts were copied.
 
 All of Desalote's art, cards, charms and rules are its own. Nothing comes from Balatro's files.
 
@@ -63,8 +63,9 @@ This repository also releases Mote, and Mote's updaters install the repository's
 - `game/match.go`: the match, run by the host: modes, blinds and targets (`blindTarget`), lives, results, the auction, tomes, the market, hexes, Race mode, and the bots.
 - `game/client.go`: what each game does for its own player: actions sent to the host, keeping its run in step with the match.
 - `game/net.go`, `game/netlan.go`, `relaycore/`: the connection, messages, and LAN discovery.
-- `game/table.go`, `game/shop.go`, `game/menus.go`: the screens. `game/cardart.go`: cards, charms, hexes and tomes drawn in code. `game/ui.go`: Mote's pixel widgets.
-- `game/audio.go`: synthesised sound effects and a card-room music loop.
+- `game/table.go`, `game/shop.go`, `game/menus.go`: the screens. `game/cardart.go`: cards (rounded, drawn once into a cached image so they can tilt and scale), charms, hexes, tomes and hearts. `game/ui.go`: the widgets: warm palette, soft rounded panels and buttons (drawn as nine-slices of a cached disc, so they batch), and the Jersey 10/15 fonts (OFL, `game/assets/OFL-Jersey.txt`).
+- `game/fx.go`: the swirling warm background (a Kage shader), cards moving on springs (`placeCard`: dealt from the deck, fanned and swaying in the hand, lifted when picked, flung away when played or discarded), floating numbers and screen shake.
+- `game/audio.go`: synthesised sound effects and the music, "Ember Lounge": a swung 8-bar loop in A minor with electric piano, walking bass, brushed drums and a plucked melody that changes each time round.
 - `android/`: the Android app (`com.theemeraldpig.desalote`). `mobile/` is the Go side of it, and `cmd/desalote` is the desktop entry point.
 
 The host sends the whole `Match` to everyone whenever it changes. Guests send actions (`action` in `client.go`). Each game deals and plays its own player's cards from the seed the host gave it, and reports scores.

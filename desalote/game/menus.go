@@ -130,36 +130,28 @@ func b2i(b bool) int {
 	return 0
 }
 
-// ---- The table background ----
-
-func drawFelt(dst *ebiten.Image) {
-	fill(dst, 0, 0, logicalW, logicalH, rgb(0x14112a))
-	// a softly lit oval in the middle, in stepped rings (pixel style)
-	cx, cy := logicalW/2, logicalH*0.55
-	for i := 6; i >= 1; i-- {
-		k := float64(i) / 6
-		rx, ry := logicalW*0.55*k, logicalH*0.55*k
-		c := color.NRGBA{uint8(26 + (6-i)*3), uint8(22 + (6-i)*3), uint8(52 + (6-i)*5), 255}
-		for j := -ry; j < ry; j += 6 {
-			hw := rx * math.Sqrt(math.Max(0, 1-(j/ry)*(j/ry)))
-			hw = math.Floor(hw/6) * 6
-			fill(dst, cx-hw, cy+j, hw*2, 6, c)
-		}
-	}
-}
-
 // ---- Main menu ----
 
 var menuCards = []Card{{R: 14, S: Spades}, {R: 13, S: Hearts}, {R: 12, S: Clubs}, {R: 11, S: Diamonds}}
 
+// The name, each letter bobbing a little out of step with the others
 func drawTitle(dst *ebiten.Image, cx, y, size float64) {
-	drawText(dst, "DESALOTE", cx+5, y+5, textOpt{size: size, display: true, col: colO, align: text.AlignCenter})
-	drawText(dst, "DESALOTE", cx+2.5, y+2.5, textOpt{size: size, display: true, col: colS, align: text.AlignCenter})
-	drawText(dst, "DESALOTE", cx, y, textOpt{size: size, display: true, align: text.AlignCenter})
+	const name = "DESALOTE"
+	w := textWidth(name, size, true)
+	x := cx - w/2
+	for i, ch := range name {
+		l := string(ch)
+		lw := textWidth(l, size, true)
+		ly := y + math.Sin(float64(frame)/22+float64(i)*0.7)*size*0.05
+		lx := x + lw/2
+		drawText(dst, l, lx+4, ly+5, textOpt{size: size, display: true, col: colO, align: text.AlignCenter})
+		drawText(dst, l, lx+2, ly+2.5, textOpt{size: size, display: true, col: colOrangeL, align: text.AlignCenter})
+		drawText(dst, l, lx, ly, textOpt{size: size, display: true, col: colL, align: text.AlignCenter})
+		x += lw
+	}
 }
 
 func mainMenu() {
-	ops = append(ops, drawFelt)
 	// the brand: a fan of cards and the name, on the left
 	colW := math.Min(270, logicalW*0.34)
 	brandW := math.Min(logicalW*0.5, 440)
@@ -173,9 +165,10 @@ func mainMenu() {
 	ops = append(ops, func(dst *ebiten.Image) {
 		for i, c := range menuCards {
 			off := float64(i) - 1.5
-			x := bx - cw/2 + off*cw*0.62
-			y := topY + math.Abs(off)*ch*0.07 + math.Sin(float64(frame)/40+float64(i))*2
-			drawCard(dst, c, x, y, cw, ch, cardLook{})
+			x := bx + off*cw*0.62
+			y := topY + ch/2 + off*off*ch*0.04 + math.Sin(float64(frame)/40+float64(i))*3
+			rot := off*0.13 + math.Sin(float64(frame)/60+float64(i)*1.7)*0.02
+			drawCardFX(dst, c, x, y, cw, ch, rot, 1, cardLook{})
 		}
 		drawTitle(dst, bx, topY+ch+ts*0.6+12, ts)
 		drawText(dst, "A CARD GAME FOR 1-4 PLAYERS", bx, topY+ch+ts*1.2+22, textOpt{size: 11, display: true, col: colT, align: text.AlignCenter, shadow: true})
@@ -234,7 +227,6 @@ var (
 )
 
 func joinMenu() {
-	ops = append(ops, drawFelt)
 	startFinding()
 	r := sheet(720, 470)
 	if back, cl := head(r, "JOIN A TABLE", true); back || cl {
@@ -433,7 +425,6 @@ func typeKeys() {
 // ---- Settings ----
 
 func settingsMenu() {
-	ops = append(ops, drawFelt)
 	r := sheet(640, 400)
 	if back, cl := head(r, "SETTINGS", true); back || cl {
 		openScreen(settingsFrom)
@@ -511,7 +502,6 @@ var helpPages = []struct{ title, body string }{
 
 func helpMenu() {
 	if helpFrom == scMain {
-		ops = append(ops, drawFelt)
 	}
 	r := sheet(720, 440)
 	if back, cl := head(r, "HOW TO PLAY", true); back || cl {

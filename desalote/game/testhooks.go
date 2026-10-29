@@ -118,7 +118,7 @@ func runScript() {
 		case "botmove": // let a bot brain make my next move
 			if myRun != nil {
 				if res := myRun.botTurn(); res != nil {
-					anim = &scoreAnim{res: res, start: frame}
+					startAnim(res, nil)
 				}
 				reportRun()
 			}

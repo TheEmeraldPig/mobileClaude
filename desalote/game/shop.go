@@ -124,7 +124,7 @@ func auction(p *PlayerState, area Rect) {
 	}
 	gap := 8.0
 	w := (area.W - gap*float64(n-1)) / float64(n)
-	area.H = math.Min(area.H, 330)
+	area.H = math.Min(area.H, 270)
 	for i, it := range view.Auction {
 		r := Rect{area.X + float64(i)*(w+gap), area.Y, w, area.H}
 		itemBox(Rect{r.X, r.Y, r.W, r.H - 70}, it.Kind, it.ID)
@@ -159,7 +159,7 @@ func raceShop(p *PlayerState, area Rect) {
 	n := len(p.Shop)
 	gap := 8.0
 	w := (area.W - gap*float64(n-1)) / float64(n)
-	area.H = math.Min(area.H, 310)
+	area.H = math.Min(area.H, 260)
 	for i, it := range p.Shop {
 		r := Rect{area.X + float64(i)*(w+gap), area.Y, w, area.H}
 		itemBox(Rect{r.X, r.Y, r.W, r.H - 50}, it.Kind, it.ID)

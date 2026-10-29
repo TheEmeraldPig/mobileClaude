@@ -79,6 +79,9 @@ func (g *Game) Update() error {
 	if cur != scJoin {
 		stopFinding()
 	}
+	drawFlying()
+	drawFloaters()
+	updateFX()
 	drawToast()
 	checkForUpdate()
 	return nil
@@ -98,25 +101,11 @@ func tableKeys() {
 	}
 	switch {
 	case inpututil.IsKeyJustPressed(ebiten.KeyEnter):
-		if res := myRun.Play(); res != nil {
-			anim = &scoreAnim{res: res, start: frame}
-			sfx("play")
-			reportRun()
-			dealAt = frame
-		}
+		doPlay()
 	case inpututil.IsKeyJustPressed(ebiten.KeyD):
-		if myRun.CanDiscard() {
-			myRun.Discard()
-			sfx("discard")
-			dealAt = frame
-		}
+		doDiscard()
 	case inpututil.IsKeyJustPressed(ebiten.KeyS):
-		if res := myRun.UseSpecial(); res != nil {
-			anim = &scoreAnim{res: res, start: frame}
-			sfx("special")
-			reportRun()
-			dealAt = frame
-		}
+		doSpecial()
 	}
 }
 
@@ -127,12 +116,33 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		return
 	}
 	defer CatchCrash()
-	screen.Fill(colNight)
-	for _, op := range ops {
-		op(screen)
+	drawBackground(screen)
+	dx, dy := shakeOffset()
+	if dx == 0 && dy == 0 {
+		for _, op := range ops {
+			op(screen)
+		}
+	} else {
+		// shaking: draw everything off screen, then put it down slightly moved
+		b := screen.Bounds()
+		if shakeBuf == nil || shakeBuf.Bounds() != b {
+			if shakeBuf != nil {
+				shakeBuf.Deallocate()
+			}
+			shakeBuf = ebiten.NewImage(b.Dx(), b.Dy())
+		}
+		shakeBuf.Clear()
+		for _, op := range ops {
+			op(shakeBuf)
+		}
+		o := &ebiten.DrawImageOptions{}
+		o.GeoM.Translate(dx*uiScale, dy*uiScale)
+		screen.DrawImage(shakeBuf, o)
 	}
 	takeShot(screen)
 }
+
+var shakeBuf *ebiten.Image
 
 func (g *Game) Layout(outW, outH int) (int, int) {
 	s := ebiten.Monitor().DeviceScaleFactor()
@@ -154,6 +164,7 @@ func NewGame() *Game {
 	loadPrefs()
 	ebiten.SetWindowClosingHandled(true)
 	initFonts()
+	initFX()
 	initAudio()
 	setVolumes()
 	clearPointers()

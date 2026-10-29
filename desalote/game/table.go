@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"math/rand"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -36,11 +37,24 @@ var (
 
 // The scoring animation for the last hand played
 type scoreAnim struct {
-	res   *ScoreResult
-	start int
+	res    *ScoreResult
+	start  int
+	vids   []int // the cards' ids for their motion (visCards)
+	flung  bool
+	cw, ch float64
 }
 
-var anim *scoreAnim
+var (
+	anim      *scoreAnim
+	dispScore float64
+)
+
+func trimFloat(f float64) string {
+	if f == math.Trunc(f) {
+		return fmt.Sprint(int(f))
+	}
+	return fmt.Sprintf("%.1f", f)
+}
 
 func animLen(res *ScoreResult) int {
 	n := 50 + 14*len(res.Scoring)
@@ -56,7 +70,6 @@ func animLen(res *ScoreResult) int {
 func animating() bool { return anim != nil && frame-anim.start < animLen(anim.res) }
 
 func tableScreen() {
-	ops = append(ops, drawFelt)
 	if view == nil {
 		openScreen(scMain)
 		return
@@ -517,18 +530,48 @@ func playScreen(p *PlayerState) {
 		wrapText("Play all your hands. Lowest total loses a life.", x, y, lw-20, 11, colMuted, text.AlignStart)
 		y += 36
 	}
-	Text("Your score", x, y, 11, colMuted, text.AlignStart)
-	Text(commas(r.Score), x, y+18, 22, colT, text.AlignStart)
-	y += 44
-	// what the selection makes
-	if h, ok := r.Preview(); ok && !r.Done {
-		b, m := handLevel(h, r.Levels[h]+1)
-		Inset(Rect{x, y, lw - 20, 40}, colPanelLo)
-		Text(hands[h].name, x+8, y+12, 13, colInk, text.AlignStart)
-		Text(fmt.Sprintf("%d x %d", b, m), x+8, y+28, 12, colT, text.AlignStart)
+	// the score rolls up to the real one once the hand has scored
+	shown := r.Score
+	if anim != nil && animating() {
+		shown -= anim.res.Total
 	}
-	y += 50
-	Text(fmt.Sprintf("Plays %d", r.Plays), x, y, 13, rgb(0x7ab4e0), text.AlignStart)
+	dispScore += (float64(shown) - dispScore) * 0.12
+	if math.Abs(float64(shown)-dispScore) < 1 {
+		dispScore = float64(shown)
+	}
+	Text("Round score", x, y, 11, colMuted, text.AlignStart)
+	Inset(Rect{x, y + 10, lw - 20, 32}, colPanelLo)
+	Text(commas(int64(math.Round(dispScore))), x+(lw-20)/2, y+26, 20, colInk, text.AlignCenter)
+	y += 52
+	// the hand: its name, and its points x mult in a blue and a red box
+	hname, pts, mlt := "", 0, 0.0
+	if anim != nil && animating() {
+		var done bool
+		pts, mlt, done = animNumbers()
+		hname = hands[anim.res.Hand].name
+		if done {
+			hname = "= " + commas(anim.res.Total)
+		}
+	} else if h, ok := r.Preview(); ok && !r.Done {
+		b, m := handLevel(h, r.Levels[h]+1)
+		hname, pts, mlt = hands[h].name, b, float64(m)
+	}
+	Text(hname, x+(lw-20)/2, y+2, 13, colInk, text.AlignCenter)
+	bw2 := (lw - 20 - 18) / 2
+	ptsS, mltS := "", ""
+	if hname != "" {
+		ptsS, mltS = fmt.Sprint(pts), trimFloat(mlt)
+	}
+	yb := y // the drawing below runs later; keep this row's y
+	ops = append(ops, func(dst *ebiten.Image) {
+		bevel(dst, Rect{x, yb + 14, bw2, 32}, rgb(0x2f8ad8), rgb(0x9fd2ff), rgb(0x1f5f9c), false)
+		bevel(dst, Rect{x + bw2 + 18, yb + 14, bw2, 32}, colRedBtn, rgb(0xff9a80), colRedLo, false)
+		drawText(dst, ptsS, x+bw2/2, yb+29, textOpt{size: 17, display: true, align: text.AlignCenter, shadow: true})
+		drawText(dst, "X", x+bw2+9, yb+29, textOpt{size: 14, display: true, col: colDanger, align: text.AlignCenter, shadow: true})
+		drawText(dst, mltS, x+bw2+18+bw2/2, yb+29, textOpt{size: 17, display: true, align: text.AlignCenter, shadow: true})
+	})
+	y += 58
+	Text(fmt.Sprintf("Plays %d", r.Plays), x, y, 13, rgb(0x6ac4ff), text.AlignStart)
 	Text(fmt.Sprintf("Discards %d", r.Discards), x+lw*0.48, y, 13, colDanger, text.AlignStart)
 	y += 20
 	if len(r.Hexes) > 0 {
@@ -549,90 +592,104 @@ func playScreen(p *PlayerState) {
 	// middle: the hand, the buttons, and the last hand scored
 	mx := left.X + left.W + 10
 	mw := right.X - 10 - mx
-	bh := 38.0
+	bh := 40.0
 	by := logicalH - bh - 12
 	ch := math.Min(150, (by-top)*0.42)
 	cw := ch * 0.7
+	handCW, handCH = cw, ch
 	n := len(r.Hand)
-	step := cw + 8
-	if n > 1 && step*float64(n-1)+cw > mw-10 {
-		step = (mw - 10 - cw) / float64(n-1)
+	step := cw * 0.92
+	if n > 1 && step*float64(n-1)+cw > mw-cw*0.9 {
+		step = (mw - cw*0.9 - cw) / float64(n-1)
 	}
-	hx := mx + (mw-(step*float64(max(0, n-1))+cw))/2
-	hy := by - 14 - ch
+	hy := by - 16 - ch/2 // the hand's middle line
+	deckX, deckY := mx+mw-cw*0.45, hy+ch*0.05
 	busy := animating()
 	if !r.Done {
+		// the deck pile the cards are dealt from
+		pile := len(r.Pile)
+		for k := min(pile, 4) - 1; k >= 0; k-- {
+			kx, ky := deckX+float64(k)*1.5, deckY-float64(k)*1.5
+			ops = append(ops, func(dst *ebiten.Image) {
+				drawCardFX(dst, Card{}, kx, ky, cw*0.8, ch*0.8, 0.06, 1, cardLook{faceDown: true})
+			})
+		}
+		Text(fmt.Sprint(pile), deckX, deckY+ch*0.47, 12, colMuted, text.AlignCenter)
+		c0 := float64(n-1) / 2
+		hovered := -1
 		for i := 0; i < n; i++ {
-			d := r.Hand[i]
-			cr := Rect{hx + float64(i)*step, hy, cw, ch}
-			hit := cr
-			if i < n-1 {
-				hit.W = step
+			o := float64(i) - c0
+			hit := Rect{mx + (mw-cw*0.9)/2 + o*step - step/2, hy - ch/2 - ch*0.2, step, ch * 1.2}
+			if i == 0 || i == n-1 {
+				hit.W = cw * 0.8
+				if i == 0 {
+					hit.X = hit.X + step - hit.W
+				}
 			}
-			sel := r.Sel[i]
-			if sel {
-				cr.Y -= ch * 0.18
-			}
-			// cards slide in when dealt
-			if age := frame - dealAt; age < 20+i*3 {
-				t := math.Max(0, float64(age-i*3)) / 20
-				cr.Y += (1 - t) * (1 - t) * 50
+			if !isTouch && hit.Has(hoverX, hoverY) && !ptr.down {
+				hovered = i
 			}
 			if !busy && ptr.released && hit.Has(ptr.x, ptr.y) && hit.Has(ptr.startX, ptr.startY) {
 				ptr.consumed = true
 				r.Toggle(i)
 				if r.Sel[i] {
 					sfx("select")
+					kickCard(r.Hand[i], -4, 0, 0.08)
 				} else {
 					sfx("unselect")
 				}
 			}
-			c, fd := r.Deck[d], r.FaceDown[d]
-			ops = append(ops, func(dst *ebiten.Image) { drawCard(dst, c, cr.X, cr.Y, cw, ch, cardLook{faceDown: fd, selected: sel}) })
 		}
-		bw := math.Min(130, (mw-20)/3)
-		bx := mx + (mw-(bw*3+20))/2
-		if Button(Rect{bx, by, bw, bh}, "Play", styleGold, r.CanPlay() && !busy, icoPlay) {
-			if res := r.Play(); res != nil {
-				anim = &scoreAnim{res: res, start: frame}
-				sfx("play")
-				reportRun()
-				dealAt = frame
+		for i := 0; i < n; i++ {
+			d := r.Hand[i]
+			o := float64(i) - c0
+			tx := mx + (mw-cw*0.9)/2 + o*step
+			ty := hy + o*o*1.6
+			trot := o*0.045 + math.Sin(float64(frame)/55+float64(i)*1.3)*0.012
+			ty += math.Sin(float64(frame)/45+float64(i)*0.9) * 1.6
+			sc := 1.0
+			if r.Sel[i] {
+				ty -= ch * 0.22
 			}
+			if i == hovered {
+				ty -= 8
+				sc = 1.06
+			}
+			v := placeCard(d, tx, ty, trot, sc, deckX, deckY)
+			c, fd, sel := r.Deck[d], r.FaceDown[d], r.Sel[i]
+			vx, vy, vr, vs := v.x, v.y, v.rot, v.scale
+			ops = append(ops, func(dst *ebiten.Image) {
+				drawCardFX(dst, c, vx, vy, cw, ch, vr, vs, cardLook{faceDown: fd, selected: sel})
+			})
 		}
-		if Button(Rect{bx + bw + 10, by, bw, bh}, fmt.Sprintf("Discard"), styleSlate, r.CanDiscard() && !busy, nil) {
-			r.Discard()
-			sfx("discard")
-			dealAt = frame
+		bw := math.Min(140, (mw-cw-20)/3)
+		bx := mx + (mw-cw*0.9-(bw*3+20))/2
+		if Button(Rect{bx, by, bw, bh}, "Play hand", styleViolet, r.CanPlay() && !busy, nil) {
+			doPlay()
+		}
+		if Button(Rect{bx + bw + 10, by, bw, bh}, "Discard", styleRed, r.CanDiscard() && !busy, nil) {
+			doDiscard()
 		}
 		spLabel := "Special"
 		if r.SpecialLeft > 1 {
 			spLabel = fmt.Sprintf("Special x%d", r.SpecialLeft)
 		}
-		if Button(Rect{bx + 2*(bw+10), by, bw, bh}, spLabel, styleViolet, r.CanSpecial() && !busy, nil) {
-			if res := r.UseSpecial(); res != nil {
-				anim = &scoreAnim{res: res, start: frame}
-				sfx("special")
-				reportRun()
-				dealAt = frame
-			}
+		if Button(Rect{bx + 2*(bw+10), by, bw, bh}, spLabel, styleGold, r.CanSpecial() && !busy, nil) {
+			doSpecial()
 		}
 		if r.Plays == 0 && !r.Done && !busy {
-			Text("Out of plays: use your special, or", mx+mw/2, hy-24, 12, colMuted, text.AlignCenter)
-			if Button(Rect{mx + mw/2 - 60, hy - 12 - 52, 120, 30}, "Finish", styleSlate, true, nil) {
+			Text("Out of plays: use your special, or", mx+mw/2, top+40, 12, colMuted, text.AlignCenter)
+			if Button(Rect{mx + mw/2 - 60, top + 54, 120, 32}, "Finish", styleSlate, true, nil) {
 				r.Finish()
 				reportRun()
 			}
 		}
-		if !isTouch && !busy {
-			Text(hands[myRun.Special].name+": "+hands[myRun.Special].how, mx+mw/2, by+bh+6, 10, colMuted, text.AlignCenter)
-		}
 		if anim == nil && len(r.Selected()) == 0 && frame-dealAt > 40 {
-			hint := "Pick up to 5 cards, then Play. Discard swaps them for new ones."
+			hint := "Pick up to 5 cards, then Play hand. Discard swaps them for new ones."
 			if !isTouch {
 				hint = "Click up to 5 cards (or keys 1-8), then Play (Enter). D discards, S uses your special."
 			}
-			Text(hint, mx+mw/2, (top+hy)/2, 12, colMuted, text.AlignCenter)
+			Text(hint, mx+mw/2, top+(hy-ch/2-top)*0.45, 12, colMuted, text.AlignCenter)
 		}
 	} else if !animating() {
 		msg := "Round done. Waiting for the others..."
@@ -648,14 +705,110 @@ func playScreen(p *PlayerState) {
 	}
 	// the last hand, scoring
 	if anim != nil {
-		drawAnim(mx, top+6, mw, hy-top-30)
+		drawAnim(mx, top+6, mw-cw*0.5, hy-ch/2-top-20)
 		if ptr.released && !ptr.consumed && animating() {
 			anim.start = frame - animLen(anim.res) // tap to skip
 		}
 	}
 }
 
-// The scoring animation: the played cards light up one by one while the points add up
+var handCW, handCH = 70.0, 100.0
+
+// The hand's actions, shared by the buttons and the keys
+func doPlay() {
+	r := myRun
+	if r == nil || !r.CanPlay() || animating() {
+		return
+	}
+	var ids []int
+	for _, i := range r.Selected() {
+		ids = append(ids, r.Hand[i])
+	}
+	if res := r.Play(); res != nil {
+		startAnim(res, ids)
+		sfx("play")
+		reportRun()
+		dealAt = frame
+	}
+}
+
+func doDiscard() {
+	r := myRun
+	if r == nil || !r.CanDiscard() || animating() {
+		return
+	}
+	for _, i := range r.Selected() {
+		d := r.Hand[i]
+		flingCard(r.Deck[d], visCards[d], handCW, handCH, false)
+		delete(visCards, d)
+	}
+	r.Discard()
+	sfx("discard")
+	dealAt = frame
+}
+
+func doSpecial() {
+	r := myRun
+	if r == nil || !r.CanSpecial() || animating() {
+		return
+	}
+	before := append([]int{}, r.Hand...)
+	if res := r.UseSpecial(); res != nil {
+		still := map[int]bool{}
+		for _, d := range r.Hand {
+			still[d] = true
+		}
+		var ids []int
+		for _, d := range before {
+			if !still[d] && len(ids) < len(res.Cards) {
+				ids = append(ids, d)
+			}
+		}
+		startAnim(res, ids)
+		sfx("special")
+		bgHeat = 1
+		reportRun()
+		dealAt = frame
+	}
+}
+
+// The played cards leave the hand and become the animation's cards, starting where
+// they were
+func startAnim(res *ScoreResult, ids []int) {
+	if anim != nil {
+		endAnim()
+	}
+	anim = &scoreAnim{res: res, start: frame}
+	for i := range res.Cards {
+		vid := 1000 + anim.start%1000*8 + i
+		anim.vids = append(anim.vids, vid)
+		if i < len(ids) {
+			if v := visCards[ids[i]]; v != nil {
+				cp := *v
+				cp.seen = frame - 1
+				visCards[vid] = &cp
+			}
+			delete(visCards, ids[i])
+		}
+	}
+}
+
+// The scored cards are swept off the table
+func endAnim() {
+	if anim == nil || anim.flung {
+		return
+	}
+	anim.flung = true
+	for i, c := range anim.res.Cards {
+		if i < len(anim.vids) {
+			flingCard(c, visCards[anim.vids[i]], anim.cw, anim.ch, false)
+			delete(visCards, anim.vids[i])
+		}
+	}
+}
+
+// The scoring animation: the played cards fly to the middle and light up one by one
+// while the points add up, then they're swept away
 func drawAnim(x, y, w, h float64) {
 	a := anim
 	res := a.res
@@ -665,63 +818,89 @@ func drawAnim(x, y, w, h float64) {
 	if prefs.Fast {
 		speed = 7
 	}
+	if t > total+25 {
+		endAnim()
+	}
 	n := len(res.Cards)
-	ch := math.Min(h-50, 110)
+	ch := math.Min(h-46, handCH)
 	if ch < 40 {
 		return
 	}
 	cw := ch * 0.7
-	step := cw + 8
-	cx := x + (w-(step*float64(n-1)+cw))/2
+	a.cw, a.ch = cw, ch
+	step := cw + 10
+	cx0 := x + (w-(step*float64(n-1)+cw))/2 + cw/2
+	cy := y + 40 + ch/2
 	lit := min(len(res.Scoring), max(0, (t-10)/speed+1))
 	scoringSet := map[int]bool{}
 	for k := 0; k < lit; k++ {
 		scoringSet[res.Scoring[k]] = true
 	}
-	fade := 1.0
-	if t > total+60 {
-		fade = math.Max(0, 1-float64(t-total-60)/30)
-	}
-	if fade <= 0 {
-		return
-	}
-	for i, c := range res.Cards {
-		cc := c
-		ix := cx + float64(i)*step
-		iy := y + 34
-		if scoringSet[i] {
-			iy -= 6
-		}
-		in := false
-		for _, s := range res.Scoring {
-			in = in || s == i
-		}
-		look := cardLook{glowGold: scoringSet[i], dim: !in}
-		ops = append(ops, func(dst *ebiten.Image) { drawCard(dst, cc, ix, iy, cw, ch, look) })
-	}
-	if t%speed == 10%speed && t >= 10 && (t-10)/speed < len(res.Scoring) {
+	// a card lighting up this frame pops and shows its points
+	if t >= 10 && (t-10)%speed == 0 && (t-10)/speed < len(res.Scoring) {
+		k := (t - 10) / speed
+		i := res.Scoring[k]
 		sfx("tick")
+		if i < len(a.vids) {
+			kickCard(a.vids[i], -7, (rand.Float64()-0.5)*0.25, 0.3)
+		}
+		floatText(fmt.Sprintf("+%d", res.Cards[i].Value()), cx0+float64(i)*step, cy+ch/2+14, 15, rgb(0x6ac4ff))
 	}
 	if t == total-10 {
 		sfx("score")
+		shake = math.Min(7, 1.5+math.Log10(float64(max(1, res.Total)))*1.2)
+		bgHeat = math.Max(bgHeat, math.Min(1, float64(res.Total)/3000))
+	}
+	if !a.flung {
+		for i, c := range res.Cards {
+			in := false
+			for _, s := range res.Scoring {
+				in = in || s == i
+			}
+			ty := cy
+			if scoringSet[i] {
+				ty -= 8
+			}
+			trot := (float64(i) - float64(n-1)/2) * 0.03
+			v := placeCard(a.vids[i], cx0+float64(i)*step, ty, trot, 1, cx0, logicalH)
+			cc, vx, vy, vr, vs := c, v.x, v.y, v.rot, v.scale
+			look := cardLook{glowGold: scoringSet[i], dim: !in && t > 10}
+			ops = append(ops, func(dst *ebiten.Image) { drawCardFX(dst, cc, vx, vy, cw, ch, vr, vs, look) })
+		}
 	}
 	name := hands[res.Hand].name
 	if res.Special {
-		name = "SPECIAL: " + name
+		name = "Special: " + name
 	}
-	ShadowText(name, x+w/2-textWidth(name, 16, false)/2, y+12, 16, colT)
-	// points x mult = total
-	ty := y + 34 + ch + 22
-	var line string
-	if t < total-10 {
-		line = fmt.Sprintf("%d points  x  %.1f mult", res.Base, res.Mult)
-	} else {
-		line = fmt.Sprintf("%d x %.1f = %s", res.Base, res.Mult, commas(res.Total))
+	pop := 1 + 0.4*math.Exp(-float64(t)/6)
+	ops = append(ops, func(dst *ebiten.Image) {
+		drawText(dst, name, x+w/2, y+14, textOpt{size: 17 * pop, display: true, col: colT, align: text.AlignCenter, shadow: true})
+	})
+	if len(res.Notes) > 0 && t > 10 {
+		Text(strings.Join(res.Notes, "   "), x+w/2, cy+ch/2+16, 12, colL, text.AlignCenter)
 	}
-	Text(line, x+w/2, ty, 15, colInk, text.AlignCenter)
-	if len(res.Notes) > 0 {
-		Text(strings.Join(res.Notes, "   "), x+w/2, ty+20, 11, colL, text.AlignCenter)
+}
+
+// What the points and mult boxes show during the animation: the hand's base, then
+// each scoring card added as it lights, then the final numbers with charms
+func animNumbers() (base int, mult float64, done bool) {
+	a := anim
+	res := a.res
+	t := frame - a.start
+	total := animLen(res)
+	if t >= total-10 {
+		return res.Base, res.Mult, true
 	}
+	speed := 14
+	if prefs.Fast {
+		speed = 7
+	}
+	lit := min(len(res.Scoring), max(0, (t-10)/speed+1))
+	b, m := handLevel(res.Hand, myRun.Levels[res.Hand]+1)
+	for k := 0; k < lit; k++ {
+		b += res.Cards[res.Scoring[k]].Value()
+	}
+	return b, float64(m), false
 }
 
 // The charms you hold and the hexes you can cast
