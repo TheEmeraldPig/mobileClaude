@@ -27,8 +27,8 @@ var (
 	script    []scriptStep
 	shotPath  string
 	scriptTap struct {
-		on, down bool
-		x, y     float64
+		on, down, hold bool
+		x, y           float64
 	}
 )
 
@@ -47,8 +47,8 @@ func init() {
 }
 
 func runScript() {
-	// a scripted tap is down for one frame and up the next
-	if scriptTap.on {
+	// a scripted tap is down for one frame and up the next (unless held)
+	if scriptTap.on && !scriptTap.hold {
 		if scriptTap.down {
 			scriptTap.down = false
 		} else {
@@ -178,6 +178,20 @@ func runScript() {
 			scriptTap.x, _ = strconv.ParseFloat(xs, 64)
 			scriptTap.y, _ = strconv.ParseFloat(ys, 64)
 			scriptTap.on, scriptTap.down = true, true
+		case "press": // press=x:y and keep holding (move=x:y, release)
+			xs, ys, _ := strings.Cut(arg, ":")
+			scriptTap.x, _ = strconv.ParseFloat(xs, 64)
+			scriptTap.y, _ = strconv.ParseFloat(ys, 64)
+			scriptTap.on, scriptTap.down, scriptTap.hold = true, true, true
+		case "move":
+			xs, ys, _ := strings.Cut(arg, ":")
+			scriptTap.x, _ = strconv.ParseFloat(xs, 64)
+			scriptTap.y, _ = strconv.ParseFloat(ys, 64)
+		case "release":
+			scriptTap.down, scriptTap.hold = false, false
+		case "handy": // the Handy settings tab
+			settingsFrom, settingsTab = cur, 1
+			openScreen(scSettings)
 		case "state":
 			if view != nil {
 				p := me()

@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -65,12 +66,15 @@ func (g *Game) Update() error {
 	case scMain:
 		mainMenu()
 	case scSettings:
+		if settingsFrom == scTable {
+			behind(tableScreen)
+		}
 		settingsMenu()
 	case scJoin:
 		joinMenu()
 	case scHelp:
 		if helpFrom == scTable {
-			tableScreen()
+			behind(tableScreen)
 		}
 		helpMenu()
 	case scTable:
@@ -89,24 +93,89 @@ func (g *Game) Update() error {
 
 // Keyboard shortcuts at the table: Enter plays, D discards, S uses the special,
 // 1-8 pick cards
+// Keyboard and mouse shortcuts at the table (the Handy controls; listed in Settings)
 func tableKeys() {
-	if view == nil || view.Phase != "play" || myRun == nil || myRun.Done || animating() || ov != ovNone {
+	if view == nil || ov != ovNone {
+		return
+	}
+	p := me()
+	if p == nil {
+		return
+	}
+	just := inpututil.IsKeyJustPressed
+	// any time in a match
+	switch {
+	case just(ebiten.KeyTab) && myRun != nil:
+		ov = ovDeck
+	case just(ebiten.KeyH) && len(p.Hexes) > 0 && view.Mode != ModeCoop:
+		ov = ovHexes
+	case just(ebiten.KeyF):
+		cycleSpeed()
+	}
+	shopping := view.Phase == "shop" || (view.Mode == ModeRace && p.Stage == "shop" && view.Phase == "play")
+	if shopping && !p.Out {
+		items := len(view.Auction)
+		if view.Mode == ModeRace {
+			items = len(p.Shop)
+		}
+		for i := 0; i < items && i < 9; i++ {
+			if just(ebiten.Key1 + ebiten.Key(i)) {
+				if view.Mode == ModeRace {
+					act(action{T: "rbuy", Item: i})
+					sfx("coin")
+				} else {
+					act(action{T: "bid", Item: i})
+					sfx("bid")
+				}
+			}
+		}
+		switch {
+		case just(ebiten.KeyQ):
+			ov = ovTomes
+		case just(ebiten.KeyW):
+			ov = ovTrade
+		case just(ebiten.KeyEnter) || just(ebiten.KeySpace):
+			if view.Mode == ModeRace {
+				act(action{T: "rcont"})
+			} else if p.Ready {
+				act(action{T: "unready"})
+			} else {
+				act(action{T: "ready"})
+			}
+		}
+		return
+	}
+	if view.Phase != "play" || myRun == nil || myRun.Done || animating() {
 		return
 	}
 	for i := 0; i < 9; i++ {
-		if inpututil.IsKeyJustPressed(ebiten.Key1 + ebiten.Key(i)) {
+		if just(ebiten.Key1 + ebiten.Key(i)) {
 			myRun.Toggle(i)
 			sfx("select")
 		}
 	}
 	switch {
-	case inpututil.IsKeyJustPressed(ebiten.KeyEnter):
+	case just(ebiten.KeyEnter) || just(ebiten.KeySpace):
 		doPlay()
-	case inpututil.IsKeyJustPressed(ebiten.KeyD):
+	case just(ebiten.KeyD):
 		doDiscard()
-	case inpututil.IsKeyJustPressed(ebiten.KeyS):
+	case just(ebiten.KeyS):
 		doSpecial()
+	case just(ebiten.KeyR):
+		sortHand(false)
+	case just(ebiten.KeyT):
+		sortHand(true)
+	case just(ebiten.KeyC) || (!isTouch && inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight)):
+		deselectAll()
+		sfx("unselect")
 	}
+}
+
+// Game speed: 1x, 2x, 4x
+func cycleSpeed() {
+	prefs.Speed = map[int]int{1: 2, 2: 4, 4: 1}[prefs.Speed]
+	savePrefs()
+	toast(fmt.Sprintf("Game speed x%d", prefs.Speed))
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
@@ -143,6 +212,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 var shakeBuf *ebiten.Image
+
+// behind draws a screen under a menu without letting it react to the pointer
+func behind(f func()) {
+	saved, hx, hy := ptr, hoverX, hoverY
+	ptr, hoverX, hoverY = uiPointer{}, -1000, -1000
+	f()
+	ptr, hoverX, hoverY = saved, hx, hy
+}
 
 func (g *Game) Layout(outW, outH int) (int, int) {
 	s := ebiten.Monitor().DeviceScaleFactor()

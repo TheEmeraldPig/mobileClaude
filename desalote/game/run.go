@@ -51,6 +51,7 @@ type Run struct {
 	Target           int64 // 0: a showdown, play every hand
 	Done             bool
 	Last             *ScoreResult
+	SortSuit         bool // keep the hand sorted by suit (then rank) instead of by rank
 
 	rng *rand.Rand
 }
@@ -159,8 +160,12 @@ func (r *Run) sortHand() {
 		}
 	}
 	h := r.Hand
+	less := cardLess
+	if r.SortSuit {
+		less = suitLess
+	}
 	for i := 1; i < len(h); i++ {
-		for j := i; j > 0 && cardLess(r.Deck[h[j-1]], r.Deck[h[j]]); j-- {
+		for j := i; j > 0 && less(r.Deck[h[j-1]], r.Deck[h[j]]); j-- {
 			h[j], h[j-1] = h[j-1], h[j]
 		}
 	}
@@ -168,6 +173,19 @@ func (r *Run) sortHand() {
 	for i, d := range h {
 		r.Sel[i] = sel[d]
 	}
+}
+
+// Sort the hand by suit or by rank, keeping what's picked
+func (r *Run) SortBy(suit bool) {
+	r.SortSuit = suit
+	r.sortHand()
+}
+
+func suitLess(a, b Card) bool {
+	if a.S != b.S {
+		return a.S > b.S
+	}
+	return a.R < b.R
 }
 
 func cardLess(a, b Card) bool {

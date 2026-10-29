@@ -48,6 +48,17 @@ This repository also releases Mote, and Mote's updaters install the repository's
 - **Hexes:** cast on a rival to curse their next round: Fog, Rust, Squeeze, Muddle, Jinx, Freeze, Shackle, or Pickpocket (which happens straight away). A Mirror Ward bounces one back, and a Thorn Ward makes the caster pay.
 - There are 28 **charms** (`charms` in `game/charms.go`). Many play off this game's own systems: your family, synergy, special hands, lives, hexes and the other players.
 
+### Handy controls
+Quicker ways to play, after the Balatro mod Handy. Each can be switched off in Settings > Handy controls (`handySettings` in `game/menus.go`, keys in `tableKeys` in `game/game.go`):
+- **Sweep to pick:** press a card and drag across the others to pick (or drop) them all; works on touch screens. On a computer, Shift + pointing picks cards, and right-click (or C) drops them all.
+- **Sorting:** by rank or by suit (the Sort button, R and T); remembered.
+- **Game speed** x1, x2 or x4 (F), or **instant scoring**.
+- **Quick actions:** Ctrl+click a charm to sell it, or a shop item to bid on (or buy) it.
+- **Keys:** Enter/Space play, D discard, S special, 1-8 pick cards, Tab your deck, H hexes; in the shop 1-4 bid or buy, Q tomes, W trade, Enter done.
+
+### Layout
+The table is kept open: the players are pills along the top (tap one for details), the score card sits at the top left, your charms are coins at the top right (tap for details and selling), and hexes, tomes, trading and your deck (tap the deck pile) open as menus (`game/layout.go`).
+
 ## Playing together
 
 - **Same Wi-Fi or hotspot:** Host a table. Friends pick Join a table and see it listed, or type the host's address. No server is needed: the host's game runs the message hub (`relaycore`) and announces the table on UDP port 47479. The hub listens on 47480 and up, different ports from Mote's so the two games never list each other.

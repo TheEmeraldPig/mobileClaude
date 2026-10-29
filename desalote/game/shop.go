@@ -14,85 +14,101 @@ import (
 //   - Trade: sell charms to the bank, list them for other players, buy theirs
 
 func shopScreen(p *PlayerState) {
-	top := topStrip(8) + 8
-	rw := math.Min(180, logicalW*0.19)
-	right := Rect{logicalW - rw - 8, top, rw, logicalH - top - 8}
-	charmPanel(right, p)
-	main := Rect{8, top, right.X - 16, logicalH - top - 8}
-	Panel(main)
-	x, y := main.X+12, main.Y+14
+	top := playerPills(8) + 10
+	charmRow(p, top)
 	race := view.Mode == ModeRace
-	// what's next
+	// what's next, and the clock
 	var next string
 	if race {
 		next = fmt.Sprintf("Next: ante %d, %s (%s)", p.Ante+1, blindNames[p.Blind], commas(view.targetFor(p.Ante, p.Blind)))
 	} else {
 		next = fmt.Sprintf("Next: ante %d, %s", view.Ante+1, blindNames[view.Blind])
 		if view.isShowdown(view.Blind) {
-			next += " - a SHOWDOWN"
+			next += " - a showdown"
 		} else {
 			next += " (" + commas(view.targetFor(view.Ante, view.Blind)) + ")"
 		}
 	}
-	Label("SHOP", x, y)
-	Text(next, x+60, y, 12, colMuted, text.AlignStart)
+	title := "SHOP"
 	if !race {
-		Text(fmt.Sprintf("%ds", view.Secs), main.X+main.W-12, y, 14, colT, text.AlignEnd)
+		title = fmt.Sprintf("AUCTION  %ds", view.Secs)
 	}
-	y += 18
-	tabs := []string{"Auction", "Tomes", "Trade"}
+	ops = append(ops, func(dst *ebiten.Image) {
+		drawText(dst, title, 14, top+12, textOpt{size: 16, display: true, col: colT, shadow: true})
+		drawText(dst, next, 14, top+32, textOpt{size: 12, col: colMuted})
+	})
+	// the items, spread over the table
+	bh := 40.0
+	by := logicalH - bh - 12
+	area := Rect{14, top + 50, logicalW - 28, by - 14 - (top + 50)}
 	if race {
-		tabs[0] = "Buy"
+		raceShop(p, area)
+	} else {
+		auction(p, area)
 	}
-	if c := seg(x, y, tabs, shopTab); c >= 0 {
-		shopTab = c
-	}
-	y += 42
-	area := Rect{x, y, main.W - 24, main.Y + main.H - 56 - y}
-	switch shopTab {
-	case 0:
-		if race {
-			raceShop(p, area)
-		} else {
-			auction(p, area)
-		}
-	case 1:
-		tomes(p, area)
-	case 2:
-		trade(p, area)
-	}
-	// money and done
+	// along the bottom: money, the other menus, done
 	free := p.Money
 	if !race {
 		free -= view.committed(p.ID, -1)
 	}
-	Text(fmt.Sprintf("$%d", p.Money), x, main.Y+main.H-30, 18, colT, text.AlignStart)
+	moneyS := fmt.Sprintf("$%d", p.Money)
+	ops = append(ops, func(dst *ebiten.Image) {
+		drawText(dst, moneyS, 16, by+bh/2-2, textOpt{size: 22, display: true, col: colT, shadow: true})
+	})
 	if free != p.Money {
-		Text(fmt.Sprintf("($%d free, the rest is in your bids)", free), x+50, main.Y+main.H-30, 11, colMuted, text.AlignStart)
+		Text(fmt.Sprintf("$%d free", free), 18, by-8, 11, colMuted, text.AlignStart)
 	}
-	bw := 150.0
-	br := Rect{main.X + main.W - bw - 12, main.Y + main.H - 48, bw, 36}
+	bw := math.Min(130, (logicalW-100-40)/4)
+	x := 100.0
+	if Button(Rect{x, by, bw, bh}, "Tomes", styleSlate, !p.Out, nil) {
+		ov = ovTomes
+	}
+	x += bw + 10
+	label := "Trade"
+	if n := otherListings(); n > 0 {
+		label = fmt.Sprintf("Trade (%d)", n)
+	}
+	if Button(Rect{x, by, bw, bh}, label, styleSlate, !p.Out, nil) {
+		ov = ovTrade
+	}
+	x += bw + 10
+	if len(p.Hexes) > 0 && view.Mode != ModeCoop && Button(Rect{x, by, bw, bh}, fmt.Sprintf("Hexes (%d)", len(p.Hexes)), styleViolet, !p.Out, nil) {
+		ov = ovHexes
+	}
+	dw := math.Min(170, bw+40)
+	br := Rect{logicalW - dw - 12, by, dw, bh}
 	switch {
 	case p.Out:
 		Text("You're out", br.X+br.W/2, br.Y+18, 13, colMuted, text.AlignCenter)
 	case race:
-		if Button(br, "Next round", styleGold, true, icoPlay) {
+		if Button(br, "Next round", styleGold, true, nil) {
 			act(action{T: "rcont"})
 		}
 	case p.Ready:
-		if Button(br, "Waiting... (undo)", styleSlate, true, nil) {
+		if Button(br, "Waiting (undo)", styleSlate, true, nil) {
 			act(action{T: "unready"})
 		}
 	default:
-		if Button(br, "Done shopping", styleGold, true, icoPlay) {
+		if Button(br, "Done shopping", styleGold, true, nil) {
 			act(action{T: "ready"})
 		}
 	}
 }
 
+// Charms other players have put up for sale
+func otherListings() int {
+	n := 0
+	for _, l := range view.Market {
+		if l.Seller != myID {
+			n++
+		}
+	}
+	return n
+}
+
 // One shop item box: art, name, description
 func itemBox(r Rect, kind, id string) {
-	Inset(r, colSlateLo)
+	Panel(r)
 	art := math.Min(72, r.H*0.3)
 	ax, ay := r.X+(r.W-art)/2, r.Y+8
 	name, desc := "", ""
@@ -122,11 +138,14 @@ func auction(p *PlayerState, area Rect) {
 	if n == 0 {
 		return
 	}
-	gap := 8.0
-	w := (area.W - gap*float64(n-1)) / float64(n)
-	area.H = math.Min(area.H, 270)
+	area, w, gap := spreadItems(area, n, 280)
 	for i, it := range view.Auction {
 		r := Rect{area.X + float64(i)*(w+gap), area.Y, w, area.H}
+		if quickMod() && ptr.released && !ptr.consumed && r.Has(ptr.x, ptr.y) {
+			ptr.consumed = true // Ctrl+click: bid straight away
+			act(action{T: "bid", Item: i})
+			sfx("bid")
+		}
 		itemBox(Rect{r.X, r.Y, r.W, r.H - 70}, it.Kind, it.ID)
 		ly := r.Y + r.H - 62
 		switch {
@@ -155,13 +174,25 @@ func auction(p *PlayerState, area Rect) {
 	}
 }
 
+// Lay n shop items out across the table, card-sized and centred
+func spreadItems(area Rect, n int, maxH float64) (Rect, float64, float64) {
+	gap := 16.0
+	w := math.Min(200, (area.W-gap*float64(n-1))/float64(n))
+	h := math.Min(area.H, maxH)
+	total := w*float64(n) + gap*float64(n-1)
+	return Rect{area.X + (area.W-total)/2, area.Y + (area.H-h)/2, total, h}, w, gap
+}
+
 func raceShop(p *PlayerState, area Rect) {
 	n := len(p.Shop)
-	gap := 8.0
-	w := (area.W - gap*float64(n-1)) / float64(n)
-	area.H = math.Min(area.H, 260)
+	area, w, gap := spreadItems(area, n, 270)
 	for i, it := range p.Shop {
 		r := Rect{area.X + float64(i)*(w+gap), area.Y, w, area.H}
+		if quickMod() && ptr.released && !ptr.consumed && r.Has(ptr.x, ptr.y) {
+			ptr.consumed = true // Ctrl+click: buy straight away
+			act(action{T: "rbuy", Item: i})
+			sfx("coin")
+		}
 		itemBox(Rect{r.X, r.Y, r.W, r.H - 50}, it.Kind, it.ID)
 		label := fmt.Sprintf("Buy $%d", it.Price)
 		if it.Sold {
@@ -176,8 +207,7 @@ func raceShop(p *PlayerState, area Rect) {
 }
 
 func tomes(p *PlayerState, area Rect) {
-	wrapText("A tome levels up one of your picked hands for the rest of the match (once per hand each shop).", area.X, area.Y+6, area.W, 12, colMuted, text.AlignStart)
-	y := area.Y + 30
+	y := wrapText("A tome levels up one of your picked hands for the rest of the match (once per hand each shop).", area.X, area.Y+6, area.W, 12, colMuted, text.AlignStart) + 4
 	free := p.Money
 	if view.Mode != ModeRace {
 		free -= view.committed(p.ID, -1)

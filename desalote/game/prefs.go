@@ -18,15 +18,23 @@ type Prefs struct {
 	UISize   int    `json:"uiSize"` // 0 small .. 3 largest, 1 normal
 	Name     string `json:"name"`   // your name at the table
 	PlayerID string `json:"playerID"`
-	Relay    string `json:"relay"` // online server, if not the built-in one
-	Fast     bool   `json:"fastAnim"`
+	Relay    string `json:"relay"`    // online server, if not the built-in one
+	Fast     bool   `json:"fastAnim"` // old setting, now Speed 2
+	// Handy controls (after the Balatro mod of that name)
+	Speed       int  `json:"speed"`       // game speed for animations: 1, 2 or 4
+	SkipAnim    bool `json:"skipAnim"`    // score hands instantly
+	DragSelect  bool `json:"dragSelect"`  // hold and sweep across cards to pick them
+	HoverSelect bool `json:"hoverSelect"` // hold Shift and point at cards to pick them
+	QuickAct    bool `json:"quickAct"`    // Ctrl+click sells a charm or bids at once
+	SortSuit    bool `json:"sortSuit"`    // hand sorted by suit instead of rank
 	// the last match settings you hosted
 	Mode   int `json:"mode"`
 	Length int `json:"length"`
 	Lives  int `json:"lives"`
 }
 
-var prefs = Prefs{SfxVol: 4, MusicVol: 3, Full: true, UISize: 1, Mode: ModeLastStanding, Length: 1, Lives: 3}
+var prefs = Prefs{SfxVol: 4, MusicVol: 3, Full: true, UISize: 1, Mode: ModeLastStanding, Length: 1, Lives: 3,
+	Speed: 1, DragSelect: true, HoverSelect: true, QuickAct: true}
 
 // DataDir can be set before the game starts (the Android wrapper does this).
 var DataDir string
@@ -54,6 +62,12 @@ func loadPrefs() {
 	prefs.Mode = clampInt(prefs.Mode, 0, numModes-1)
 	prefs.Length = clampInt(prefs.Length, 0, len(lengthAntes)-1)
 	prefs.Lives = clampInt(prefs.Lives, 1, 5)
+	if prefs.Fast {
+		prefs.Speed, prefs.Fast = 2, false
+	}
+	if prefs.Speed != 2 && prefs.Speed != 4 {
+		prefs.Speed = 1
+	}
 	if prefs.PlayerID == "" {
 		b := make([]byte, 8)
 		rand.Read(b)

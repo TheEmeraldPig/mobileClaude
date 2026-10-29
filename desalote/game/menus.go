@@ -424,13 +424,23 @@ func typeKeys() {
 
 // ---- Settings ----
 
+var settingsTab int
+
 func settingsMenu() {
-	r := sheet(640, 400)
+	r := sheet(680, 420)
 	if back, cl := head(r, "SETTINGS", true); back || cl {
 		openScreen(settingsFrom)
 		return
 	}
-	x, y := r.X+18, r.Y+70
+	x, y := r.X+18, r.Y+60
+	if c := seg(x, y, []string{"General", "Handy controls"}, settingsTab); c >= 0 {
+		settingsTab = c
+	}
+	y += 52
+	if settingsTab == 1 {
+		handySettings(r, x, y)
+		return
+	}
 	lvls := []string{"Off", "1", "2", "3", "4", "5"}
 	Label("MUSIC VOLUME", x, y)
 	if c := seg(x, y+14, lvls, prefs.MusicVol); c >= 0 {
@@ -438,7 +448,7 @@ func settingsMenu() {
 		setVolumes()
 		savePrefs()
 	}
-	y += 64
+	y += 62
 	Label("SOUND EFFECTS VOLUME", x, y)
 	if c := seg(x, y+14, lvls, prefs.SfxVol); c >= 0 {
 		prefs.SfxVol = c
@@ -446,33 +456,68 @@ func settingsMenu() {
 		savePrefs()
 		sfx("coin")
 	}
-	y += 64
+	y += 62
 	Label("INTERFACE SIZE", x, y)
 	if c := seg(x, y+14, []string{"Small", "Normal", "Large", "Larger"}, prefs.UISize); c >= 0 {
 		prefs.UISize = c
 		savePrefs()
 	}
-	y += 64
-	Label("SCORING ANIMATION", x, y)
-	if c := seg(x, y+14, []string{"Normal", "Fast"}, b2i(prefs.Fast)); c >= 0 {
-		prefs.Fast = c == 1
-		savePrefs()
-	}
 	if !isTouch {
-		Label("FULL SCREEN", x+260, y)
-		if c := seg(x+260, y+14, []string{"On", "Off"}, b2i(!prefs.Full)); c >= 0 {
+		Label("FULL SCREEN", x+360, y)
+		if c := seg(x+360, y+14, []string{"On", "Off"}, b2i(!prefs.Full)); c >= 0 {
 			prefs.Full = c == 0
 			ebiten.SetFullscreen(prefs.Full)
 			savePrefs()
 		}
 	}
-	y += 64
+	y += 62
 	if settingsFrom == scMain {
 		nameField(x, y+8, r.W-36)
 		if !isTouch {
 			typeKeys()
 		}
 	}
+}
+
+// The Handy controls (after the Balatro mod): each can be switched off
+func handySettings(r Rect, x, y float64) {
+	onOff := []string{"On", "Off"}
+	Label("GAME SPEED", x, y)
+	if c := seg(x, y+14, []string{"x1", "x2", "x4"}, map[int]int{1: 0, 2: 1, 4: 2}[prefs.Speed]); c >= 0 {
+		prefs.Speed = []int{1, 2, 4}[c]
+		savePrefs()
+	}
+	Label("SCORING", x+250, y)
+	if c := seg(x+250, y+14, []string{"Animated", "Instant"}, b2i(prefs.SkipAnim)); c >= 0 {
+		prefs.SkipAnim = c == 1
+		savePrefs()
+	}
+	y += 62
+	Label("HOLD AND SWEEP TO PICK CARDS", x, y)
+	if c := seg(x, y+14, onOff, b2i(!prefs.DragSelect)); c >= 0 {
+		prefs.DragSelect = c == 0
+		savePrefs()
+	}
+	if !isTouch {
+		Label("SHIFT + POINT TO PICK", x+250, y)
+		if c := seg(x+250, y+14, onOff, b2i(!prefs.HoverSelect)); c >= 0 {
+			prefs.HoverSelect = c == 0
+			savePrefs()
+		}
+		Label("CTRL+CLICK SELL / BID", x+450, y)
+		if c := seg(x+450, y+14, onOff, b2i(!prefs.QuickAct)); c >= 0 {
+			prefs.QuickAct = c == 0
+			savePrefs()
+		}
+	}
+	y += 62
+	keys := "Tap a card and sweep across others to pick or drop them all. Tap the deck to see your cards."
+	if !isTouch {
+		keys = "Play: Enter or Space   Discard: D   Special: S   Pick cards: 1-8   Drop all: C or right-click\n" +
+			"Sort by rank: R   by suit: T   Your deck: Tab   Hexes: H   Game speed: F\n" +
+			"Shop: bid or buy 1-4   Tomes: Q   Trade: W   Done: Enter   Ctrl+click a charm to sell it"
+	}
+	wrapText(keys, x, y, r.W-36, 12, colMuted, text.AlignStart)
 }
 
 // ---- How to play ----
@@ -498,6 +543,11 @@ var helpPages = []struct{ title, body string }{
 		"Tomes level up one of your picked hands, at a set price.\n" +
 		"Market: sell a charm back for half its price, or list it for other players to buy at the price you set.\n" +
 		"Hexes: cast one on a rival to curse their next round (Fog, Rust, Squeeze and more). A Mirror Ward bounces one back."},
+	{"HANDY CONTROLS", "Quicker ways to play, after the Handy mod (switch each one in Settings > Handy controls):\n" +
+		"Press a card and sweep across the others to pick or drop them all at once. On a computer, hold Shift and point at cards to pick them, and right-click to drop them all.\n" +
+		"Sort your hand by rank or by suit. Game speed x1, x2 or x4 (F), or score hands instantly.\n" +
+		"Ctrl+click a charm to sell it, or a shop item to bid on it.\n" +
+		"Keys: Enter or Space plays, D discards, S special, 1-8 pick cards, R and T sort, Tab your deck, H hexes. In the shop: 1-4 bid, Q tomes, W trade, Enter done."},
 }
 
 func helpMenu() {
@@ -510,7 +560,7 @@ func helpMenu() {
 	}
 	x := r.X + 18
 	y := r.Y + 62
-	if c := seg(x, y, []string{"1", "2", "3", "4", "5", "6"}, helpPage); c >= 0 {
+	if c := seg(x, y, []string{"1", "2", "3", "4", "5", "6", "7"}, helpPage); c >= 0 {
 		helpPage = c
 	}
 	pg := helpPages[helpPage]

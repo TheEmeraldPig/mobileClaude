@@ -148,6 +148,7 @@ func clientUpdate() {
 	}
 	if p.Seed != 0 && (myRun == nil || mySeed != p.Seed) {
 		myRun = NewRun(p.Seed, p.Family, p.Special)
+		myRun.SortSuit = prefs.SortSuit
 		mySeed, myRnd = p.Seed, 0
 		draftPicks = nil
 	}
