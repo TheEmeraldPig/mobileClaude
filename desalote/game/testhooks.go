@@ -91,20 +91,8 @@ func runScript() {
 			if host != nil && host.canStart() {
 				host.start()
 			}
-		case "autopick": // pick the first three offered hands that are allowed
-			if p := me(); p != nil {
-				for a := 0; a < 5; a++ {
-					for b := a + 1; b < 5; b++ {
-						for c := b + 1; c < 5; c++ {
-							pk := []HandType{p.Offer[a], p.Offer[b], p.Offer[c]}
-							if validPicks(p, pk) && p.Picks == nil {
-								act(action{T: "pick", Picks: pk})
-								p.Picks = pk
-							}
-						}
-					}
-				}
-			}
+		case "autopick": // ready after the deal
+			act(action{T: "dealt"})
 		case "select": // select=0:2:3 cards in my hand
 			if myRun != nil {
 				for i := range myRun.Sel {

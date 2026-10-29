@@ -38,7 +38,6 @@ func testMatch(mode int) *Match {
 	m.addPlayer(2, "c", false)
 	m.start()
 	for _, p := range m.Players {
-		p.Picks = p.Offer[:3]
 		p.Ready = true
 	}
 	return m

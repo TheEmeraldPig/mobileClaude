@@ -145,7 +145,7 @@ func TestSpecialHandsScoreAsTheirHand(t *testing.T) {
 			}
 		}
 		if sp == StraightFlush {
-			if _, ok := detect(Straight, res.Cards, handRules{straight: 5}); !ok {
+			if _, ok := detect(Straight, res.Cards, handRules{straight: len(res.Cards)}); !ok {
 				t.Fatalf("not a straight: %v", res.Cards)
 			}
 		}
@@ -153,7 +153,7 @@ func TestSpecialHandsScoreAsTheirHand(t *testing.T) {
 		for _, c := range r.Deck {
 			after += c.Bonus
 		}
-		if after-before != 5*specialBuff {
+		if after-before != len(res.Cards)*specialBuff || len(res.Cards) != baseHandSize {
 			t.Fatalf("%s: buff %d", hands[sp].name, after-before)
 		}
 		if r.Plays != basePlays {

@@ -10,9 +10,9 @@ import (
 // only scores and choices travel over the network.
 
 const (
-	baseHandSize = 7
-	basePlays    = 4
-	baseDiscards = 3
+	baseHandSize = 3 // charms raise these
+	basePlays    = 1
+	baseDiscards = 1
 	specialBuff  = 3 // permanent points a card gets each time a special hand uses it
 )
 
@@ -52,6 +52,7 @@ type Run struct {
 	Done             bool
 	Last             *ScoreResult
 	SortSuit         bool // keep the hand sorted by suit (then rank) instead of by rank
+	startDiscards    int
 
 	rng *rand.Rand
 }
@@ -104,6 +105,7 @@ func (r *Run) Known() []HandType {
 func (r *Run) StartRound(target int64) {
 	r.Target, r.Score, r.Done, r.PlayNo, r.Last = target, 0, false, 0, nil
 	r.HandSize, r.Plays, r.Discards, r.SpecialLeft = baseHandSize, basePlays, baseDiscards, 1
+	defer func() { r.startDiscards = r.Discards }()
 	for _, id := range r.Charms {
 		if c := charms[id]; c != nil && r.has(id) {
 			r.HandSize += c.handSize
@@ -118,7 +120,7 @@ func (r *Run) StartRound(target int64) {
 		r.HandSize--
 	}
 	if r.hexed("shackle") {
-		r.Plays = max(1, r.Plays-1)
+		r.Discards = max(0, r.Discards-1)
 	}
 	if r.hexed("jinx") {
 		r.SpecialLeft = 0
@@ -127,7 +129,7 @@ func (r *Run) StartRound(target int64) {
 	r.FaceDown = map[int]bool{}
 	r.draw()
 	if r.hexed("fog") {
-		for i := 0; i < 3 && i < len(r.Hand); i++ {
+		for i := 0; i < 2 && i < len(r.Hand); i++ {
 			r.FaceDown[r.Hand[i]] = true
 		}
 	}
@@ -234,7 +236,7 @@ func (r *Run) Preview() (HandType, bool) {
 
 func (r *Run) CanPlay() bool    { return !r.Done && r.Plays > 0 && len(r.Selected()) > 0 }
 func (r *Run) CanDiscard() bool { return !r.Done && r.Discards > 0 && len(r.Selected()) > 0 }
-func (r *Run) CanSpecial() bool { return !r.Done && r.SpecialLeft > 0 && len(r.Hand) >= 5 }
+func (r *Run) CanSpecial() bool { return !r.Done && r.SpecialLeft > 0 && len(r.Hand) >= 2 }
 
 // Play the selected cards
 func (r *Run) Play() *ScoreResult {
@@ -274,7 +276,7 @@ func (r *Run) removeSelected() {
 	r.Sel = make([]bool, len(keep))
 }
 
-// Special: five cards from the hand, chosen by the game, briefly become the special hand
+// Special: the cards in the hand (up to five), chosen by the game, briefly become the special hand
 // and score it. It doesn't use a play. Afterwards they go back to normal, a little
 // stronger for good.
 func (r *Run) UseSpecial() *ScoreResult {
@@ -282,13 +284,13 @@ func (r *Run) UseSpecial() *ScoreResult {
 		return nil
 	}
 	r.SpecialLeft--
-	pick := r.rng.Perm(len(r.Hand))[:5]
+	pick := r.rng.Perm(len(r.Hand))[:min(5, len(r.Hand))]
 	var cs []Card
 	for _, i := range pick {
 		cs = append(cs, r.Deck[r.Hand[i]])
 	}
 	changed := r.transform(cs)
-	res := r.score(r.Special, changed, allIdx(5), true)
+	res := r.score(r.Special, changed, allIdx(len(changed)), true)
 	buff := specialBuff
 	if r.has("afterglow") {
 		buff *= 2
@@ -390,7 +392,8 @@ func (r *Run) Finish() { r.Done = true }
 func (r *Run) score(h HandType, cs []Card, scoring []int, special bool) *ScoreResult {
 	base, mult := handLevel(h, r.Levels[h]+1)
 	c := &scoreCtx{run: r, hand: h, cards: cs, scoring: scoring, mult: float64(mult), xmult: 1,
-		special: special, firstPlay: r.PlayNo <= 1 && !special, lastPlay: r.Plays == 0 && !special}
+		special: special, firstPlay: r.PlayNo <= 1 && !special, lastPlay: r.Plays == 0 && !special,
+		usedDiscard: r.Discards < r.startDiscards}
 	c.base = float64(base)
 	for k, i := range scoring {
 		v := cs[i].Value()
@@ -490,7 +493,7 @@ func (r *Run) botTurn() *ScoreResult {
 	for i := range r.Sel {
 		r.Sel[i] = false
 	}
-	if bestH <= Pair && r.Discards > 0 && r.Plays > 1 {
+	if bestH == HighCard && r.Discards > 0 {
 		// throw away the cards that aren't helping
 		k := 0
 		keep := map[int]bool{}

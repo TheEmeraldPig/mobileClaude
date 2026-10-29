@@ -11,16 +11,17 @@ import (
 const maxCharms = 5
 
 type scoreCtx struct {
-	run        *Run
-	hand       HandType
-	cards      []Card // the played cards (after a special hand's change)
-	scoring    []int
-	base, mult float64
-	xmult      float64
-	special    bool
-	firstPlay  bool
-	lastPlay   bool
-	notes      []string
+	run         *Run
+	hand        HandType
+	cards       []Card // the played cards (after a special hand's change)
+	scoring     []int
+	base, mult  float64
+	xmult       float64
+	special     bool
+	firstPlay   bool
+	lastPlay    bool
+	usedDiscard bool
+	notes       []string
 }
 
 func (c *scoreCtx) note(f string, a ...any) { c.notes = append(c.notes, fmt.Sprintf(f, a...)) }
@@ -89,8 +90,12 @@ var charms = map[string]*charmDef{
 		art: [3]uint32{0xd9b25a, 0xfff0b4, 0x8c6a1e}},
 	"sieve": {name: "Sieve", desc: "+2 discards each round", price: 4, discards: 2,
 		art: [3]uint32{0x7ab4e0, 0xc8e6ff, 0x3a6a96}},
-	"widegrip": {name: "Wide Grip", desc: "+1 card in your hand", price: 6, rarity: 1, handSize: 1,
+	"widegrip": {name: "Wide Grip", desc: "+1 card in your hand", price: 5, handSize: 1,
 		art: [3]uint32{0xb48cf0, 0xe2d2ff, 0x6a46aa}},
+	"satchel": {name: "Satchel", desc: "+2 cards in your hand", price: 9, rarity: 2, handSize: 2,
+		art: [3]uint32{0x9a6a3a, 0xe0b88a, 0x5a3a1a}},
+	"sleeve": {name: "Card Sleeve", desc: "+1 card in your hand and +1 discard", price: 7, rarity: 1, handSize: 1, discards: 1,
+		art: [3]uint32{0x5a8ae0, 0xb0d0ff, 0x2a4a8a}},
 	"tally": {name: "Tally Stone", desc: "+2 points for every hand you've played this match", price: 5,
 		score: func(c *scoreCtx) { c.base += float64(2 * c.run.HandsPlayed) },
 		art:   [3]uint32{0xa0a0a0, 0xe6e6e6, 0x5a5a5a}},
@@ -113,9 +118,9 @@ var charms = map[string]*charmDef{
 		art: [3]uint32{0xd6a05a, 0xffdca8, 0x8a5a1e}},
 	"purse": {name: "Coin Purse", desc: "+$2 at the end of each round", price: 4, roundEnd: 2,
 		art: [3]uint32{0xc9a050, 0xffe6a0, 0x7a5a1e}},
-	"lastgasp": {name: "Last Gasp", desc: "x2 Mult on your last play of a round", price: 6, rarity: 1,
+	"lastgasp": {name: "Last Gasp", desc: "x2 Mult on a play after you've used all your discards", price: 6, rarity: 1,
 		score: func(c *scoreCtx) {
-			if c.lastPlay {
+			if c.usedDiscard && c.run.Discards == 0 && !c.special {
 				c.xmult *= 2
 			}
 		}, art: [3]uint32{0xd04a3a, 0xff9a8a, 0x7a1a12}},
@@ -211,13 +216,13 @@ type hexDef struct {
 }
 
 var hexes = map[string]*hexDef{
-	"fog":        {name: "Fog", desc: "Their first 3 cards are dealt face down next round", price: 3},
+	"fog":        {name: "Fog", desc: "Their first 2 cards are dealt face down next round", price: 3},
 	"rust":       {name: "Rust", desc: "Their aces and face cards score 0 points next round", price: 4},
 	"squeeze":    {name: "Squeeze", desc: "1 fewer card in their hand next round", price: 4},
 	"muddle":     {name: "Muddle", desc: "Their picked hands get -3 Mult next round", price: 4},
 	"jinx":       {name: "Jinx", desc: "They can't use their special hand next round", price: 3},
 	"freeze":     {name: "Freeze", desc: "One of their charms does nothing next round", price: 3},
-	"shackle":    {name: "Shackle", desc: "1 fewer play next round", price: 5},
+	"shackle":    {name: "Shackle", desc: "1 fewer discard next round", price: 4},
 	"pickpocket": {name: "Pickpocket", desc: "Take $3 from them now", price: 3, now: true},
 }
 

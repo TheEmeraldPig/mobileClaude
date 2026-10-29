@@ -49,12 +49,12 @@ func hostAct(from int, a action) {
 		return
 	}
 	switch a.T {
-	case "pick":
-		if m.Phase == "draft" && validPicks(p, a.Picks) {
-			p.Picks, p.Ready = a.Picks, true
+	case "dealt": // seen my hands: ready to play
+		if m.Phase == "draft" {
+			p.Ready = true
 			m.changed()
 		}
-	case "unpick":
+	case "undealt":
 		if m.Phase == "draft" {
 			p.Ready = false
 			m.changed()
@@ -150,7 +150,6 @@ func clientUpdate() {
 		myRun = NewRun(p.Seed, p.Family, p.Special)
 		myRun.SortSuit = prefs.SortSuit
 		mySeed, myRnd = p.Seed, 0
-		draftPicks = nil
 	}
 	playing := view.Phase == "play" && !p.Out
 	if view.Mode == ModeRace {

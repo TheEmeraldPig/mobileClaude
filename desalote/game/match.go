@@ -38,7 +38,7 @@ const botID0 = 10 // bots' player ids start here
 
 // blindTarget is the points needed to beat a blind on its own (ante from 0)
 func blindTarget(ante, blind int) int64 {
-	base := 800 * math.Pow(1.78, float64(ante))
+	base := 300 * math.Pow(1.38, float64(ante))
 	t := base * []float64{1, 1.35, 1.8}[blind]
 	// round to a nice number
 	step := math.Pow(10, math.Floor(math.Log10(t))-1)
@@ -74,7 +74,7 @@ type PlayerState struct {
 	Levels  map[HandType]int `json:"lv"`
 	Family  Family           `json:"f"`
 	Special HandType         `json:"sp"`
-	Offer   []HandType       `json:"of"`
+	Synergy int              `json:"sy"` // how many of the dealt hands share their family (3, 2 or 1)
 	Picks   []HandType       `json:"pk"`
 	Seed    int64            `json:"sd"`
 	Score   int64            `json:"sc"` // this round
@@ -209,7 +209,7 @@ func (m *Match) canStart() bool {
 	return n >= 2 && n <= m.maxPlayers()
 }
 
-// Start: deal each player a family, a special hand, a deck and hands to pick from
+// Start: deal each player a family, a special hand, a deck and their three hands
 func (m *Match) start() {
 	m.Phase, m.Ante, m.Blind, m.Round = "draft", 0, 0, 0
 	m.Team = m.MaxLives
@@ -223,21 +223,8 @@ func (m *Match) start() {
 		p.Seed = m.Seed*31 + int64(p.ID)*7919 + 1
 		p.Total, p.Out, p.Ready, p.Done, p.Cast = 0, false, false, false, 0
 		p.Ante, p.Blind, p.Stage = 0, 0, "play"
-		// offer three hands of their family and two from the others
-		own := familyHands(p.Family)
-		m.rng.Shuffle(len(own), func(a, b int) { own[a], own[b] = own[b], own[a] })
-		var other []HandType
-		for f := FamSame; f <= FamSuits; f++ {
-			if f != p.Family {
-				other = append(other, familyHands(f)...)
-			}
-		}
-		m.rng.Shuffle(len(other), func(a, b int) { other[a], other[b] = other[b], other[a] })
-		p.Offer = append(append([]HandType{}, own[:3]...), other[:2]...)
-		p.Picks = nil
+		m.dealHands(p)
 		if p.Bot {
-			// bots stay in their family (most synergy)
-			p.Picks = append([]HandType{}, own[:3]...)
 			p.Ready = true
 			r := NewRun(p.Seed, p.Family, p.Special)
 			r.Picks = p.Picks
@@ -249,25 +236,28 @@ func (m *Match) start() {
 	m.changed()
 }
 
-// validPicks: three different hands from the offer, at least one from your family
-func validPicks(p *PlayerState, picks []HandType) bool {
-	if len(picks) != 3 {
-		return false
-	}
-	own := false
-	seen := map[HandType]bool{}
-	for _, h := range picks {
-		ok := false
-		for _, o := range p.Offer {
-			ok = ok || o == h
+// dealHands gives a player three hands at random. First the synergy is rolled: all
+// three from their own family, two, or just one. Hands from outside the family start a
+// level up, so a low roll isn't a worse deal.
+func (m *Match) dealHands(p *PlayerState) {
+	own := familyHands(p.Family)
+	m.rng.Shuffle(len(own), func(a, b int) { own[a], own[b] = own[b], own[a] })
+	var others [][]HandType
+	for f := FamSame; f <= FamSuits; f++ {
+		if f != p.Family {
+			hs := familyHands(f)
+			m.rng.Shuffle(len(hs), func(a, b int) { hs[a], hs[b] = hs[b], hs[a] })
+			others = append(others, hs)
 		}
-		if !ok || seen[h] {
-			return false
-		}
-		seen[h] = true
-		own = own || hands[h].fam == p.Family
 	}
-	return own
+	m.rng.Shuffle(len(others), func(a, b int) { others[a], others[b] = others[b], others[a] })
+	p.Synergy = 3 - m.rng.Intn(3)
+	p.Picks = append([]HandType{}, own[:p.Synergy]...)
+	for k := 0; len(p.Picks) < 3; k++ {
+		h := others[k%2][k/2]
+		p.Picks = append(p.Picks, h)
+		p.Levels[h] = 1
+	}
 }
 
 // ---- Host: rounds ----

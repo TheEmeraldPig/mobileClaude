@@ -36,7 +36,6 @@ var (
 	priceCharm string
 	priceAmt   int
 	shopTab    int
-	draftPicks []HandType
 	dealAt     int
 )
 
@@ -180,7 +179,7 @@ func playerStatus(p *PlayerState) string {
 		if p.Ready {
 			return "ready"
 		}
-		return "picking"
+		return "looking"
 	case "shop":
 		if p.Ready {
 			return "done"
@@ -198,114 +197,112 @@ func playerStatus(p *PlayerState) string {
 
 // ---- Lobby ----
 
+// The lobby, laid out openly on the table: the seats across the middle, the match
+// settings under them, how friends join and Start along the bottom
 func lobbyScreen() {
-	r := sheet(780, 470)
-	Title("TABLE", r.X+16, r.Y+28)
 	isHost := host != nil
-	x, y := r.X+18, r.Y+60
+	ops = append(ops, func(dst *ebiten.Image) {
+		drawText(dst, "THE TABLE", 18, 26, textOpt{size: 22, display: true, col: colL, shadow: true})
+	})
+	if Button(Rect{logicalW - 104, 10, 94, 34}, "Leave", styleRed, true, nil) {
+		leaveTable("")
+		return
+	}
 	// seats
-	lw := math.Min(300, r.W*0.4)
-	Label("PLAYERS", x, y)
-	y += 14
-	for i := 0; i < view.maxPlayers(); i++ {
-		row := Rect{x, y, lw, 34}
-		Inset(row, colSlateLo)
+	n := view.maxPlayers()
+	sw := math.Min(190, (logicalW-40-12*float64(n-1))/float64(n))
+	sh := math.Min(108, logicalH*0.24)
+	sx := (logicalW - (sw*float64(n) + 12*float64(n-1))) / 2
+	sy := 56.0
+	for i := 0; i < n; i++ {
+		r := Rect{sx + float64(i)*(sw+12), sy, sw, sh}
 		if i < len(view.Players) {
 			p := view.Players[i]
-			who := p.Name
-			if p.Bot {
-				who += "  (bot)"
+			tag := "player"
+			switch {
+			case p.ID == myID:
+				tag = "you"
+			case p.Bot:
+				tag = "bot"
 			}
 			if p.ID == 0 {
-				who += "  (host)"
+				tag += " - host"
 			}
-			c := color.Color(colInk)
-			if p.ID == myID {
-				c = colT
-			}
-			Text(who, row.X+10, row.Y+17, 14, c, text.AlignStart)
-			if isHost && p.Bot && Button(Rect{row.X + row.W - 74, row.Y + 3, 70, 28}, "Remove", styleSlate, true, nil) {
+			name, me := p.Name, p.ID == myID
+			ops = append(ops, func(dst *ebiten.Image) {
+				roundRect(dst, r.X, r.Y+4, r.W, r.H, 16, color.NRGBA{0, 0, 0, 80})
+				body := color.Color(color.NRGBA{60, 32, 32, 230})
+				if me {
+					body = color.NRGBA{96, 52, 38, 235}
+				}
+				roundRect(dst, r.X, r.Y, r.W, r.H, 16, body)
+				drawCardFX(dst, Card{}, r.X+r.W/2, r.Y+r.H*0.34, r.H*0.3, r.H*0.42, 0.08*float64(i%2*2-1), 1, cardLook{faceDown: true})
+				drawText(dst, name, r.X+r.W/2, r.Y+r.H*0.66, textOpt{size: 14, col: colInk, align: text.AlignCenter, shadow: true})
+				drawText(dst, tag, r.X+r.W/2, r.Y+r.H*0.84, textOpt{size: 11, col: colMuted, align: text.AlignCenter})
+			})
+			if isHost && p.Bot && Button(Rect{r.X + r.W - 34, r.Y + 6, 28, 28}, "", styleSlate, true, icoX) {
 				host.removePlayer(p.ID)
 			}
 		} else {
-			Text("Empty seat", row.X+10, row.Y+17, 13, colMuted, text.AlignStart)
-			if isHost && Button(Rect{row.X + row.W - 74, row.Y + 3, 70, 28}, "+ Bot", styleSlate, true, nil) {
+			ops = append(ops, func(dst *ebiten.Image) {
+				roundRect(dst, r.X, r.Y, r.W, r.H, 16, color.NRGBA{0, 0, 0, 60})
+				drawText(dst, "Empty seat", r.X+r.W/2, r.Y+r.H*0.36, textOpt{size: 13, col: colMuted, align: text.AlignCenter})
+			})
+			if isHost && Button(Rect{r.X + r.W/2 - 50, r.Y + r.H*0.56, 100, 30}, "+ Bot", styleSlate, true, nil) {
 				host.addBot()
 			}
 		}
+	}
+	// settings, centred under the seats
+	y := sy + sh + 22
+	row := func(label string, labels []string, active int) int {
+		w := 0.0
+		for _, l := range labels {
+			w += math.Max(38, textWidth(l, 14, false)+22) + 10
+		}
+		lw := 70.0
+		x := (logicalW - (lw + w)) / 2
+		Text(label, x, y+15, 12, colT, text.AlignStart)
+		c := segWrap(x+lw, y, w, labels, active, isHost)
 		y += 40
+		return c
 	}
-	// how friends join
-	y += 6
-	if isHost && !solo {
-		Label("FRIENDS JOIN", x, y)
-		y += 18
-		if lanServer != nil {
-			if a := myAddress(); a != "" {
-				wrapText("On the same Wi-Fi: Join a table, or type "+a, x, y, lw, 12, colInk, text.AlignStart)
-			} else {
-				wrapText("Connect to Wi-Fi or a hotspot so friends can find you", x, y, lw, 12, colMuted, text.AlignStart)
-			}
-			y += 36
-		}
-		if netCode != "" && lanServer == nil {
-			Text("Online code: "+netCode, x, y+6, 16, colT, text.AlignStart)
-			y += 26
-		} else if relayURL() != "" && Button(Rect{x, y, lw, 30}, "Use an online code instead", styleSlate, true, nil) {
-			startHostingOnline()
-		}
-		if netStatus != "" {
-			Text(netStatus, x, r.Y+r.H-22, 11, colMuted, text.AlignStart)
-		}
-	} else if !isHost {
-		Text("Waiting for the host to start...", x, y+8, 13, colMuted, text.AlignStart)
+	if c := row("MODE", []string{"Duel", "Last Standing", "Co-op", "Race"}, view.Mode); c >= 0 {
+		setMode(c)
 	}
-	// match settings
-	sx := x + lw + 30
-	sw := r.X + r.W - 18 - sx
-	sy := r.Y + 60
-	Label("MODE", sx, sy)
-	modeLabels := []string{"Duel", "Last Standing", "Co-op", "Race"}
-	if c := segWrap(sx, sy+14, sw, modeLabels, view.Mode, isHost); c >= 0 {
-		host.Mode = c
-		prefs.Mode = c
-		for len(host.Players) > host.maxPlayers() {
-			// a duel has two seats: remove bots first
-			removed := false
-			for i := len(host.Players) - 1; i > 0; i-- {
-				if host.Players[i].Bot {
-					host.removePlayer(host.Players[i].ID)
-					removed = true
-					break
-				}
-			}
-			if !removed {
-				host.Mode = ModeLastStanding
-				toast("Too many players for a duel")
-				break
-			}
-		}
-		host.changed()
-		savePrefs()
-	}
-	by := wrapText(modeBlurbs[view.Mode], sx, sy+92, sw, 12, colMuted, text.AlignStart)
-	sy = math.Max(by+4, sy+150)
-	Label("LENGTH", sx, sy)
-	ll := []string{}
+	y = wrapText(modeBlurbs[view.Mode], logicalW/2, y+4, math.Min(760, logicalW-40), 12, colMuted, text.AlignCenter) + 4
+	var ll []string
 	for i, n := range lengthNames {
 		ll = append(ll, fmt.Sprintf("%s (%d)", n, lengthAntes[i]))
 	}
-	if c := segWrap(sx, sy+14, sw, ll, view.Length, isHost); c >= 0 {
+	if c := row("LENGTH", ll, view.Length); c >= 0 {
 		host.Length, prefs.Length = c, c
 		host.changed()
 		savePrefs()
 	}
-	sy += 60
-	Label("LIVES", sx, sy)
-	if c := segWrap(sx, sy+14, sw, []string{"1", "2", "3", "4", "5"}, view.MaxLives-1, isHost); c >= 0 {
+	if c := row("LIVES", []string{"1", "2", "3", "4", "5"}, view.MaxLives-1); c >= 0 {
 		host.MaxLives, prefs.Lives = c+1, c+1
 		host.changed()
 		savePrefs()
+	}
+	// bottom: how friends join, and Start
+	by := logicalH - 50
+	info := ""
+	switch {
+	case !isHost:
+		info = "Waiting for the host to start..."
+	case solo:
+		info = "Playing with bots. Add or remove them in the empty seats."
+	case netCode != "" && lanServer == nil:
+		info = "Friends join with the online code " + netCode
+	case lanServer != nil && myAddress() != "":
+		info = "Friends on this Wi-Fi: Join a table, or type " + myAddress()
+	case lanServer != nil:
+		info = "Connect to Wi-Fi or a hotspot so friends can find you"
+	}
+	Text(info, 18, by+19, 13, colInk, text.AlignStart)
+	if isHost && !solo && netCode == "" && relayURL() != "" && Button(Rect{18, by - 40, 220, 32}, "Use an online code instead", styleSlate, true, nil) {
+		startHostingOnline()
 	}
 	if isHost {
 		ok := host.canStart()
@@ -313,14 +310,34 @@ func lobbyScreen() {
 		if !ok {
 			label = "Need 2+ players"
 		}
-		if Button(Rect{r.X + r.W - 200, r.Y + r.H - 52, 184, 38}, label, styleGold, ok, icoPlay) {
+		if Button(Rect{logicalW - 210, by, 196, 40}, label, styleGold, ok, nil) {
 			host.start()
 			sfx("deal")
 		}
 	}
-	if Button(Rect{r.X + r.W - 46, r.Y + 12, 32, 32}, "", styleSlate, true, icoX) {
-		leaveTable("")
+}
+
+func setMode(c int) {
+	host.Mode = c
+	prefs.Mode = c
+	for len(host.Players) > host.maxPlayers() {
+		// a duel has two seats: remove bots first
+		removed := false
+		for i := len(host.Players) - 1; i > 0; i-- {
+			if host.Players[i].Bot {
+				host.removePlayer(host.Players[i].ID)
+				removed = true
+				break
+			}
+		}
+		if !removed {
+			host.Mode = ModeLastStanding
+			toast("Too many players for a duel")
+			break
+		}
 	}
+	host.changed()
+	savePrefs()
 }
 
 // Segmented buttons that wrap onto more rows; read-only for guests
@@ -344,105 +361,101 @@ func segWrap(x, y, w float64, labels []string, active int, enabled bool) int {
 	return clicked
 }
 
-// ---- Draft: pick your three hands ----
+// ---- The deal: your cards and hands for the match ----
 
 func draftScreen(p *PlayerState) {
-	y := playerPills(8) + 10
+	top := playerPills(8) + 12
 	if myRun == nil {
 		return
 	}
-	// left: your cards
-	lw := math.Min(logicalW*0.46, 430)
-	left := Rect{10, y, lw, logicalH - y - 10}
-	Panel(left)
-	Label("YOUR 13 CARDS", left.X+12, left.Y+16)
-	cw := math.Min((lw-24-6*5)/7, (left.H-130)/2/1.4)
-	ch := cw * 1.4
+	titleY := top + 12
+	ops = append(ops, func(dst *ebiten.Image) {
+		drawText(dst, "YOUR DEAL", 18, titleY, textOpt{size: 20, display: true, col: colL, shadow: true})
+	})
+	// your 13 cards, fanned across the table
 	deck := myRun.Deck
+	ch := math.Min(110, logicalH*0.24)
+	cw := ch * 0.7
+	// everything below sits in the middle of the free space
+	by := logicalH - 50
+	content := 34 + ch + 46 + 34 + math.Min(86, logicalH*0.22)
+	top = math.Max(top, top+(by-10-top-content)/2)
+	step := math.Min(cw*0.78, (logicalW-60-cw)/12)
+	x0 := (logicalW - (step*12 + cw)) / 2
+	cy := top + 34 + ch/2
 	for i, c := range deck {
-		col, row := i%7, i/7
-		cx := left.X + 12 + float64(col)*(cw+5)
-		cy := left.Y + 32 + float64(row)*(ch+8)
+		o := float64(i) - 6
 		cc := c
-		ops = append(ops, func(dst *ebiten.Image) { drawCard(dst, cc, cx, cy, cw, ch, cardLook{}) })
+		x := x0 + cw/2 + float64(i)*step
+		y := cy + o*o*0.9 + math.Sin(float64(frame)/50+float64(i)*0.8)*1.5
+		rot := o * 0.025
+		ops = append(ops, func(dst *ebiten.Image) { drawCardFX(dst, cc, x, y, cw, ch, rot, 1, cardLook{}) })
 	}
-	ty := left.Y + 32 + 2*(ch+8) + 8
-	Text(fmt.Sprintf("Flush: %d cards of one suit", myRun.Rules.flush), left.X+12, ty, 13, colInk, text.AlignStart)
-	Text(fmt.Sprintf("Straight: %d ranks in a row", myRun.Rules.straight), left.X+12, ty+18, 13, colInk, text.AlignStart)
-	wrapText("Your deck is locked for the whole match.", left.X+12, ty+38, lw-24, 11, colMuted, text.AlignStart)
-
-	// right: family, special, and the hands to pick
-	rx := left.X + lw + 10
-	right := Rect{rx, y, logicalW - rx - 10, logicalH - y - 10}
-	Panel(right)
-	x, w := right.X+12, right.W-24
+	y := cy + ch/2 + 46
+	// facts about the deal, as a line of pills
 	fc := familyColors[p.Family]
-	Label("YOUR FAMILY", x, right.Y+16)
-	Text(familyNames[p.Family], x, right.Y+36, 16, rgb(fc[1]), text.AlignStart)
-	Label("YOUR SPECIAL", x+w*0.5, right.Y+16)
-	Text(hands[p.Special].name, x+w*0.5, right.Y+36, 16, colT, text.AlignStart)
-	yy := wrapText(familyBlurb[p.Family], x, right.Y+56, w, 11, colMuted, text.AlignStart)
+	facts := []struct {
+		k, v string
+		c    color.Color
+	}{
+		{"Family", familyNames[p.Family], rgb(fc[1])},
+		{"Special", hands[p.Special].name, colT},
+		{"Flush", fmt.Sprintf("%d of a suit", myRun.Rules.flush), colInk},
+		{"Straight", fmt.Sprintf("%d in a row", myRun.Rules.straight), colInk},
+	}
+	pw := math.Min(200, (logicalW-40-30)/4)
+	px := (logicalW - (pw*4 + 30)) / 2
+	for i, f := range facts {
+		r := Rect{px + float64(i)*(pw+10), y - 20, pw, 40}
+		ff := f
+		ops = append(ops, func(dst *ebiten.Image) {
+			roundRect(dst, r.X, r.Y, r.W, r.H, 20, color.NRGBA{40, 22, 24, 215})
+			drawText(dst, ff.k, r.X+r.W/2, r.Y+12, textOpt{size: 10, display: true, col: colMuted, align: text.AlignCenter})
+			drawText(dst, ff.v, r.X+r.W/2, r.Y+28, textOpt{size: 13, col: ff.c, align: text.AlignCenter})
+		})
+	}
+	y += 34
+	// the three hands you were dealt
+	hw := math.Min(230, (logicalW-40-20)/3)
+	hh := math.Min(86, logicalH*0.22)
+	hx := (logicalW - (hw*3 + 20)) / 2
+	for i, h := range p.Picks {
+		r := Rect{hx + float64(i)*(hw+10), y, hw, hh}
+		hh2 := h
+		f := hands[h].fam
+		lv := p.Levels[h]
+		b, m := handLevel(h, lv+1)
+		how := handHow(h, myRun.Rules)
+		ops = append(ops, func(dst *ebiten.Image) {
+			col := familyColors[f]
+			roundRect(dst, r.X, r.Y+4, r.W, r.H, 14, color.NRGBA{0, 0, 0, 80})
+			roundRect(dst, r.X, r.Y, r.W, r.H, 14, color.NRGBA{60, 32, 32, 235})
+			roundRect(dst, r.X+8, r.Y+8, 6, r.H-16, 3, rgb(col[0]))
+			drawText(dst, hands[hh2].name, r.X+22, r.Y+r.H*0.25, textOpt{size: 14, col: colInk, shadow: true})
+			drawText(dst, how, r.X+22, r.Y+r.H*0.52, textOpt{size: 10, col: colL})
+			lvS := fmt.Sprintf("Lv %d   %d x %d", lv+1, b, m)
+			drawText(dst, lvS, r.X+22, r.Y+r.H*0.78, textOpt{size: 12, display: true, col: colT})
+		})
+	}
+	// the synergy roll
+	_, sm := synergyOf(p.Picks)
+	syn := fmt.Sprintf("Synergy roll: all 3 %s hands, x%.1f", familyNames[p.Family], sm)
+	switch p.Synergy {
+	case 2:
+		syn = fmt.Sprintf("Synergy roll: 2 %s hands, x%.1f. The other hand starts a level up.", familyNames[p.Family], sm)
+	case 1:
+		syn = "Synergy roll: no synergy. Your hands from other families start a level up."
+	}
+	Text(syn, 18, by+20, 13, colT, text.AlignStart)
 	if p.Ready {
-		Label("YOUR HANDS", x, yy+8)
-		hy := yy + 26
-		for _, h := range p.Picks {
-			Text(hands[h].name, x, hy, 14, colInk, text.AlignStart)
-			hy += 20
-		}
-		Text("Waiting for the others...", x, right.Y+right.H-30, 13, colMuted, text.AlignStart)
-		if Button(Rect{right.X + right.W - 112, right.Y + right.H - 46, 100, 34}, "Change", styleSlate, true, nil) {
-			draftPicks = append([]HandType{}, p.Picks...)
-			act(action{T: "unpick"})
+		Text("Waiting for the others...", logicalW-230, by+20, 13, colMuted, text.AlignEnd)
+		if Button(Rect{logicalW - 210, by, 196, 40}, "Not yet", styleSlate, true, nil) {
+			act(action{T: "undealt"})
 		}
 		return
 	}
-	Label("PICK 3 HANDS (1+ FROM YOUR FAMILY)", x, yy+8)
-	by := yy + 22
-	bh := math.Max(30, math.Min(40, (right.Y+right.H-50-by)/5-6))
-	for _, h := range p.Offer {
-		on := false
-		for _, d := range draftPicks {
-			on = on || d == h
-		}
-		r := Rect{x, by, w, bh}
-		st := styleSlate
-		if on {
-			st = styleViolet
-		}
-		if Button(r, "", st, true, nil) {
-			if on {
-				var keep []HandType
-				for _, d := range draftPicks {
-					if d != h {
-						keep = append(keep, d)
-					}
-				}
-				draftPicks = keep
-			} else if len(draftPicks) < 3 {
-				draftPicks = append(draftPicks, h)
-			}
-		}
-		hh := h
-		f := hands[h].fam
-		how := handHow(h, myRun.Rules)
-		ops = append(ops, func(dst *ebiten.Image) {
-			fcol := familyColors[f]
-			fill(dst, r.X+6, r.Y+6, 6, r.H-12, rgb(fcol[0]))
-			drawText(dst, hands[hh].name, r.X+20, r.Y+r.H/2-5, textOpt{size: 14, shadow: true})
-			drawText(dst, how, r.X+20, r.Y+r.H/2+9, textOpt{size: 10, col: colL})
-			b, m := handLevel(hh, 1)
-			drawText(dst, fmt.Sprintf("%d x %d", b, m), r.X+r.W-10, r.Y+r.H/2, textOpt{size: 12, display: true, col: colT, align: text.AlignEnd})
-		})
-		by += bh + 6
-	}
-	g, m := synergyOf(draftPicks)
-	syn := "Synergy: none yet"
-	if m > 1 {
-		syn = fmt.Sprintf("Synergy: x%.1f (%d %s hands)", m, g, familyNames[majorFamily(draftPicks)])
-	}
-	Text(syn, x, right.Y+right.H-28, 13, colT, text.AlignStart)
-	if Button(Rect{right.X + right.W - 112, right.Y + right.H - 46, 100, 34}, "Ready", styleGold, validPicks(p, draftPicks), icoPlay) {
-		act(action{T: "pick", Picks: draftPicks})
+	if Button(Rect{logicalW - 210, by, 196, 40}, "Ready", styleGold, true, nil) {
+		act(action{T: "dealt"})
 		sfx("score")
 	}
 }

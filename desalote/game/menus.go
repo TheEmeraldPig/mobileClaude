@@ -526,12 +526,12 @@ var helpPages = []struct{ title, body string }{
 	{"THE IDEA", "Desalote is a poker-hand scoring game for 1 to 4 players. Each round you play hands of cards to score points: a hand's points (its base plus the value of its scoring cards) times its Mult.\n" +
 		"Beat the round's target, or beat your rivals in a showdown, to keep your lives. Between rounds, bid against each other for charms, buy tomes to level up your hands, trade charms, and buy hexes to curse your rivals."},
 	{"YOUR 13 CARDS", "You don't get a full deck. At the start of a match you're dealt 13 different cards at random, and they're yours, unchanged, for the whole match: nothing adds or removes cards.\n" +
-		"Because every deck is different, flushes and straights adapt to yours. A flush needs as many cards of one suit as your deck's average per suit (rounded down). A straight needs as many ranks in a row as your deck's average run (rounded up). Neither is ever more than 5, since you play at most 5 cards.\n" +
-		"Each round you hold 7 cards, play up to 5 at a time, and have 4 plays and 3 discards. When your pile runs out, your played cards are shuffled back in."},
-	{"YOUR HANDS", "Everyone can always score High Card and Pair. You're also given a family: Same (matching ranks), Counting (ranks in a row) or Suits. From five hands offered to you, pick three to play all match, at least one from your own family. Any other hand only counts as a Pair or High Card.\n" +
-		"Synergy: when two of your picks share a family, all three score x1.2. When all three do, x1.5.\n" +
-		"A Same family deck always has at least 3 cards of one rank."},
-	{"YOUR SPECIAL HAND", "You also get a special hand: Five of a Kind, Straight Flush or Flush House. Once a round, press Special: the game picks 5 cards from your hand (you don't choose) and briefly turns them into that hand. It scores big and doesn't use a play.\n" +
+		"Because every deck is different, flushes and straights adapt to yours. A flush needs as many cards of one suit as your deck's average per suit (rounded down). A straight needs as many ranks in a row as your deck's average run (rounded up). Neither is ever more than 5.\n" +
+		"Each round you hold 3 cards, with 1 play and 1 discard. Charms give you more: Wide Grip, Card Sleeve and Satchel add cards to your hand, Pocket Watch a play, Sieve discards."},
+	{"YOUR HANDS", "Everyone can always score High Card and Pair. You're also given a family: Same (matching ranks), Counting (ranks in a row) or Suits.\n" +
+		"Your three hands are dealt at random. First the synergy is rolled: all three from your family (x1.5 for all of them), two (x1.2), or just one (no synergy). Hands from outside your family start a level up, so a low roll isn't a worse deal. Any other hand only counts as a Pair or High Card.\n" +
+		"Some hands need more cards than you hold at first (Two Pair needs 4): get bigger hands from charms. A Same family deck always has at least 3 cards of one rank."},
+	{"YOUR SPECIAL HAND", "You also get a special hand: Five of a Kind, Straight Flush or Flush House. Once a round, press Special: the cards in your hand (up to 5; you don't choose) briefly turn into that hand. It scores big and doesn't use a play.\n" +
 		"Afterwards the cards return to normal, each with +3 points for good.\n" +
 		"Five of a Kind always uses your deck's most common rank (ties are picked at random), so it's a little predictable and scores a little less than the other two."},
 	{"MODES", "Duel: 1 v 1. Small blinds are against the house; Big and Boss blinds are showdowns, where the lower score loses a life.\n" +
