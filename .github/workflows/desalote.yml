@@ -116,8 +116,9 @@ jobs:
             adb shell am start -n com.theemeraldpig.desalote/.MainActivity
             sleep 40
             adb exec-out screencap -p > shot-menu.png
-            # tap Play with bots (the first button on the right of the main menu)
-            adb shell input swipe 1300 330 1300 330 300
+            # tap Play with bots (the top button on the right of the main menu; the
+            # emulator's screen is 640x320 in landscape)
+            adb shell input swipe 470 55 470 55 300
             sleep 20
             adb exec-out screencap -p > shot-lobby.png
             adb logcat -d > logcat.txt
