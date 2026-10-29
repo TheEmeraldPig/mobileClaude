@@ -1,0 +1,42 @@
+plugins {
+    id 'com.android.application'
+}
+
+// CI passes the build number so each build installs over the last one
+def lensVersion = (project.findProperty('lensVersion') ?: '1').toString()
+
+android {
+    namespace 'com.theemeraldpig.lens'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.theemeraldpig.lens'
+        minSdk 26
+        targetSdk 34
+        versionCode lensVersion.toInteger()
+        versionName "build-" + lensVersion
+    }
+
+    // A fixed key for installing the APK directly on your phone, so new builds update the old one.
+    signingConfigs {
+        sideload {
+            storeFile rootProject.file('lens-sideload.keystore')
+            storePassword 'android'
+            keyAlias 'lens'
+            keyPassword 'android'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.sideload
+        }
+        debug {
+            signingConfig signingConfigs.sideload
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

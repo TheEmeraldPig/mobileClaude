@@ -114,6 +114,15 @@ The page shows each question as it's asked, the answer as it's written, and the 
 
 The page reads the hub's live event stream (`GET /events`). A display inside the glasses is planned as the next step and will read the same stream.
 
+### The Lens app (control panel)
+
+`app/` is a small Android app, **Lens**, that shows the hub's control panel (`pi/panel.html`): how a question travels through the parts, lit up live; a health check for every part with a Test button (Claude, microphone, speaker, camera); this session's questions, answer times and data used; the settings; and the recent log. When the hub isn't running it says so and can start it in Termux.
+
+- Every push to `glasses/app/` builds it and publishes **Lens.apk** as a GitHub release named `lens-app-<number>`. On the hub phone, open the latest one under the repo's Releases, download `Lens.apk` and open it to install. (Android asks to allow installs from your browser.)
+- First launch asks for the hub address (leave `http://127.0.0.1:8765` when the hub is on the same phone) and the token from `config.toml`.
+- For the app's "Start the hub" button, Termux must allow it once: `echo "allow-external-apps = true" >> ~/.termux/termux.properties`, then restart Termux. The app asks for permission to run commands in Termux the first time.
+- The same panel also opens in any browser at `http://<hub address>:8765/panel?t=<token>`.
+
 ### Testing without the glasses: your screen as the camera
 
 `tools/screen_glasses.py` stands in for the glasses on your computer: it sends a picture of your screen whenever the hub looks, tells the hub where it is, and the keyboard is the button. Handy for asking "what's this error?" while you're debugging, and for testing the hub and phone page before the glasses are built.

@@ -4,6 +4,13 @@
 cd "$(dirname "$0")/.." || exit 1
 termux-wake-lock 2>/dev/null   # stop Android from pausing the hub while the screen is off
 
+# Already running (say, started from the Lens app while it was up)? Then there's nothing to do.
+PORT=$(grep -E '^[[:space:]]*port[[:space:]]*=' config.toml 2>/dev/null | head -1 | tr -dc 0-9)
+if curl -s -m 3 -o /dev/null "http://127.0.0.1:${PORT:-8765}/status"; then
+  echo "The hub is already running."
+  exit 0
+fi
+
 crashes=()
 while true; do
   python3 lens.py

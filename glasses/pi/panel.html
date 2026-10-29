@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05080d">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png">
+<title>Lens Control</title>
+<style>
+/* One dark HUD look, shared with the phone page. Layout: a live "how it works" strip, then checks, usage, settings and the log. */
+:root{--bg:#05080d;--card:#0a1520;--card2:#0d1b28;--line:#7fe3ff2e;--hud:#7fe3ff;--hud2:#b9f3ff;--ink:#e8f7ff;--dim:#8aa4b2;--faint:#5f7884;
+  --ok:#5be3a0;--warn:#ffc46b;--fail:#ff6b7a;--off:#58697a;color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.wrap{max-width:860px;margin:0 auto;padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));display:grid;gap:18px}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.logo{font:700 14px/1 ui-monospace,Menlo,monospace;letter-spacing:.2em;color:var(--hud);flex:1}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border:1px solid var(--line);border-radius:999px;font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.pill i,.dot{width:8px;height:8px;border-radius:50%;background:var(--off);display:inline-block;flex:none}
+.ok i,.dot.ok{background:var(--ok)} .warn i,.dot.warn{background:var(--warn)} .fail i,.dot.fail{background:var(--fail)}
+.hbtn{padding:7px 11px;border:1px solid var(--line);border-radius:10px;color:var(--hud);font-size:13px}
+h2{font:700 12px/1 ui-monospace,Menlo,monospace;letter-spacing:.16em;color:var(--hud);margin:0 0 10px;text-transform:uppercase}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.offline{display:none;border:1px solid #ffc46b66;color:var(--warn);border-radius:12px;padding:12px 14px}
+.offline.show{display:block}
+
+/* how it works: the path one question takes */
+.flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;align-items:stretch}
+.node{position:relative;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center;transition:border-color .2s,box-shadow .2s}
+.node b{display:block;font-size:13px}
+.node small{display:block;color:var(--dim);font-size:11.5px;margin-top:2px}
+.node .dot{position:absolute;top:8px;right:8px}
+.node.active{border-color:var(--hud);box-shadow:0 0 0 1px var(--hud),0 0 18px #7fe3ff55}
+.node:not(:last-child)::after{content:"";position:absolute;right:-8px;top:50%;width:8px;height:2px;background:var(--line)}
+.now{margin-top:10px;color:var(--hud2);min-height:1.4em}
+@media (max-width:560px){.flow{grid-template-columns:1fr}.node{text-align:left;padding-left:12px}.node:not(:last-child)::after{right:auto;left:22px;top:auto;bottom:-8px;width:2px;height:8px}}
+@media (prefers-reduced-motion:reduce){.node{transition:none}}
+
+/* checks */
+.checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+.check{display:grid;gap:8px;align-content:start}
+.check .top{display:flex;align-items:center;gap:8px}
+.check .top b{flex:1}
+.chip{font:600 10.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;padding:5px 8px;border-radius:999px;border:1px solid currentColor}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.fail{color:var(--fail)} .chip.off{color:var(--off)}
+.check p{margin:0;color:var(--dim);font-size:13.5px}
+.check .what{color:var(--faint);font-size:12.5px}
+.test{justify-self:start;padding:8px 12px;border-radius:10px;border:1px solid var(--hud);color:var(--hud);font-weight:600;font-size:13px}
+.test:disabled{opacity:.5}
+.result{font-size:13.5px;color:var(--hud2)} .result.bad{color:var(--warn)}
+.result img{display:block;width:100%;border-radius:8px;margin-top:6px;border:1px solid var(--line)}
+
+/* usage */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.stat span{display:block;color:var(--dim);font-size:12px}
+.stat b{font:600 20px/1.2 ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+td{padding:7px 0;border-bottom:1px solid #7fe3ff14;vertical-align:top}
+td:first-child{color:var(--dim);width:45%}
+td:last-child{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;word-break:break-all}
+.log{background:#03060a;border:1px solid var(--line);border-radius:12px;padding:10px;max-height:340px;overflow:auto;font:11.5px/1.5 ui-monospace,Menlo,monospace;color:#b8cad4;white-space:pre-wrap;word-break:break-word}
+.log .w{color:var(--warn)} .log .e{color:var(--fail)}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px}
+.row h2{margin:0}
+.note{color:var(--faint);font-size:12.5px;margin:8px 0 0}
+details summary{cursor:pointer;color:var(--hud);font-weight:600;font-size:14px}
+details p{color:var(--dim);font-size:13.5px;margin:8px 0 0}
+:focus-visible{outline:2px solid var(--hud);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="logo">LENS CONTROL</span>
+    <span class="pill" id="online"><i></i><span>Connecting</span></span>
+    <a class="hbtn" href="/" id="toPhone">Answers</a>
+    <button class="hbtn" id="appSettings" hidden>App settings</button>
+  </header>
+  <div class="offline" id="offline">Can't reach the hub. Make sure it's running in Termux (<code>bash ~/mobileClaude/glasses/pi/android/run.sh</code>).</div>
+
+  <section>
+    <h2>How a question travels</h2>
+    <div class="card">
+      <div class="flow" id="flow">
+        <div class="node" data-k="eyes"><span class="dot"></span><b>Glasses</b><small>button + camera</small></div>
+        <div class="node" data-k="ears"><span class="dot"></span><b>Ears</b><small>speech to text</small></div>
+        <div class="node" data-k="claude"><span class="dot"></span><b>Claude</b><small>thinks it over</small></div>
+        <div class="node" data-k="mouth"><span class="dot"></span><b>Voice</b><small>reads it out</small></div>
+        <div class="node" data-k="you"><span class="dot ok"></span><b>You</b><small>earbuds / page</small></div>
+      </div>
+      <div class="now" id="now">Waiting for a question.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Checks</h2>
+    <div class="checks" id="checks"></div>
+  </section>
+
+  <section>
+    <h2>This session</h2>
+    <div class="stats" id="stats"></div>
+    <p class="note">Data is an estimate of what the hub uploads to Claude. Every question re-sends the conversation so far, so a fresh conversation (after 10 quiet minutes) keeps it small.</p>
+  </section>
+
+  <section class="card">
+    <h2>Settings</h2>
+    <table id="settings"></table>
+    <p class="note">Change these in <code>~/mobileClaude/glasses/pi/config.toml</code> in Termux, then restart the hub.</p>
+  </section>
+
+  <section>
+    <div class="row"><h2>Recent log</h2><button class="hbtn" id="refresh">Refresh</button></div>
+    <div class="log" id="log">Loading…</div>
+  </section>
+
+  <section class="card" id="doctorCard" hidden>
+    <h2>Automatic repairs</h2>
+    <div class="log" id="doctor"></div>
+  </section>
+
+  <section class="card">
+    <h2>What each part does</h2>
+    <details><summary>Glasses</summary><p>A tiny camera board on the frame. The button tells the hub to listen; when you ask something, the hub fetches a picture from the glasses so Claude sees what you're looking at. The light is on whenever a picture is taken.</p></details>
+    <details><summary>Ears</summary><p>The hub phone listens through its microphone (or your earbuds) until you stop talking, and turns your words into text with Android's speech recognition.</p></details>
+    <details><summary>Claude</summary><p>Claude Code runs in the Ubuntu inside Termux, logged into your own account. It stays running between questions so answers start quickly, and it uses your plan's usage, not a separate bill.</p></details>
+    <details><summary>Voice</summary><p>Android's text-to-speech reads the answer out one sentence at a time, while the rest is still being written.</p></details>
+    <details><summary>The doctor</summary><p>If the hub crashes five times in five minutes, Claude Code reads the log, fixes the hub's own code if it can, and restarts it. It keeps a fix only when the self-test passes; what it did shows up under Automatic repairs.</p></details>
+  </section>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
+const WHAT = {
+  claude: "Answers your questions. Runs inside Termux on this phone.",
+  ears: "Hears your question and turns it into text.",
+  mouth: "Reads answers out loud.",
+  eyes: "Shows Claude what you're looking at.",
+  net: "Claude needs the internet: mobile data or Wi-Fi.",
+};
+const TESTS = { claude: "Ask Claude", listen: "Test microphone", speak: "Test speaker", camera: "Take a test picture" };
+const LABEL = { ok: "Working", warn: "Check", fail: "Problem", off: "Off" };
+let H = null, testing = {};
+
+const app = window.LensApp;   // set when this page runs inside the Lens app
+if (app) {
+  $("appSettings").hidden = false;
+  $("appSettings").onclick = () => app.openSettings();
+}
+
+function fmtTime(s) {
+  if (s < 90) return s + " s";
+  if (s < 5400) return Math.round(s / 60) + " min";
+  return (s / 3600).toFixed(1) + " h";
+}
+function fmtBytes(b) { return b < 1e6 ? Math.round(b / 1024) + " KB" : (b / 1e6).toFixed(1) + " MB"; }
+
+function renderChecks() {
+  const box = $("checks"), keep = {};
+  box.querySelectorAll(".result").forEach(r => keep[r.dataset.k] = r.cloneNode(true));
+  box.innerHTML = "";
+  for (const p of H.parts) {
+    const c = el("div", "card check");
+    const top = el("div", "top");
+    top.append(el("span", "dot " + p.status), el("b", null, p.name), el("span", "chip " + p.status, LABEL[p.status] || p.status));
+    c.append(top, el("p", "what", WHAT[p.key] || ""), el("p", null, p.detail));
+    if (p.test) {
+      const b = el("button", "test", testing[p.test] ? "Testing…" : TESTS[p.test]);
+      b.disabled = !!testing[p.test];
+      b.onclick = () => runTest(p.test);
+      c.append(b);
+      const r = keep[p.test] || el("div", "result");
+      r.dataset.k = p.test;
+      c.append(r);
+    }
+    box.append(c);
+  }
+  // dots on the "how a question travels" strip
+  const by = Object.fromEntries(H.parts.map(p => [p.key, p.status]));
+  document.querySelectorAll(".node").forEach(n => { const s = by[n.dataset.k]; if (s) n.querySelector(".dot").className = "dot " + s; });
+}
+
+function renderStats() {
+  const s = H.stats, b = H.battery;
+  const items = [
+    ["Running for", fmtTime(H.uptime)],
+    ["Questions", s.questions + (s.local ? ` + ${s.local} quick` : "")],
+    ["Average answer", s.average != null ? s.average + " s" : "–"],
+    ["Data to Claude", "≈ " + fmtBytes(s.sent_bytes)],
+    ["Errors", String(s.errors)],
+    ["Notes / photos", `${s.notes} / ${s.photos}`],
+  ];
+  if (b && b.percent != null) items.push(["Hub battery", `${b.percent}%${b.charging ? " charging" : ""}`]);
+  $("stats").innerHTML = "";
+  for (const [k, v] of items) { const d = el("div", "stat"); d.append(el("span", null, k), el("b", null, v)); $("stats").append(d); }
+
+  const st = H.settings, rows = [
+    ["Model", st.model], ["Effort", st.effort], ["Fresh conversation after", st.fresh_after_minutes + " min"],
+    ["Web search", st.web_search ? "on" : "off"], ["Sends a picture with questions", st.send_view ? "yes" : "no"],
+    ["Microphone engine", st.ears], ["Voice engine", st.mouth], ["Camera", st.camera],
+    ["Hub address", (H.address || "unknown yet") + ":" + H.port], ["Data folder", st.data_dir],
+  ];
+  $("settings").innerHTML = "";
+  for (const [k, v] of rows) { const tr = el("tr"); tr.append(el("td", null, k), el("td", null, String(v))); $("settings").append(tr); }
+
+  const log = $("log"), atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
+  log.innerHTML = "";
+  for (const line of H.log.length ? H.log : ["(nothing logged yet)"]) {
+    log.append(el("div", / (ERROR|CRITICAL) /.test(line) ? "e" : / WARNING /.test(line) ? "w" : null, line));
+  }
+  if (atBottom) log.scrollTop = log.scrollHeight;
+  $("doctorCard").hidden = !H.doctor.length;
+  $("doctor").textContent = H.doctor.join("\n");
+}
+
+async function load() {
+  try {
+    const r = await fetch("/api/health", { cache: "no-store" });
+    if (r.status === 403) { $("offline").textContent = "The hub didn't accept the token. Open App settings and check it matches config.toml."; throw 0; }
+    if (!r.ok) throw 0;
+    H = await r.json();
+    $("offline").classList.remove("show");
+    const bad = H.parts.filter(p => p.status === "fail").length, warn = H.parts.filter(p => p.status === "warn").length;
+    $("online").className = "pill " + (bad ? "fail" : warn ? "warn" : "ok");
+    $("online").lastElementChild.textContent = bad ? `${bad} problem${bad > 1 ? "s" : ""}` : warn ? "Running, check below" : "All good";
+    renderChecks(); renderStats();
+  } catch (e) {
+    $("offline").classList.add("show");
+    $("online").className = "pill fail"; $("online").lastElementChild.textContent = "Hub offline";
+  }
+}
+
+async function runTest(kind) {
+  testing[kind] = true; if (H) renderChecks();
+  const box = () => document.querySelector(`.result[data-k="${kind}"]`);
+  if (kind === "listen" && box()) box().textContent = "Listening… say something now.";
+  let res;
+  try {
+    const r = await fetch("/test/" + kind, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    res = await r.json();
+  } catch (e) { res = { ok: false, text: "Couldn't reach the hub." }; }
+  testing[kind] = false;
+  await load();
+  const b = box();
+  if (b) {
+    b.className = "result" + (res.ok ? "" : " bad");
+    b.textContent = res.text || (res.ok ? "Done." : "That didn't work.");
+    if (res.view) { const i = el("img"); i.src = "/views/" + res.view; i.alt = "Test picture"; b.append(i); }
+  }
+}
+
+// live: light up each part as a question moves through it
+function stage(k, text) {
+  document.querySelectorAll(".node").forEach(n => n.classList.toggle("active", n.dataset.k === k));
+  $("now").textContent = text;
+}
+function connect() {
+  const es = new EventSource("/events");
+  es.addEventListener("state", e => {
+    const s = JSON.parse(e.data).state;
+    if (s === "listening") stage("ears", "Listening for your question…");
+    else if (s === "thinking") stage("claude", "Claude is thinking…");
+    else if (s === "ready" && !document.querySelector('.node[data-k="mouth"].active')) stage(null, "Waiting for a question.");
+  });
+  es.addEventListener("question", e => {
+    const q = JSON.parse(e.data);
+    stage(q.view ? "eyes" : "claude", q.view ? `Got a picture from the camera for “${q.question}”` : `Asking Claude: “${q.question}”`);
+  });
+  es.addEventListener("delta", () => stage("mouth", "Answering out loud…"));
+  es.addEventListener("answer", e => {
+    const a = JSON.parse(e.data);
+    stage("you", a.seconds ? `Answered in ${a.seconds} s: ${a.answer}` : `Answered: ${a.answer}`);
+    setTimeout(load, 400);
+  });
+  es.addEventListener("glasses", () => { if (H && !H.parts.some(p => p.key === "eyes" && p.status === "ok")) load(); });
+  es.addEventListener("problem", e => stage(null, "Problem: " + JSON.parse(e.data).text));
+}
+
+$("refresh").onclick = load;
+load(); connect();
+setInterval(() => { if (!document.hidden) load(); }, 10000);
+</script>
+</body>
+</html>

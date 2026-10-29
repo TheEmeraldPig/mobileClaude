@@ -1,0 +1,123 @@
+name: Build Lens app
+
+# Builds Lens.apk (the Android app that shows the hub's control panel), checks it on an
+# emulator against a real copy of the hub, and publishes it as a release named lens-app-<number>.
+on:
+  push:
+    paths:
+      - 'glasses/app/**'
+      - 'glasses/pi/panel.html'
+      - '.github/workflows/lens-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build Lens.apk
+        working-directory: glasses/app
+        run: |
+          gradle assembleRelease -PlensVersion=${{ github.run_number }} --no-daemon -q
+          cp app/build/outputs/apk/release/app-release.apk ../../Lens.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lens-apk
+          path: Lens.apk
+
+  # Runs the app on an emulator, connected to the hub running on the build machine
+  # (without Claude Code, which isn't installed there), and prints small screenshots into the log.
+  emulator-test:
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: lens-apk
+      - name: Start a test hub
+        run: |
+          cat > /tmp/hub.toml <<'TOML'
+          data_dir = "/tmp/lens-data"
+          [claude]
+          bin = "true"
+          [ears]
+          engine = "none"
+          [mouth]
+          engine = "none"
+          [eyes]
+          source = "none"
+          [hub]
+          port = 8765
+          token = "test"
+          TOML
+          nohup python3 glasses/pi/lens.py --config /tmp/hub.toml > /tmp/hub.log 2>&1 &
+          sleep 3
+          curl -s localhost:8765/status
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run Lens on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install -r Lens.apk
+            adb logcat -c
+            adb shell am start -n com.theemeraldpig.lens/.MainActivity --es hub http://10.0.2.2:8765 --es token test
+            sleep 25
+            adb exec-out screencap -p > shot-panel.png
+            adb shell input swipe 540 1800 540 600 400
+            sleep 3
+            adb exec-out screencap -p > shot-panel-lower.png
+            pkill -f "glasses/pi/lens.py" || true
+            adb shell am force-stop com.theemeraldpig.lens
+            adb shell am start -n com.theemeraldpig.lens/.MainActivity
+            sleep 12
+            adb exec-out screencap -p > shot-offline.png
+            adb logcat -d > logcat.txt
+            grep -E "chromium|Lens|FATAL|AndroidRuntime" logcat.txt | tail -60 || true
+            for f in shot-panel.png shot-panel-lower.png shot-offline.png; do echo "== $f"; python3 mote/android/tools/shrink_png.py $f 200 || true; done
+      - name: Hub log
+        if: always()
+        run: tail -40 /tmp/hub.log || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lens-emulator-test
+          path: |
+            shot-*.png
+            logcat.txt
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lens-apk
+      - name: Publish release lens-app-${{ github.run_number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "lens-app-${{ github.run_number }}" Lens.apk \
+            --repo "${{ github.repository }}" --target "${{ github.sha }}" --latest=false \
+            --title "Lens app build ${{ github.run_number }}" \
+            --notes "Open this page on the phone that runs the hub, download Lens.apk and open it to install. The hub must be running in Termux."

@@ -13,6 +13,9 @@ import argparse
 import array
 import base64
 import json
+import socket
+import struct
+import zlib
 import logging
 import logging.handlers
 import queue
@@ -86,6 +89,7 @@ class Brain:
         self.cancelled = threading.Event()
         self.last_error = ""
         self.turns = 0
+        self.convo_bytes = 0   # size of the conversation so far; every request uploads all of it
 
     def command(self):
         c = self.cfg
@@ -102,6 +106,7 @@ class Brain:
         self.stop()
         self.events = queue.Queue()
         self.turns = 0
+        self.convo_bytes = 0
         log.info("starting Claude Code (%s)", self.cfg["model"])
         self.proc = subprocess.Popen(self.command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, text=True, bufsize=1)
@@ -158,6 +163,8 @@ class Brain:
             content.append({"type": "text", "text": text})
             msg = {"type": "user", "message": {"role": "user", "content": content}}
             self.turns += 1
+            self.convo_bytes += len(json.dumps(msg))
+            self.sent_bytes = self.convo_bytes
             try:
                 self.proc.stdin.write(json.dumps(msg) + "\n")
                 self.proc.stdin.flush()
@@ -401,6 +408,8 @@ class Hub:
         self.subscribers = set()    # live displays (phone page now, glasses display later)
         self.sub_lock = threading.Lock()
         self.history = deque(self._load_history(), maxlen=self.HISTORY)
+        self.stats = {"questions": 0, "local": 0, "errors": 0, "seconds": 0.0, "sent_bytes": 0}
+        self._cache = {}            # slow health checks (internet, battery), refreshed now and then
 
     # ---------- live events for displays ----------
     def publish(self, event, data):
@@ -499,6 +508,7 @@ class Hub:
             if speak and local:
                 self.mouth.say(local)
             if local:
+                self.stats["local"] += 1
                 item = {"at": time.time(), "question": q, "answer": local, "view": None, "seconds": 0}
                 self.publish("question", item)
                 self.publish("answer", item)
@@ -533,6 +543,9 @@ class Hub:
             self.save_note(note)
         spoken = " ".join(NOTE_RE.sub("", text).split())
         item.update(answer=spoken, seconds=round(time.time() - t0, 2))
+        self.stats["questions"] += 1
+        self.stats["seconds"] += item["seconds"]
+        self.stats["sent_bytes"] += getattr(self.brain, "sent_bytes", 0)
         self.publish("answer", item)
         self.remember(item)
         self.last = {"question": q, "answer": spoken, "seconds": item["seconds"], "with_view": bool(jpeg)}
@@ -562,6 +575,7 @@ class Hub:
                 self.answer(q)
         except Exception as e:
             log.exception("answering failed")
+            self.stats["errors"] += 1
             self.mouth.say("Sorry, something went wrong. " + friendly_error(e))
             self.publish("problem", {"text": friendly_error(e)})
         finally:
@@ -580,6 +594,170 @@ class Hub:
         return {"state": self.state, "uptime": round(time.time() - self.started), "claude_running": self.brain.alive(),
                 "claude_last_error": self.brain.last_error, "camera": self.cfg["eyes"]["source"],
                 "glasses_connected": time.time() - self.glasses_seen < 70, "address": self.lan_ip, "last": self.last}
+
+
+    # ---------- health, for the control panel ----------
+    def cached(self, key, seconds, fn):
+        hit = self._cache.get(key)
+        if hit and time.time() - hit[0] < seconds:
+            return hit[1]
+        value = fn()
+        self._cache[key] = (time.time(), value)
+        return value
+
+    @staticmethod
+    def _internet():
+        try:
+            with socket.create_connection(("api.anthropic.com", 443), timeout=3):
+                return True
+        except OSError:
+            return False
+
+    @staticmethod
+    def _battery():
+        if not shutil.which("termux-battery-status"):
+            return None
+        try:
+            out = subprocess.run(["termux-battery-status"], capture_output=True, text=True, timeout=6).stdout
+            b = json.loads(out)
+            return {"percent": b.get("percentage"), "charging": b.get("status") in ("CHARGING", "FULL"),
+                    "temp": b.get("temperature")}
+        except Exception:
+            return None
+
+    def tail(self, name, lines):
+        try:
+            return (self.data / name).read_text(errors="replace").splitlines()[-lines:]
+        except OSError:
+            return []
+
+    def health(self):
+        c = self.cfg
+        ears, mouth, eyes = c["ears"]["engine"], c["mouth"]["engine"], c["eyes"]["source"]
+        parts = []
+
+        def part(key, name, status, detail, test=None):
+            parts.append({"key": key, "name": name, "status": status, "detail": detail, "test": test})
+
+        err = self.brain.last_error
+        if self.brain.alive():
+            part("claude", "Claude Code", "ok", f"Running ({c['claude']['model']}, effort {c['claude']['effort']}). "
+                 f"{self.brain.turns} questions in this conversation.", "claude")
+        elif re.search(r"log ?in|auth|401", err, re.I):
+            part("claude", "Claude Code", "fail", "Logged out. Run claude-proot (or claude) and log in again.", "claude")
+        else:
+            part("claude", "Claude Code", "warn", "Not running right now; the hub restarts it within a few seconds."
+                 + (f" Last message: {err[:160]}" if err else ""), "claude")
+
+        if ears == "none":
+            part("ears", "Microphone", "off", "No microphone set up (ears engine is none).")
+        elif ears == "android":
+            ok = bool(shutil.which("termux-speech-to-text"))
+            part("ears", "Microphone", "ok" if ok else "fail", "Android speech recognition through Termux:API."
+                 if ok else "Termux:API commands missing: pkg install termux-api, and install the Termux:API app.", "listen")
+        else:
+            ok = expand(c["ears"]["whisper_bin"]).exists() and expand(c["ears"]["whisper_model"]).exists()
+            part("ears", "Microphone", "ok" if ok else "fail", "whisper.cpp speech recognition."
+                 if ok else "whisper.cpp or its model is missing: run setup.sh.", "listen")
+
+        if mouth == "none":
+            part("mouth", "Speaker", "off", "Answers are only printed (mouth engine is none).", "speak")
+        else:
+            ok = bool(shutil.which("termux-tts-speak")) if mouth == "android" else True
+            names = {"android": "Android's text-to-speech", "piper": "Piper voice", "espeak": "espeak-ng voice"}
+            part("mouth", "Speaker", "ok" if ok else "fail", f"{names.get(mouth, mouth)}. Plays through paired earbuds if connected."
+                 if ok else "Termux:API commands missing.", "speak")
+
+        if eyes == "glasses":
+            seen = time.time() - self.glasses_seen
+            if seen < 70:
+                part("eyes", "Glasses camera", "ok", f"Connected at {c['eyes']['glasses_url'].split('/')[2]}.", "camera")
+            else:
+                part("eyes", "Glasses camera", "warn", "Glasses not connected. They check in every 30 s once they're on "
+                     "the same Wi-Fi; questions still work without a picture.", "camera")
+        elif eyes == "none":
+            part("eyes", "Camera", "off", "No camera (eyes source is none).")
+        else:
+            part("eyes", "Camera", "ok", f"Source: {eyes}.", "camera")
+
+        online = self.cached("internet", 30, self._internet)
+        part("net", "Internet", "ok" if online else "fail", "Can reach Claude's servers." if online
+             else "Can't reach Claude's servers. Check mobile data or Wi-Fi.")
+
+        st = self.stats
+        return {
+            "now": time.time(), "state": self.state, "uptime": round(time.time() - self.started),
+            "address": self.lan_ip, "port": c["hub"]["port"], "parts": parts,
+            "battery": self.cached("battery", 60, self._battery),
+            "stats": {**st, "average": round(st["seconds"] / st["questions"], 1) if st["questions"] else None,
+                      "notes": len(self.note_list()), "photos": len(self.captures())},
+            "settings": {"model": c["claude"]["model"], "effort": c["claude"]["effort"],
+                         "fresh_after_minutes": c["claude"]["fresh_after_minutes"], "web_search": c["claude"]["web_search"],
+                         "ears": ears, "mouth": mouth, "camera": eyes, "send_view": c["eyes"]["send_view"],
+                         "data_dir": str(self.data)},
+            "log": self.tail("lens.log", 80),
+            "doctor": self.tail("doctor-report.md", 30),
+        }
+
+    def test(self, what):
+        """One-tap checks from the control panel."""
+        if what == "speak":
+            self.mouth.say("Hi, this is Lens. If you can hear me, the speaker works.")
+            return {"ok": True, "text": "Speaking now. You should hear a short sentence."}
+        if what == "camera":
+            jpeg = self.eyes.look()
+            if not jpeg:
+                return {"ok": False, "text": "No picture came back from the camera."}
+            return {"ok": True, "text": f"Got a {len(jpeg) // 1024} KB picture.", "view": self.save_view(jpeg)}
+        if not self.busy.acquire(timeout=5):
+            return {"ok": False, "text": "Busy answering a question; try again in a moment."}
+        try:
+            if what == "listen":
+                if not self.ears:
+                    return {"ok": False, "text": "No microphone is set up."}
+                self.set_state("listening")
+                heard = self.ears.listen()
+                return {"ok": bool(heard), "text": f"Heard: \u201c{heard}\u201d" if heard else "Didn't hear anything. Speak right after tapping."}
+            if what == "claude":
+                t0 = time.time()
+                reply = self.brain.ask("This is a connection test from the control panel. Reply with exactly: Claude is working.")
+                return {"ok": "working" in reply.lower(), "text": f"{reply.strip()} ({time.time() - t0:.1f} s)"}
+        except Exception as e:
+            return {"ok": False, "text": str(e)[:300]}
+        finally:
+            self.set_state("ready")
+            self.busy.release()
+        return {"ok": False, "text": "Unknown test."}
+
+
+def app_icon(size):
+    """The home-screen icon: a lens ring on dark glass, drawn without any image library."""
+    bg, ring, glint = (5, 8, 13), (127, 227, 255), (233, 250, 255)
+    c, r_out, r_in = size / 2, size * 0.36, size * 0.27
+    rows = bytearray()
+    for y in range(size):
+        rows.append(0)
+        for x in range(size):
+            d = ((x + 0.5 - c) ** 2 + (y + 0.5 - c) ** 2) ** 0.5
+            gx, gy = x - size * 0.40, y - size * 0.38
+            if (gx * gx + gy * gy) ** 0.5 < size * 0.05:
+                rows += bytes(glint)
+            elif r_in <= d <= r_out:
+                rows += bytes(ring)
+            else:
+                rows += bytes(bg)
+
+    def chunk(t, data):
+        return struct.pack(">I", len(data)) + t + data + struct.pack(">I", zlib.crc32(t + data) & 0xFFFFFFFF)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(bytes(rows), 9)) + chunk(b"IEND", b""))
+
+
+MANIFEST = {"name": "Lens", "short_name": "Lens", "start_url": "/panel", "display": "standalone",
+            "background_color": "#05080d", "theme_color": "#05080d",
+            "icons": [{"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                      {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"}]}
+ICONS = {}
 
 
 def friendly_error(e):
@@ -630,6 +808,13 @@ def make_handler(hub):
             url = urllib.parse.urlsplit(self.path)
             query = urllib.parse.parse_qs(url.query)
             self.note_address()
+            if url.path == "/manifest.webmanifest":
+                return self.send_bytes(200, json.dumps(MANIFEST).encode(), "application/manifest+json")
+            m = re.fullmatch(r"/icon-(192|512)\.png", url.path)
+            if m:
+                size = int(m.group(1))
+                ICONS.setdefault(size, app_icon(size))
+                return self.send_bytes(200, ICONS[size], "image/png")
             if not self.authorised(query):
                 if url.path == "/status":
                     return self.reply(200, {"state": hub.state})
@@ -637,11 +822,14 @@ def make_handler(hub):
                 return self.send_bytes(403, page, "text/html; charset=utf-8")
             if url.path == "/status":
                 return self.reply(200, hub.status())
-            if url.path == "/":
+            pages = {"/": "phone.html", "/panel": "panel.html"}
+            if url.path in pages:
                 if "t" in query:   # remember the token and drop it from the address bar
                     cookie = f"lens={token}; Path=/; Max-Age=31536000; SameSite=Strict"
-                    return self.send_bytes(303, b"", "text/plain", [("Location", "/"), ("Set-Cookie", cookie)])
-                return self.send_bytes(200, (HERE / "phone.html").read_bytes(), "text/html; charset=utf-8")
+                    return self.send_bytes(303, b"", "text/plain", [("Location", url.path), ("Set-Cookie", cookie)])
+                return self.send_bytes(200, (HERE / pages[url.path]).read_bytes(), "text/html; charset=utf-8")
+            if url.path == "/api/health":
+                return self.reply(200, hub.health())
             if url.path == "/events":
                 return self.stream_events()
             if url.path == "/api/state":
@@ -700,6 +888,9 @@ def make_handler(hub):
                 target = {"long": hub.photo, "stop": hub.interrupt}.get(event, hub.talk)
                 threading.Thread(target=target, daemon=True).start()
                 return self.reply(200, {"ok": True, "event": event})
+            m = re.fullmatch(r"/test/(speak|listen|camera|claude)", path)
+            if m:
+                return self.reply(200, hub.test(m.group(1)))
             if path == "/notes/delete":
                 hub.delete_note(int(body.get("index", -1)))
                 return self.reply(200, {"notes": hub.note_list()})
@@ -715,6 +906,7 @@ def make_handler(hub):
                     return self.reply(200, {"answer": text, **hub.last})
                 except Exception as e:
                     log.exception("ask failed")
+                    hub.stats["errors"] += 1
                     hub.publish("problem", {"text": friendly_error(e)})
                     return self.reply(500, {"error": str(e)})
                 finally:

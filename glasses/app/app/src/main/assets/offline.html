@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#05080d;--card:#0a1520;--line:#7fe3ff2e;--hud:#7fe3ff;--ink:#e8f7ff;--dim:#8aa4b2;--warn:#ffc46b;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif;padding:24px 18px}
+h1{font:700 14px/1 ui-monospace,monospace;letter-spacing:.2em;color:var(--hud);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:12px;max-width:560px}
+.warn{color:var(--warn);font-weight:600}
+p{margin:0;color:var(--dim)}
+code{color:var(--ink);font-size:13px;word-break:break-all}
+.btns{display:grid;gap:8px}
+button{font:inherit;font-weight:600;padding:13px;border-radius:12px;border:1px solid var(--hud);background:#0f2533;color:var(--hud)}
+button.quiet{background:none;border-color:var(--line)}
+small{color:#5f7884}
+</style>
+</head>
+<body>
+<h1>LENS</h1>
+<div class="card">
+  <div class="warn">The hub isn't running</div>
+  <p>The app shows what the hub in Termux is doing, so the hub needs to be running. It couldn't reach it at <code>{{HUB}}</code>.</p>
+  <div class="btns">
+    <button onclick="LensApp.startHub()">Start the hub</button>
+    <button class="quiet" onclick="LensApp.retry()">Try again</button>
+    <button class="quiet" onclick="LensApp.openTermux()">Open Termux</button>
+    <button class="quiet" onclick="LensApp.openSettings()">App settings</button>
+  </div>
+  <p>Or start it yourself in Termux: <code>bash ~/mobileClaude/glasses/pi/android/run.sh</code></p>
+  <small>{{REASON}}</small>
+</div>
+</body>
+</html>
