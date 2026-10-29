@@ -6,6 +6,8 @@
 package mobile
 
 import (
+	"os"
+
 	"github.com/TheEmeraldPig/mobileClaude/remote/game"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/mobile"
@@ -16,6 +18,9 @@ type lazy struct{ g ebiten.Game }
 
 func (l *lazy) Update() error {
 	if game.Crashed() {
+		if game.CrashUpdate() { // Close on the crash screen
+			os.Exit(0)
+		}
 		return nil
 	}
 	if l.g == nil {
