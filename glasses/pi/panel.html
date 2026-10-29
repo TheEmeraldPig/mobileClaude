@@ -14,10 +14,11 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
-.wrap{max-width:860px;margin:0 auto;padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));display:grid;gap:18px}
+.wrap{max-width:860px;margin:0 auto;padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));display:grid;grid-template-columns:minmax(0,1fr);gap:18px}
+.wrap>*{min-width:0}
 header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .logo{font:700 14px/1 ui-monospace,Menlo,monospace;letter-spacing:.2em;color:var(--hud);flex:1}
-.pill{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border:1px solid var(--line);border-radius:999px;font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.pill{display:inline-flex;max-width:100%;align-items:center;gap:7px;padding:6px 11px;border:1px solid var(--line);border-radius:999px;font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
 .pill i,.dot{width:8px;height:8px;border-radius:50%;background:var(--off);display:inline-block;flex:none}
 .ok i,.dot.ok{background:var(--ok)} .warn i,.dot.warn{background:var(--warn)} .fail i,.dot.fail{background:var(--fail)}
 .hbtn{padding:7px 11px;border:1px solid var(--line);border-radius:10px;color:var(--hud);font-size:13px}
@@ -39,7 +40,7 @@ h2{font:700 12px/1 ui-monospace,Menlo,monospace;letter-spacing:.16em;color:var(-
 @media (prefers-reduced-motion:reduce){.node{transition:none}}
 
 /* checks */
-.checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+.checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:10px}
 .check{display:grid;gap:8px;align-content:start}
 .check .top{display:flex;align-items:center;gap:8px}
 .check .top b{flex:1}
