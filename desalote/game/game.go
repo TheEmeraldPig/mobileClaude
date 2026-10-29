@@ -17,6 +17,11 @@ type Game struct{}
 
 func (g *Game) Update() error {
 	if Crashed() {
+		frame++
+		runScript()        // (test hooks keep running, to look at the crash screen)
+		if CrashUpdate() { // Esc or Close on the crash screen
+			return ebiten.Termination
+		}
 		return nil
 	}
 	defer CatchCrash()
@@ -118,6 +123,7 @@ func tableKeys() {
 func (g *Game) Draw(screen *ebiten.Image) {
 	if Crashed() {
 		DrawCrash(screen)
+		takeShot(screen)
 		return
 	}
 	defer CatchCrash()
