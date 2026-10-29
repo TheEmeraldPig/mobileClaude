@@ -1,0 +1,151 @@
+name: Build Desalote
+
+# Builds the Windows .exe and the Android .apk on every push that changes the game,
+# then publishes them as a GitHub release named desalote-build-<number>.
+#
+# This repository also releases Mote, and Mote's updaters install whatever release is the
+# repository's "latest". So Desalote's releases are never marked latest (--latest=false),
+# and Desalote's own updaters look for the newest desalote-build- tag instead.
+on:
+  push:
+    paths:
+      - 'desalote/**'
+      - '.github/workflows/desalote.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desalote
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: desalote/go.sum
+      - name: Install libraries for tests
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev libxxf86vm-dev libasound2-dev xvfb
+      - name: Test (rules, scoring, and whole bot matches in every mode)
+        run: xvfb-run -a go test ./game
+      - name: Build Desalote.exe
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
+            -ldflags "-s -w -H windowsgui -X github.com/TheEmeraldPig/mobileClaude/desalote/game.Version=${{ github.run_number }} -X github.com/TheEmeraldPig/mobileClaude/desalote/game.RelayURL=${{ vars.MOTE_RELAY_URL }}" \
+            -o Desalote.exe ./cmd/desalote
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -tags steam \
+            -ldflags "-s -w -H windowsgui -X github.com/TheEmeraldPig/mobileClaude/desalote/game.Version=${{ github.run_number }} -X github.com/TheEmeraldPig/mobileClaude/desalote/game.RelayURL=${{ vars.MOTE_RELAY_URL }}" \
+            -o Desalote-steam.exe ./cmd/desalote
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            desalote/Desalote.exe
+            desalote/Desalote-steam.exe
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: desalote/go.sum
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Use the Android SDK and NDK that come with the runner
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> $GITHUB_ENV
+          echo "SDK: $ANDROID_HOME  NDK: $ANDROID_NDK_LATEST_HOME"
+          ls "$ANDROID_HOME/platforms" | tail -3
+      - name: Build the game library (.aar)
+        working-directory: desalote
+        run: |
+          mkdir -p android/app/libs
+          go install github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@v2.8.8
+          ebitenmobile bind -target android -androidapi 23 -javapkg com.theemeraldpig.desalote \
+            -ldflags "-X github.com/TheEmeraldPig/mobileClaude/desalote/game.Version=${{ github.run_number }} -X github.com/TheEmeraldPig/mobileClaude/desalote/game.RelayURL=${{ vars.MOTE_RELAY_URL }}" \
+            -o android/app/libs/desalote.aar ./mobile
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build Desalote.apk
+        working-directory: desalote/android
+        run: |
+          gradle assembleRelease -PgameVersion=${{ github.run_number }} --no-daemon -q
+          cp app/build/outputs/apk/release/app-release.apk ../Desalote.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: desalote/Desalote.apk
+
+  # Starts Desalote.apk on an Android emulator and saves a screenshot and the system log,
+  # so problems on phones can be seen without a phone. It does not block the release.
+  android-test:
+    needs: android
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: android
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run Desalote on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install -r Desalote.apk
+            adb logcat -c
+            adb shell am start -n com.theemeraldpig.desalote/.MainActivity
+            sleep 40
+            adb exec-out screencap -p > shot-menu.png
+            # tap Play with bots (the first button on the right of the main menu)
+            adb shell input swipe 1300 330 1300 330 300
+            sleep 20
+            adb exec-out screencap -p > shot-lobby.png
+            adb logcat -d > logcat.txt
+            PID=$(adb shell pidof com.theemeraldpig.desalote || true); echo "Desalote pid: $PID"
+            if [ -n "$PID" ]; then grep " $PID " logcat.txt | tail -150; fi
+            grep -E "GoLog|Desalote|FATAL|DEBUG  :|libc  " logcat.txt | tail -100 || true
+            adb shell dumpsys activity top | grep -iE "ACTIVITY|desalote" | head -5 || true
+            for f in shot-menu.png shot-lobby.png; do echo "== $f"; python3 desalote/android/tools/shrink_png.py $f 192 || true; done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test
+          path: |
+            shot-*.png
+            logcat.txt
+
+  release:
+    needs: [windows, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Publish release desalote-build-${{ github.run_number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "desalote-build-${{ github.run_number }}" Desalote.exe Desalote-steam.exe Desalote.apk \
+            --repo "${{ github.repository }}" --target "${{ github.sha }}" --latest=false \
+            --title "Desalote build ${{ github.run_number }}" \
+            --notes "Windows: download Desalote.exe and run it. Android: download Desalote.apk on your phone and open it to install. Desalote-steam.exe is the Steam build (no built-in updater)."

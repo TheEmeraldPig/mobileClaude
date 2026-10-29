@@ -1,5 +1,8 @@
 # Handoff: a new game built on Mote's engine
 
+> **Done once:** Desalote (`desalote/`, a multiplayer card game) was built this way. Its README and
+> workflow show the renames, the release-tag prefix and the updaters in practice.
+
 You're starting a **new, separate game** in this repository (`TheEmeraldPig/mobileClaude`). It reuses
 the engine of **Mote**, a pixel sandbox game in `mote/`. Mote is finished and must keep working
 exactly as it is. The owner wants "something more exciting" built on the same lighting and game

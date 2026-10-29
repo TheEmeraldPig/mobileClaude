@@ -19,3 +19,11 @@
 - Building tools (shapes, walls, paint, rotate/flip, holograms) are in `build.go`; keep the build bar usable on phones.
 - Every push to `mote/` builds and releases `Mote.exe`, `Mote-steam.exe` and `Mote.apk` through `.github/workflows/mote.yml`.
 - Check layouts by running under Xvfb with the test hooks in `game/testhooks.go` (`MOTE_SCRIPT`, `MOTE_TOUCH=1`, `MOTE_NOAUDIO=1`).
+
+## desalote/ (Desalote: a multiplayer poker-hand card game on Mote's engine)
+
+- A separate game built from copies of Mote's engine parts (UI, audio, multiplayer hub, Android wrapper). Never import from `mote/` or change Mote for it. See `desalote/README.md` for the rules and layout.
+- The host's game runs the match (`game/match.go`) and sends all of it to everyone. Each game plays its own player's cards (`game/run.go`) and reports scores. New per-player state goes in `PlayerState`; new player actions go in `action` and `hostAct` in `client.go`.
+- Its own art, cards, charms and rules: don't copy anything from Balatro.
+- Releases are tagged `desalote-build-N` and created with `--latest=false`; Desalote's updaters look for that prefix. Keep this, or Mote's updaters would offer Desalote to Mote players. Its ports (47479/47480), Android id and save folder differ from Mote's.
+- `xvfb-run -a go test ./game` must pass, including the whole bot matches in every mode. Check layouts with the test hooks in `game/testhooks.go` (`DESALOTE_SCRIPT`, `DESALOTE_TOUCH=1`, `DESALOTE_SIZE`, `DESALOTE_NOAUDIO=1`), at desktop size and at a small phone size like 873x393.
