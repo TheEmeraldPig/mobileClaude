@@ -1,0 +1,5 @@
+10-30 00:22:54.501  5823  5888 I LensUpdate: Installing build 5…
+10-30 00:23:08.244   481   849 I ActivityTaskManager: START u0 {act=android.content.pm.action.CONFIRM_INSTALL flg=0x2000001 pkg=com.google.android.packageinstaller cmp=com.google.android.packageinstaller/com.android.packageinstaller.PackageInstallerActivity (has extras)} from uid 10079
+10-30 00:23:08.336   481  1930 D CoreBackPreview: Window{caadd55 u0 com.google.android.packageinstaller/com.android.packageinstaller.PackageInstallerActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@8e0005b, mPriority=0}
+10-30 00:23:09.310   481   508 I ActivityTaskManager: Displayed com.google.android.packageinstaller/com.android.packageinstaller.PackageInstallerActivity: +1s31ms
+    versionCode=1 minSdk=26 targetSdk=34

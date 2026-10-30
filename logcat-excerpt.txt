@@ -1,0 +1,80 @@
+10-30 00:22:05.842  3279  3337 W cr_AWNetworkFetcherTask: 	at org.chromium.android_webview.nonembedded.NetworkFetcherTask.download(chromium-TrichromeWebViewGoogle6432.apk-stable-541412337:48)
+10-30 00:22:06.053  3279  3337 W cr_AWNetworkFetcherTask: 	at org.chromium.android_webview.nonembedded.NetworkFetcherTask.download(chromium-TrichromeWebViewGoogle6432.apk-stable-541412337:48)
+10-30 00:22:06.053  3279  3337 W cr_AWNetworkFetcherTask: 	at org.chromium.android_webview.nonembedded.NetworkFetcherTask.download(chromium-TrichromeWebViewGoogle6432.apk-stable-541412337:48)
+10-30 00:22:06.114  3279  3337 W cr_AWNetworkFetcherTask: 	at org.chromium.android_webview.nonembedded.NetworkFetcherTask.download(chromium-TrichromeWebViewGoogle6432.apk-stable-541412337:48)
+10-30 00:22:07.551  1586  1586 I AiAiEcho: EchoSearch: AppFetcherImpl is initialized with [19] apps [time=4, reason=com.theemeraldpig.lens is added]
+10-30 00:22:13.289  1287  3650 I BlockstoreStorage: Clearing Blockstore Data for package com.theemeraldpig.lens [CONTEXT service_id=258 ]
+10-30 00:22:13.346  1049  3532 I FontLog : Package com.theemeraldpig.lens has no metadata [CONTEXT service_id=132 ]
+10-30 00:22:17.840  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.getEnabledCronetProviders(PG:5)
+10-30 00:22:17.840  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.createBuilderDelegate(PG:2)
+10-30 00:22:17.840  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.<init>(PG:1)
+10-30 00:22:17.840  2847  2955 D StrictMode: 	at org.chromium.net.ExperimentalCronetEngine$Builder.<init>(PG:1)
+10-30 00:22:17.859  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.getEnabledCronetProviders(PG:5)
+10-30 00:22:17.859  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.createBuilderDelegate(PG:2)
+10-30 00:22:17.859  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.<init>(PG:1)
+10-30 00:22:17.859  2847  2955 D StrictMode: 	at org.chromium.net.ExperimentalCronetEngine$Builder.<init>(PG:1)
+10-30 00:22:17.859  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.getEnabledCronetProviders(PG:5)
+10-30 00:22:17.859  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.createBuilderDelegate(PG:2)
+10-30 00:22:17.859  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.<init>(PG:1)
+10-30 00:22:17.859  2847  2955 D StrictMode: 	at org.chromium.net.ExperimentalCronetEngine$Builder.<init>(PG:1)
+10-30 00:22:17.867  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.getEnabledCronetProviders(PG:5)
+10-30 00:22:17.867  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.createBuilderDelegate(PG:2)
+10-30 00:22:17.867  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.<init>(PG:1)
+10-30 00:22:17.867  2847  2955 D StrictMode: 	at org.chromium.net.ExperimentalCronetEngine$Builder.<init>(PG:1)
+10-30 00:22:17.867  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.getEnabledCronetProviders(PG:5)
+10-30 00:22:17.867  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.createBuilderDelegate(PG:2)
+10-30 00:22:17.867  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.<init>(PG:1)
+10-30 00:22:17.867  2847  2955 D StrictMode: 	at org.chromium.net.ExperimentalCronetEngine$Builder.<init>(PG:1)
+10-30 00:22:17.867  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.getEnabledCronetProviders(PG:5)
+10-30 00:22:17.867  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.createBuilderDelegate(PG:2)
+10-30 00:22:17.867  2847  2955 D StrictMode: 	at org.chromium.net.CronetEngine$Builder.<init>(PG:1)
+10-30 00:22:17.867  2847  2955 D StrictMode: 	at org.chromium.net.ExperimentalCronetEngine$Builder.<init>(PG:1)
+10-30 00:22:18.780  2847  4240 I cr_CronetUrlRequestContext: destroyNativeStreamLocked org.chromium.net.impl.CronetBidirectionalStream@50882e0
+10-30 00:22:32.974  4825  4881 I cr_CronetUrlRequestContext: destroyNativeStreamLocked org.chromium.net.impl.CronetBidirectionalStream@1b5c252
+10-30 00:22:33.465   481   595 W InputDispatcher: Not sending touch gesture to cc2f0c9 ActivityRecordInputSink com.theemeraldpig.lens/.MainActivity because it is not responsive
+10-30 00:22:37.096   481  1802 I ActivityManager: Force stopping com.theemeraldpig.lens appid=10174 user=0: from pid 5185
+10-30 00:22:37.099   481  1802 I ActivityManager: Killing 3137:com.theemeraldpig.lens/u0a174 (adj 0): stop com.theemeraldpig.lens due to from pid 5185
+10-30 00:22:37.112  3208  3208 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:37.119   481  1802 I ActivityManager: Killing 3208:com.google.android.webview:sandboxed_process0:org.chromium.content.app.SandboxedProcessService0:0/u0a174i0 (adj 0): isolated not needed
+10-30 00:22:37.135   481  1802 W ActivityTaskManager: Force removing ActivityRecord{cca81de u0 com.theemeraldpig.lens/.MainActivity} t9 f}}: app died, no saved state
+10-30 00:22:37.157   481  1802 W WindowManager: Exception thrown during dispatchAppVisibility Window{e92833a u0 com.theemeraldpig.lens/com.theemeraldpig.lens.MainActivity}
+10-30 00:22:37.167   481  1802 W InputManager-JNI: Input channel object 'e92833a com.theemeraldpig.lens/com.theemeraldpig.lens.MainActivity (client)' was disposed without first being removed with the input manager!
+10-30 00:22:37.193   481  1519 V ActivityManager: Got obituary of 3137:com.theemeraldpig.lens
+10-30 00:22:37.239   984   984 D CarrierSvcBindHelper: onHandleForceStop: [com.theemeraldpig.lens]
+10-30 00:22:37.270   481  1050 I ActivityTaskManager: START u0 {flg=0x10000000 cmp=com.theemeraldpig.lens/.MainActivity} from uid 2000
+10-30 00:22:37.446   481   565 D CoreBackPreview: Window{b517158 u0 Splash Screen com.theemeraldpig.lens}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@228396, mPriority=0}
+10-30 00:22:37.466   481   520 I ActivityManager: Start proc 5199:com.theemeraldpig.lens/u0a174 for next-top-activity {com.theemeraldpig.lens/com.theemeraldpig.lens.MainActivity}
+10-30 00:22:37.472  5199  5199 I emeraldpig.lens: Using CollectorTypeCC GC.
+10-30 00:22:37.476  5199  5199 W emeraldpig.lens: Unexpected CPU variant for x86: x86_64.
+10-30 00:22:37.476  5199  5199 W emeraldpig.lens: Known variants: atom, sandybridge, silvermont, kabylake, default
+10-30 00:22:37.482   481   481 I NotificationService: Cannot find enqueued record for key: 0|com.theemeraldpig.lens|2147483647|ranker_group|10174|ranker_group
+10-30 00:22:37.539  5199  5199 D nativeloader: Configuring classloader-namespace for other apk /data/app/~~zLYXSoZdpe6W5MZuzmqfgA==/com.theemeraldpig.lens-z2280knTbN5g7YibWWo2WQ==/base.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app/~~zLYXSoZdpe6W5MZuzmqfgA==/com.theemeraldpig.lens-z2280knTbN5g7YibWWo2WQ==/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/com.theemeraldpig.lens
+10-30 00:22:37.550  5199  5199 V GraphicsEnvironment: ANGLE Developer option for 'com.theemeraldpig.lens' set to: 'default'
+10-30 00:22:37.551  5199  5199 V GraphicsEnvironment: ANGLE GameManagerService for com.theemeraldpig.lens: false
+10-30 00:22:37.612  5199  5199 W emeraldpig.lens: Entry not found
+10-30 00:22:37.665  5199  5225 I cr_VariationsUtils: Failed reading seed file "/data/user/0/com.theemeraldpig.lens/app_webview/variations_seed_new"
+10-30 00:22:37.665  5199  5225 I cr_VariationsUtils: Failed reading seed file "/data/user/0/com.theemeraldpig.lens/app_webview/variations_seed"
+10-30 00:22:37.688   481   520 I ActivityManager: Start proc 5229:com.google.android.webview:sandboxed_process0:org.chromium.content.app.SandboxedProcessService0:0/u0i1 for  {com.theemeraldpig.lens/org.chromium.content.app.SandboxedProcessService0:0}
+10-30 00:22:37.719  5199  5231 W chromium: [WARNING:dns_config_service_android.cc(115)] Failed to read DnsConfig.
+10-30 00:22:37.766  5229  5229 I cr_WebViewApkApp: Launched version=109.0.5414.123 minSdkVersion=29 isBundle=false processName=com.google.android.webview:sandboxed_process0:org.chromium.content.app.SandboxedProcessService0:0
+10-30 00:22:37.856   481  2011 D CoreBackPreview: Window{74778ba u0 com.theemeraldpig.lens/com.theemeraldpig.lens.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@7646686, mPriority=0}
+10-30 00:22:38.191   481   571 D CoreBackPreview: Window{b517158 u0 Splash Screen com.theemeraldpig.lens EXITING}: Setting back callback null
+10-30 00:22:38.192   481  2011 W InputManager-JNI: Input channel object 'b517158 Splash Screen com.theemeraldpig.lens (client)' was disposed without first being removed with the input manager!
+10-30 00:22:38.202   481   508 I ActivityTaskManager: Displayed com.theemeraldpig.lens/.MainActivity: +895ms
+10-30 00:22:38.228  1465  1465 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1877 onStartInput(EditorInfo{inputType=0x0(NULL) imeOptions=0x0 privateImeOptions=null actionName=UNSPECIFIED actionLabel=null actionId=0 initialSelStart=-1 initialSelEnd=-1 initialCapsMode=0x0 hintText=null label=null packageName=com.theemeraldpig.lens fieldId=-1 fieldName=null extras=null}, false)
+10-30 00:22:46.731  4677  4677 I HibernationPolicy: android.cameraextensions=Thu Jan 01 00:00:00 UTC 1970, com.google.android.apps.wallpaper.nexus=Thu Jan 01 00:00:00 UTC 1970, com.android.localtransport=Fri Oct 30 00:21:52 UTC 2026, com.google.android.apps.nexuslauncher=Fri Oct 30 00:22:37 UTC 2026, com.google.android.nearby.halfsheet=Thu Jan 01 00:00:00 UTC 1970, com.android.carrierdefaultapp=Thu Jan 01 00:00:00 UTC 1970, com.android.theme.font.notoserifsource=Thu Jan 01 00:00:00 UTC 1970, com.android.proxyhandler=Thu Jan 01 00:00:00 UTC 1970, com.google.android.safetycenter.resources=Thu Jan 01 00:00:00 UTC 1970, com.android.internal.display.cutout.emulation.waterfall=Thu Jan 01 00:00:00 UTC 1970, com.android.intentresolver=Thu Jan 01 00:00:00 UTC 1970, com.google.android.connectivity.resources=Thu Jan 01 00:00:00 UTC 1970, com.android.providers.contacts.auto_generated_rro_product__=Thu Jan 01 00:00:00 UTC 1970, com.google.android.feedback=Thu Jan 01 00:00:00 UTC 1970, com.google.android.printservice.recommendation=Thu Jan 01 00:00:00 UTC 1970, com.android.managedprovisioning=Fri Oct 30 00:21:50 UTC 2026, com.android.soundpicker=Thu Jan 01 00:00:00 UTC 1970, com.google.android.documentsui=Fri Oct 30 00:22:13 UTC 2026, com.android.systemui.emulation.pixel_3a_xl=Thu Jan 01 00:00:00 UTC 1970, com.android.systemui.emulation.pixel_6_pro=Thu Jan 01 00:00:00 UTC 1970, com.android.systemui.emulation.pixel_7_pro=Thu Jan 01 00:00:00 UTC 1970, com.google.mainline.telemetry=Thu Jan 01 00:00:00 UTC 1970, com.google.android.systemui.gxoverlay=Thu Jan 01 00:00:00 UTC 1970, com.android.carrierconfig.auto_generated_rro_product__=Thu Jan 01 00:00:00 UTC 1970, com.android.emulator.multidisplay=Fri Oct 30 00:22:12 UTC 2026, com.android.providers.partnerbookmarks=Thu Jan 01 00:00:00 UTC 1970, com.android.wallpaper.livepicker=Thu Jan 01 00:00:00 UTC 1970, com.android.providers.telephony.auto_generated_rro_product__=Thu Jan 01 00:00:00 UTC 1970, com.android.phone.auto_generated_rro_vendor__=Thu Jan 01 00:00:00 UTC 1970, com.google.mainline.adservices=Thu Jan 01 00:00:00 UTC 1970, com.android.imsserviceentitlement=Thu Jan 01 00:00:00 UTC 1970, com.google.android.sdksetup=Fri Oct 30 00:21:51 UTC 2026, com.android.internal.emulation.pixel_2_xl=Thu Jan 01 00:00:00 UTC 1970, com.android.internal.emulation.pixel_3_xl=Thu Jan 01 00:00:00 UTC 1970, com.android.internal.emulation.pixel_4_xl=Thu Jan 01 00:00:00 UTC 1970, com.android.storagemanager=Thu Jan 01 00:00:00 UTC 1970, com.android.bookmarkprovider=Thu Jan 01 00:00:00 UTC 1970, com.google.android.overlay.pixelconfigcommon=Thu Jan 01 00:00:00 UTC 1970, com.android.settings=Fri Oct 30 00:22:39 UTC 2026, com.theemeraldpig.lens=Fri Oct 30 00:22:37 UTC 2026, com.android.systemui.emulation.pixel_3a=Thu Jan 01 00:00:00 UTC 1970, com.android.systemui.emulation.pixel_4a=Thu Jan 01 00:00:00 UTC 1970, com.android.systemui.emulation.pixel_6a=Thu Jan 01 00:00:00 UTC 1970, com.google.android.settings.intelligence=Fri Oct 30 00:22:12 UTC 2026, com.google.android.uwb.resources=Thu Jan 01 00:00:00 UTC 1970, com.android.cts.ctsshim=Thu Jan 01 00:00:00 UTC 1970, com.google.android.wifi.resources=Thu Jan 01 00:00:00 UTC 1970, com.android.remoteprovisioner=Fri Oct 30 00:22:35 UTC 2026, com.google.android.wifi.dialog=Thu Jan 01 00:00:00 UTC 1970, com.android.vpndialogs=Thu Jan 01 00:00:00 UTC 1970, com.google.android.apps.wallpaper=Fri Oct 30 00:21:53 UTC 2026, com.google.android.odad=Thu Jan 01 00:00:00 UTC 1970, com.android.phone=Fri Oct 30 00:21:43 UTC 2026, com.android.shell=Thu Jan 01 00:00:00 UTC 1970, com.android.wallpaperbackup=Thu Jan 01 00:00:00 UTC 1970, com.android.providers.blockednumber=Thu Jan 01 00:00:00 UTC 1970, com.android.settings.auto_generated_rro_product__=Thu Jan 01 00:00:00 UTC 1970, com.android.providers.userdictionary=Thu Jan 01 00:00:00 UTC 1970, com.android.emergency=Fri Oct 30 00:22:28 UTC 2026, com.android.internal.systemui.navbar.gestural=Thu Jan 01 00:00:00 UTC 1970, com.android.location.fused=Fri Oct 30 00:21:43 UTC 2026, com.android.systemui=Fri Oct 30 0
+10-30 00:22:47.365  4315  4315 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:48.037  5411  5411 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:48.313  5434  5434 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:48.384  5453  5453 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:48.493  5471  5471 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:48.612  5489  5489 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:48.775  5506  5506 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:48.921  5524  5524 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:49.104  5541  5541 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:49.197  5558  5558 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:49.270  5575  5575 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:49.332  5592  5592 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:49.407  5609  5609 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:49.496  5627  5627 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-30 00:22:50.158  5651  5651 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
