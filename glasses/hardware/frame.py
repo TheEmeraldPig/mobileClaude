@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-"""Lens glasses, version 1: a parametric 3D-printable frame.
+"""Lens glasses, version 2: a parametric 3D-printable frame with folding hinges.
 
-Writes print-ready STL files (each part laid out the way it should sit on the print bed)
-to stl/, and the same parts in their assembled positions, plus stand-ins for the
-electronics, to preview/model.json for the 3D view in blueprint.html.
+Parts: the front (lenses and nose pads), two temples (the arms that go over the ears) and two
+lids. Each temple joins the front with a printed barrel hinge: two knuckles on the front, one on
+the temple, and a 2.85 mm filament offcut as the pin. All the electronics live in the right
+temple (camera and recording light in its front face, the XIAO board, battery, button and switch
+behind them), so no wires cross the hinge. The left temple has the same shape, with an empty
+pocket for a counterweight.
+
+Everything is modelled where it sits when worn (x across the face, y backwards from the front
+face, z up), then laid flat for printing. Outputs:
+  stl/<part>.stl                  each part on its own, lying the way it prints
+  stl/lens_glasses_plate.stl      all parts arranged on a 280 x 280 mm bed (LulzBot TAZ 6)
+  preview/model.json              the parts in their worn positions plus the electronics, for blueprint.html
 
   pip install manifold3d numpy
-  python3 frame.py                      # default sizes
-  python3 frame.py --head-width 138     # wider head
-  python3 frame.py --board-thickness 14 # if your board stack measures thicker
-
-Layout: everything electronic lives in the right temple ("pod"): the XIAO board at the
-front with its USB-C port facing down, the battery behind it. The camera and recording
-light sit in the right end piece of the front, looking forward. The left temple has the
-same shape (so the glasses look even) with an empty pocket for a counterweight.
-Temples join the front with two pins cut from 1.75 mm filament, plus glue. They don't fold.
+  python3 frame.py [--head-width 134] [--board-thickness 11]
 """
 import argparse
 import base64
@@ -26,218 +27,285 @@ from pathlib import Path
 import numpy as np
 from manifold3d import CrossSection, JoinType, Manifold, set_circular_segments
 
-set_circular_segments(48)
+set_circular_segments(56)
 HERE = Path(__file__).resolve().parent
+BED = 280.0
 
 
-def params(args):
+def params(a):
     p = dict(
-        # front
-        lens_w=args.lens_width, lens_h=args.lens_height, lens_r=10.0, rim=4.5, bridge=args.bridge,
-        front_t=5.0, lens_ledge=1.2, lens_rebate=1.8,
-        # where the temples sit: inner faces this far apart
-        head_w=args.head_width,
-        # right temple pod (electronics)
-        wall=1.6, board_l=21.0, board_w=17.8, board_t=args.board_thickness, usb_room=1.5,
-        battery=(5.2, 20.5, 31.0),     # thickness, height, length of a 502030 cell, with a little room
-        front_block=5.0, rear_wall=4.0, lid_t=1.6, lid_lip=1.2, fit=0.25,
-        pod_top=44.0,                   # top of the pod, from the bottom of the front
-        # end piece
-        end_d=12.0, cam=9.6, cam_hole=7.4, cam_skin=1.2, led_hole=3.1,
+        head_w=a.head_width,                   # between the temples' inner faces at the hinge
+        lens_w=a.lens_width, lens_h=a.lens_height, lens_r=11.0, rim=5.0, bridge=a.bridge,
+        front_t=5.5, lens_ledge=1.2, lens_rebate=1.8, end_d=8.0,
+        # hinge
+        knuckle_r=3.2, pin_hole=3.05, gap=0.4, kf_h=6.0, kt_h=7.0,
+        # right temple pod: what goes inside, plus room for the wires between the parts
+        wall=1.8, lid_t=1.6, lid_lip=1.2, fit=0.25,
+        board=(21.0, 17.8, a.board_thickness),   # XIAO ESP32S3 + Sense board, camera unplugged: length, width, stack
+        usb_room=1.5, wire_room=2.5,             # USB-C plug clearance below the board; a wire channel along the top
+        battery=(5.2, 20.5, 31.0),               # 502030 LiPo with a little room: thickness, height, length
+        gap_board_batt=3.0, gap_rear=3.0,         # wiring room around the battery
+        front_block=9.0,                         # solid front of the temple: hinge knuckle, camera and light
+        cam=9.6, cam_hole=7.4, cam_skin=1.2, cam_depth=7.0, led_hole=3.1,
+        rear_wall=4.0,
         # arms
-        arm_t=4.5, arm_h=7.0, temple_len=args.temple_length, drop_len=38.0, drop_angle=35.0,
-        pin_d=1.9, pin_depth=6.0,
+        arm_t=4.5, arm_h=7.0, temple_len=a.temple_length, drop_len=40.0, drop_angle=35.0,
     )
-    p["pod_in_t"] = p["board_t"] + 0.4                         # inside thickness
-    p["pod_t"] = p["wall"] + p["pod_in_t"]                     # body thickness (lid adds lid_t)
-    p["pod_tt"] = p["pod_t"] + p["lid_t"]
-    p["pod_in_h"] = p["board_l"] + p["usb_room"] + 0.3
-    p["pod_h"] = p["pod_in_h"] + 2 * p["wall"]
-    p["pod_bottom"] = p["pod_top"] - p["pod_h"]
-    p["pod_in_l"] = p["board_w"] + 1.0 + 1.5 + p["battery"][2] + 1.5   # board, gap, battery, wiring room
-    p["pod_l"] = p["front_block"] + p["pod_in_l"] + p["rear_wall"]
+    b_len, b_w, b_t = p["board"]
+    p["in_t"] = b_t + 1.2                                              # board stack + wires beside it
+    p["body_t"] = p["wall"] + p["in_t"]                                # printed temple thickness (without lid)
+    p["T"] = p["body_t"] + p["lid_t"]                                  # temple thickness when assembled
+    p["in_h"] = b_len + p["usb_room"] + p["wire_room"]
+    p["pod_h"] = p["in_h"] + 2 * p["wall"]
     p["front_h"] = p["lens_h"] + 2 * p["rim"]
-    p["lens_cz"] = p["front_h"] / 2
+    p["pod_top"] = p["front_h"] - 2.0
+    p["pod_bot"] = p["pod_top"] - p["pod_h"]
+    p["in_l"] = 0.5 + b_w + p["gap_board_batt"] + p["battery"][2] + p["gap_rear"]
+    p["pod_l"] = p["front_block"] + p["in_l"] + p["rear_wall"]
     p["lens_cx"] = p["bridge"] / 2 + p["rim"] + p["lens_w"] / 2
-    p["cam_z"] = p["pod_bottom"] + p["pod_h"] / 2 + 3.5        # camera centre height
-    p["cam_x"] = p["wall"] + p["pod_in_t"] / 2                 # camera centre, measured from the temple's outer face
-    p["led_z"] = p["cam_z"] - 9.0
-    p["pins"] = [(p["cam_x"], p["pod_bottom"] + 2.0), (p["cam_x"], p["pod_top"] - 2.0)]
-    p["opening"] = (p["pod_bottom"] + 4.0, p["pod_top"] - 3.8)  # wiring opening between end piece and pod
+    p["lens_cz"] = p["front_h"] / 2
+    # hinge axis: vertical, on the temple's inner face, one knuckle radius behind the front
+    p["ax"], p["ay"] = p["head_w"] / 2, p["end_d"] + p["knuckle_r"]
+    zc = (p["pod_bot"] + p["pod_top"]) / 2
+    g, kf, kt = p["gap"], p["kf_h"], p["kt_h"]
+    p["k_lo"] = (zc - kt / 2 - g - kf, zc - kt / 2 - g)                 # front knuckle, bottom
+    p["k_mid"] = (zc - kt / 2, zc + kt / 2)                             # temple knuckle
+    p["k_hi"] = (zc + kt / 2 + g, zc + kt / 2 + g + kf)                 # front knuckle, top
+    # camera and light in the temple's front face, outside the frame's end piece
+    p["end_x1"] = p["ax"] + p["knuckle_r"] + 1.5                         # outer edge of the front's end piece
+    p["cam_x"] = p["ax"] + p["T"] - p["wall"] - p["cam"] / 2 - 0.2
+    p["cam_z"] = zc + 4.0
+    p["led_z"] = p["cam_z"] - 10.0
     return p
 
 
 # ---------- helpers ----------
 def rrect(w, h, r, cx=0.0, cy=0.0):
-    """Rounded rectangle centred at (cx, cy)."""
     r = min(r, w / 2 - 0.01, h / 2 - 0.01)
     return CrossSection.square((w - 2 * r, h - 2 * r), center=True).offset(r, JoinType.Round).translate((cx, cy))
-
-
-def rect(x0, y0, x1, y1):
-    return CrossSection.square((x1 - x0, y1 - y0)).translate((x0, y0))
 
 
 def box(x0, y0, z0, x1, y1, z1):
     return Manifold.cube((x1 - x0, y1 - y0, z1 - z0)).translate((x0, y0, z0))
 
 
-def cyl_z(x, y, z0, z1, d):
-    return Manifold.cylinder(z1 - z0, d / 2).translate((x, y, z0))
+def zcyl(x, y, z0, z1, r):
+    """Vertical cylinder (along worn z)."""
+    return Manifold.cylinder(z1 - z0, r).translate((x, y, z0))
 
 
-def prism(cs, z0, z1):
-    return Manifold.extrude(cs, z1 - z0).translate((0, 0, z0))
+def ycyl(x, z, y0, y1, r):
+    """Cylinder along worn y (front to back), e.g. a camera window."""
+    return Manifold.cylinder(y1 - y0, r).rotate((-90, 0, 0)).translate((x, y0, z))
 
 
-# ---------- parts, in print orientation ----------
+def xz_prism(cs, y0, y1):
+    """A shape drawn in the x-z plane (looking at the face), given depth from y0 to y1."""
+    return Manifold.extrude(cs, y1 - y0).rotate((90, 0, 0)).translate((0, y1, 0))
+
+
+def yz_prism(cs, x0, x1):
+    """A shape drawn in the y-z plane (side view, cs x = worn y, cs y = worn z), given thickness from x0 to x1."""
+    return Manifold.extrude(cs, x1 - x0).rotate((90, 0, 90)).translate((x0, 0, 0))
+
+
+# ---------- hinge ----------
+def front_knuckles(p, grow=0.0):
+    """The front's two knuckles (right side): round barrels on the axis, joined to the end piece."""
+    ax, ay, r = p["ax"], p["ay"], p["knuckle_r"] + grow
+    out = Manifold()
+    for z0, z1 in (p["k_lo"], p["k_hi"]):
+        z0, z1 = z0 - grow, z1 + grow
+        barrel = zcyl(ax, ay, z0, z1, r)
+        web = box(ax - r, p["end_d"] - 0.5, z0, ax + r, ay, z1)
+        out = out + Manifold.batch_hull([barrel, web])
+    return out
+
+
+def temple_knuckle(p):
+    ax, ay, r = p["ax"], p["ay"], p["knuckle_r"]
+    z0, z1 = p["k_mid"]
+    barrel = zcyl(ax, ay, z0, z1, r)
+    web = box(ax, ay, z0, ax + r + 1, ay + r + 2, z1)   # into the temple's front block
+    return Manifold.batch_hull([barrel, web])
+
+
+def pin_hole(p):
+    return zcyl(p["ax"], p["ay"], p["k_lo"][0] - 1, p["k_hi"][1] + 1, p["pin_hole"] / 2)
+
+
+# ---------- parts, worn position (right side; the left is a mirror image) ----------
 def front(p):
-    """Face down on the bed: x = across the face, y = up, z = backwards from the front face."""
     lens = rrect(p["lens_w"], p["lens_h"], p["lens_r"])
     rimmed = lens.offset(p["rim"], JoinType.Round)
     shape = CrossSection()
     for s in (-1, 1):
         shape = shape + rimmed.translate((s * p["lens_cx"], p["lens_cz"]))
     top = p["front_h"]
-    shape = shape + rect(-p["bridge"] / 2 - 3, top - 11, p["bridge"] / 2 + 3, top)          # bridge
-    ex0 = p["head_w"] / 2
-    for s in (-1, 1):                                                                          # joins to the end pieces
-        x0, x1 = sorted((s * (p["lens_cx"] + p["lens_w"] / 2), s * (ex0 + 2)))
-        shape = shape + rrect(x1 - x0, 16, 3, (x0 + x1) / 2, p["pod_top"] - 10)
-    body = prism(shape, 0, p["front_t"])
+    shape = shape + rrect(p["bridge"] + 8, 12, 3, 0, top - 6)                      # bridge over the nose
+    x_rim = p["lens_cx"] + p["lens_w"] / 2
+    for s in (-1, 1):                                                               # joins rims to end pieces
+        x0, x1 = sorted((s * (x_rim - 2), s * (p["ax"] + 2)))
+        shape = shape + rrect(x1 - x0, 18, 3, (x0 + x1) / 2, p["pod_top"] - 10)
+    body = xz_prism(shape, 0, p["front_t"])
 
     for s in (-1, 1):
         cx = s * p["lens_cx"]
-        body = body - prism(lens.translate((cx, p["lens_cz"])), -1, p["front_t"] + 1)           # lens opening
+        body = body - xz_prism(lens.translate((cx, p["lens_cz"])), -1, p["front_t"] + 1)
         ledge = lens.offset(p["lens_ledge"], JoinType.Round).translate((cx, p["lens_cz"]))
-        body = body - prism(ledge, p["front_t"] - p["lens_rebate"], p["front_t"] + 1)          # optional lens seat
-        # nose pad: a slanted tab behind the inner lower rim
-        pad = box(-1.2, -7, 0, 1.2, 7, 9).rotate((0, s * 25, 0))
-        pad = pad.translate((s * (p["bridge"] / 2 + 1.6), p["lens_cz"] - 9, p["front_t"] - 1))
-        body = body + pad
+        body = body - xz_prism(ledge, p["front_t"] - p["lens_rebate"], p["front_t"] + 1)  # seat for optional lenses
+        pad = box(-1.2, 0, -7, 1.2, 7, 7).rotate((0, 0, s * 28))
+        body = body + pad.translate((s * (p["bridge"] / 2 + 1.8), p["front_t"] - 0.5, p["lens_cz"] - 10))
 
-    for side in ("right", "left"):
-        s = 1 if side == "right" else -1
-        xo = s * (ex0 + p["pod_tt"])     # outer face of the temple
-        x0, x1 = sorted((s * ex0, xo))
-        block = prism(rrect(x1 - x0, p["pod_h"], 2.5, (x0 + x1) / 2, p["pod_bottom"] + p["pod_h"] / 2), 0, p["end_d"])
-        body = body + block
-        # temple pins: holes in the back of the end piece
-        for (px, pz) in p["pins"]:
-            x = xo - s * px
-            body = body - cyl_z(x, pz, p["end_d"] - p["pin_depth"], p["end_d"] + 1, p["pin_d"])
-        if side == "right":
-            cx = xo - s * p["cam_x"]
-            c = p["cam"] / 2
-            body = body - box(cx - c, p["cam_z"] - c, p["cam_skin"], cx + c, p["cam_z"] + c, p["end_d"] + 1)   # camera pocket
-            body = body - cyl_z(cx, p["cam_z"], -1, p["cam_skin"] + 0.5, p["cam_hole"])                      # lens window
-            body = body - cyl_z(cx, p["led_z"], -1, p["end_d"] + 1, p["led_hole"])                           # recording light
-            body = body - cyl_z(cx, p["led_z"], 1.5, p["end_d"] + 1, 3.6)                                    # LED body
-    return body
+    # right end piece with its knuckles; the left one is the mirror image
+    x0 = p["ax"] - p["knuckle_r"] - 1.5
+    end = box(x0, 0, p["pod_bot"], p["end_x1"], p["end_d"], p["pod_top"])
+    side = end + front_knuckles(p)
+    zt0, zt1 = p["k_mid"]
+    side = side - zcyl(p["ax"], p["ay"], zt0 - p["gap"], zt1 + p["gap"], p["knuckle_r"] + p["gap"])  # room for the temple's knuckle
+    side = side - pin_hole(p)
+    return body + side + side.mirror((1, 0, 0))
 
 
-def temple(p, side):
-    """Lying on its outer face: x = along the temple (0 = joint), y = up, z = from the outer face inwards."""
-    w, L = p["wall"], p["pod_l"]
-    yb, yt = p["pod_bottom"], p["pod_top"]
-    pod_out = rrect(L, p["pod_h"], 3, L / 2, yb + p["pod_h"] / 2)
-    body = prism(pod_out, 0, p["pod_t"])
+def temple(p, electronics=True):
+    ax, ay, w = p["ax"], p["ay"], p["wall"]
+    xi, xo = ax, ax + p["T"]                    # inner face (lid side) and outer face
+    xb = ax + p["lid_t"]                        # where the printed body starts (the lid covers the rest)
+    y0, L = p["end_d"], p["pod_l"]
+    zb, zt = p["pod_bot"], p["pod_top"]
+    pod = rrect(L, p["pod_h"], 3.0, y0 + L / 2, zb + p["pod_h"] / 2)
+    body = yz_prism(pod, xb, xo)
+    body = body + box(xi, y0, zb + 0.6, xb + 0.01, y0 + p["front_block"], zt - 0.6)   # front block reaches the inner face
 
-    # arm: straight back, then down behind the ear
-    a_top = yt - 0.5
-    a_mid = a_top - p["arm_h"] / 2
+    # arm: straight back, then down behind the ear; set in from the outer face so it rests on the head
     r = p["arm_h"] / 2
-    end = (p["temple_len"], a_mid)
+    a_mid = zt - 1.0 - r
+    end = (p["temple_len"] + y0, a_mid)
     ang = math.radians(p["drop_angle"])
     tip = (end[0] + p["drop_len"] * math.cos(ang), end[1] - p["drop_len"] * math.sin(ang))
-    arm2d = (CrossSection.circle(r).translate((L - 8, a_mid)) + CrossSection.circle(r).translate(end)).hull()
+    arm2d = (CrossSection.circle(r).translate((y0 + L - 8, a_mid)) + CrossSection.circle(r).translate(end)).hull()
     arm2d = arm2d + (CrossSection.circle(r).translate(end) + CrossSection.circle(r * 0.8).translate(tip)).hull()
-    arm = prism(arm2d, 0, p["arm_t"])
-    # smooth taper from the pod into the arm
-    taper = Manifold.batch_hull([box(L - 14, yb + 3, 0, L - 3, yt - 0.5, p["arm_t"] + 4),
-                                 box(L + 18, a_mid - r + 0.5, 0, L + 19, a_mid + r - 0.5, p["arm_t"])])
+    ax0, ax1 = xb + 3.5, xb + 3.5 + p["arm_t"]
+    arm = yz_prism(arm2d, ax0, ax1)
+    taper = Manifold.batch_hull([box(ax0, y0 + L - 14, zb + 4, xo, y0 + L - 3, zt - 0.5),
+                                 box(ax0, y0 + L + 20, a_mid - r + 0.5, ax1, y0 + L + 21, a_mid + r - 0.5)])
     body = body + arm + taper
 
-    # hollow inside, open on the inner face (closed by the lid)
-    x0, x1 = p["front_block"], L - p["rear_wall"]
-    cavity = prism(rrect(x1 - x0, p["pod_in_h"], 1.5, (x0 + x1) / 2, yb + w + p["pod_in_h"] / 2), w, p["pod_t"] + 1)
-    body = body - cavity
-    # lid screw (M2) into the rear wall
-    body = body - cyl_z(L - p["rear_wall"] / 2 - 0.2, yb + p["pod_h"] / 2, p["pod_t"] - 8, p["pod_t"] + 1, 1.7)
-    # pins into the front block
-    for (pz_x, pz_y) in p["pins"]:
-        body = body - Manifold.cylinder(p["pin_depth"] + 1, p["pin_d"] / 2).rotate((0, 90, 0)).translate((-1, pz_y, pz_x))
+    # hinge: the temple's knuckle, minus room for the front's knuckles to turn in
+    body = body + temple_knuckle(p)
+    body = body - front_knuckles(p, grow=p["gap"])
+    body = body - pin_hole(p)
 
-    if side == "right":
-        o0, o1 = p["opening"]
-        # wiring and camera opening from the end piece into the pod
-        body = body - box(-1, o0, w + 0.4, p["front_block"] + 1, o1, p["pod_t"] - 0.6)
-        bx0 = p["front_block"] + 0.5
-        bx1 = bx0 + p["board_w"]
-        # USB-C port under the board
-        body = body - box(bx0 + p["board_w"] / 2 - 6, yb - 1, w - 0.01, bx0 + p["board_w"] / 2 + 6, yb + w + 0.5, p["pod_t"] - 0.01)
-        batt0 = bx1 + 2.5
-        # push button on the outer face, beside the battery
-        body = body - cyl_z(batt0 + 9, yb + p["pod_h"] / 2 + 3, -1, w + 1, 3.6)
-        # power switch lever (SS12D00) through the bottom
+    # the pocket, open on the inner face (closed by the lid)
+    c0, c1 = y0 + p["front_block"], y0 + L - p["rear_wall"]
+    cavity = rrect(c1 - c0, p["in_h"], 1.5, (c0 + c1) / 2, zb + w + p["in_h"] / 2)
+    body = body - yz_prism(cavity, xb - 1, xo - w)
+    body = body - box(xb - 1, c1 + p["rear_wall"] / 2 - 0.85, zb + p["pod_h"] / 2 - 0.85,
+                      xb + 8, c1 + p["rear_wall"] / 2 + 0.85, zb + p["pod_h"] / 2 + 0.85)   # M2 lid screw (square pilot)
+
+    if electronics:
+        cx, c = p["cam_x"], p["cam"] / 2
+        # camera: pocket from the inside, round window in the front face
+        body = body - box(cx - c, y0 + p["cam_skin"], p["cam_z"] - c, cx + c, c0 + 1, p["cam_z"] + c)
+        body = body - ycyl(cx, p["cam_z"], y0 - 1, y0 + p["cam_skin"] + 0.5, p["cam_hole"] / 2)
+        # recording light, below the camera, wires back into the pocket
+        body = body - ycyl(cx, p["led_z"], y0 - 1, c0 + 1, p["led_hole"] / 2)
+        body = body - ycyl(cx, p["led_z"], y0 + 1.6, c0 + 1, 1.9)
+        bx0 = c0 + 0.5
+        bmid = bx0 + p["board"][1] / 2
+        # USB-C port under the board, so it can be charged with the glasses on the table
+        body = body - box(xb + 0.5, bmid - 6, zb - 1, xo - w, bmid + 6, zb + w + 0.5)
+        batt0 = bx0 + p["board"][1] + p["gap_board_batt"]
+        # push button on the outer face, beside the battery; power switch lever through the bottom
+        body = body - Manifold.cylinder(w + 2, 1.8).rotate((0, 90, 0)).translate((xo - w - 1, batt0 + 9, zb + p["pod_h"] / 2 + 3))
         sx = batt0 + 22
-        body = body - box(sx - 2.5, yb - 1, w + 2.0, sx + 2.5, yb + w + 0.5, w + 4.6)
+        body = body - box(xo - w - 4.2, sx - 2.6, zb - 1, xo - w - 1.6, sx + 2.6, zb + w + 0.5)
     return body
 
 
 def lid(p):
-    """Flat on the bed, lip up."""
-    L, w = p["pod_l"], p["wall"]
-    x0, x1 = p["front_block"], L - p["rear_wall"]
-    cy = p["pod_bottom"] + p["pod_h"] / 2
-    plate = prism(rrect(L - 0.4, p["pod_h"] - 0.4, 2.8, L / 2, cy), 0, p["lid_t"])
-    inner = rrect(x1 - x0 - 2 * p["fit"], p["pod_in_h"] - 2 * p["fit"], 1.3, (x0 + x1) / 2, cy)
-    lip = prism(inner, p["lid_t"], p["lid_t"] + p["lid_lip"]) - prism(inner.offset(-1.2, JoinType.Round), p["lid_t"] - 0.01, p["lid_t"] + p["lid_lip"] + 1)
+    """Covers the pocket on the temple's inner face; its rim locates it."""
+    ax, y0, L, w = p["ax"], p["end_d"], p["pod_l"], p["wall"]
+    zb = p["pod_bot"]
+    c0, c1 = y0 + p["front_block"], y0 + L - p["rear_wall"]
+    cy = zb + p["pod_h"] / 2
+    plate = yz_prism(rrect(L - p["front_block"] - 0.4, p["pod_h"] - 0.4, 2.8, c0 + (L - p["front_block"]) / 2, cy),
+                     ax, ax + p["lid_t"])
+    inner = rrect(c1 - c0 - 2 * p["fit"], p["in_h"] - 2 * p["fit"], 1.3, (c0 + c1) / 2, cy)
+    lip = yz_prism(inner, ax + p["lid_t"] - 0.01, ax + p["lid_t"] + p["lid_lip"]) - \
+        yz_prism(inner.offset(-1.2, JoinType.Round), ax + p["lid_t"] - 0.1, ax + p["lid_t"] + p["lid_lip"] + 1)
     part = plate + lip
-    part = part - cyl_z(L - p["rear_wall"] / 2 - 0.2, cy, -1, p["lid_t"] + p["lid_lip"] + 1, 2.3)
+    sy = c1 + p["rear_wall"] / 2
+    part = part - Manifold.cylinder(10, 1.15).rotate((0, 90, 0)).translate((ax - 1, sy, cy))
+    # the screw hole lands on the rear wall, past the lip
     return part
 
 
-# ---------- placing parts on the head (for the preview) ----------
-def place_front(m):
-    """Print orientation -> worn: x across, y backwards, z up."""
-    return m.transform(np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0]], dtype=float))
-
-
-def place_temple(m, p, side, lid_part=False):
-    s = 1 if side == "right" else -1
-    xo = s * (p["head_w"] / 2 + p["pod_tt"])
-    # local x (along) -> worn y; local y (up) -> z; local z (inwards) -> towards the centre
-    M = np.array([[0, 0, -s, xo], [1, 0, 0, p["end_d"]], [0, 1, 0, 0]], dtype=float)
-    if lid_part:   # the lid sits on the inner face, lip pointing into the pod
-        m = m.mirror((0, 0, 1)).translate((0, 0, p["pod_t"] + p["lid_t"]))
-    return m.transform(M)
-
-
 def electronics(p):
-    """Stand-ins showing where each electronic part goes (preview only)."""
-    s, xo = 1, p["head_w"] / 2 + p["pod_tt"]
-    w, yb = p["wall"], p["pod_bottom"]
-    def pod_box(x0, y0, z0, x1, y1, z1):   # pod-local coordinates -> worn
-        return place_temple(box(x0, y0, z0, x1, y1, z1), p, "right")
-    bx0 = p["front_block"] + 0.5
-    parts = {
-        "board": pod_box(bx0, yb + w + p["usb_room"], w + 0.2, bx0 + p["board_w"], yb + w + p["usb_room"] + p["board_l"], w + p["board_t"]),
-        "battery": pod_box(bx0 + p["board_w"] + 2.5, yb + w + 1, p["pod_t"] - p["battery"][0] - 0.2,
-                           bx0 + p["board_w"] + 2.5 + p["battery"][2] - 1, yb + w + 1 + p["battery"][1] - 0.5, p["pod_t"] - 0.2),
-        "button": pod_box(bx0 + p["board_w"] + 2.5 + 6, yb + p["pod_h"] / 2, w, bx0 + p["board_w"] + 2.5 + 12, yb + p["pod_h"] / 2 + 6, w + 3.5),
-        "switch": pod_box(bx0 + p["board_w"] + 2.5 + 22 - 4.3, yb + w, w + 2, bx0 + p["board_w"] + 2.5 + 22 + 4.3, yb + w + 3.6, w + 5.5),
-    }
-    cx = xo - p["cam_x"]
+    """Stand-ins for the electronics, where they sit inside the right temple (preview only)."""
+    ax, y0, w, zb = p["ax"], p["end_d"], p["wall"], p["pod_bot"]
+    xb, xo = ax + p["lid_t"], ax + p["T"]
+    c0 = y0 + p["front_block"]
+    bx0 = c0 + 0.5
+    bl, bw, bt = p["board"]
+    batt0 = bx0 + bw + p["gap_board_batt"]
+    bt_, bh, bl_ = p["battery"]
     c = p["cam"] / 2 - 0.3
-    parts["camera"] = box(cx - c, p["cam_skin"], p["cam_z"] - c, cx + c, p["cam_skin"] + 4.5, p["cam_z"] + c)
-    parts["led"] = Manifold.cylinder(5, 1.5).rotate((-90, 0, 0)).translate((cx, 0.2, p["led_z"]))
-    return parts
+    return {
+        "board": box(xo - w - bt, bx0, zb + w + p["usb_room"], xo - w - 0.1, bx0 + bw, zb + w + p["usb_room"] + bl),
+        "battery": box(xb + p["lid_lip"] + 0.3, batt0, zb + w + 0.5, xb + p["lid_lip"] + 0.3 + bt_ - 0.2, batt0 + bl_ - 1, zb + w + 0.5 + bh - 0.5),
+        "button": box(xo - w - 3.5, batt0 + 6, zb + p["pod_h"] / 2, xo - w, batt0 + 12, zb + p["pod_h"] / 2 + 6),
+        "switch": box(xo - w - 5.5, batt0 + 22 - 4.3, zb + w, xo - w - 2, batt0 + 22 + 4.3, zb + w + 3.6),
+        "camera": box(p["cam_x"] - c, y0 + p["cam_skin"], p["cam_z"] - c, p["cam_x"] + c, y0 + p["cam_skin"] + 5.5, p["cam_z"] + c),
+        "led": ycyl(p["cam_x"], p["led_z"], y0 + 0.3, y0 + 5.5, 1.5),
+        "pins": pin_hole(p) + pin_hole(p).mirror((1, 0, 0)),
+    }
+
+
+# ---------- laying parts flat for printing ----------
+def on_bed(m):
+    """Moves a part so it sits on z = 0 with its corner at x = y = 0."""
+    b = m.bounding_box()
+    return m.translate((-b[0], -b[1], -b[2]))
+
+
+def to_print(parts):
+    face_down = parts["front"].rotate((90, 0, 0))                 # front face on the bed
+    return {
+        "front": on_bed(face_down),
+        # outer face on the bed, pocket up, turned so the length runs across the bed
+        "temple_right": on_bed(parts["temple_right"].rotate((0, 90, 0)).rotate((0, 0, 90))),
+        "temple_left": on_bed(parts["temple_left"].rotate((0, -90, 0)).rotate((0, 0, 90))),
+        "lid_right": on_bed(parts["lid_right"].rotate((0, -90, 0)).rotate((0, 0, 90))),   # flat, rim up
+        "lid_left": on_bed(parts["lid_left"].rotate((0, 90, 0)).rotate((0, 0, 90))),
+    }
+
+
+def plate(flat):
+    """All parts on one 280 x 280 mm bed, 8 mm apart, centred."""
+    def size(m):
+        b = m.bounding_box()
+        return b[3] - b[0], b[4] - b[1]
+
+    rows = [["front"], ["temple_right"], ["temple_left"], ["lid_right", "lid_left"]]
+    placed, y = [], 0.0
+    for row in rows:
+        x, h = 0.0, 0.0
+        for name in row:
+            w, d = size(flat[name])
+            placed.append(flat[name].translate((x, y, 0)))
+            x, h = x + w + 8, max(h, d)
+        y += h + 8
+    allp = Manifold.compose(placed)
+    b = allp.bounding_box()
+    w, d = b[3] - b[0], b[4] - b[1]
+    if w > BED - 10 or d > BED - 10:
+        raise SystemExit(f"plate is {w:.0f} x {d:.0f} mm, too big for the {BED:.0f} mm bed")
+    return allp.translate(((BED - w) / 2 - b[0], (BED - d) / 2 - b[1], 0))
 
 
 # ---------- output ----------
 def stl_bytes(m):
-    """Binary STL of a manifold."""
     mesh = m.to_mesh()
     v = np.asarray(mesh.vert_properties)[:, :3].astype(np.float32)
     t = np.asarray(mesh.tri_verts)
@@ -246,53 +314,71 @@ def stl_bytes(m):
     n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
     data = np.zeros(len(t), dtype=[("n", "<f4", 3), ("v", "<f4", (3, 3)), ("a", "<u2")])
     data["n"], data["v"] = n, tri
-    return b"Lens glasses v1".ljust(80, b" ") + struct.pack("<I", len(t)) + data.tobytes()
+    return b"Lens glasses v2".ljust(80, b" ") + struct.pack("<I", len(t)) + data.tobytes()
+
+
+def check(p, parts):
+    """Fit checks: the hinge parts must not touch, and the temple must swing 90 degrees inward."""
+    problems = []
+    fr, tr = parts["front"], parts["temple_right"]
+    if (fr ^ tr).volume() > 0.5:
+        problems.append(f"front and right temple overlap by {(fr ^ tr).volume():.2f} mm3 when open")
+    for deg in (30, 60, 90):
+        moved = tr.translate((-p["ax"], -p["ay"], 0)).rotate((0, 0, deg)).translate((p["ax"], p["ay"], 0))
+        clash = (fr ^ moved).volume()
+        if clash > 0.5:
+            problems.append(f"right temple hits the front when folded {deg} degrees ({clash:.1f} mm3)")
+    e = electronics(p)
+    inside = tr + parts["lid_right"]
+    for name in ("board", "battery", "camera", "button", "switch"):
+        v = (inside ^ e[name]).volume()
+        if v > 0.5:
+            problems.append(f"{name} hits the temple ({v:.1f} mm3)")
+    return problems
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Generate the Lens glasses frame")
-    ap.add_argument("--head-width", type=float, default=132.0, help="distance between the inner faces of the temples at the front (mm)")
+    ap = argparse.ArgumentParser(description="Generate the Lens glasses frame (v2, folding)")
+    ap.add_argument("--head-width", type=float, default=134.0, help="between the temples' inner faces at the hinge (mm)")
     ap.add_argument("--lens-width", type=float, default=50.0)
-    ap.add_argument("--lens-height", type=float, default=38.0)
+    ap.add_argument("--lens-height", type=float, default=40.0)
     ap.add_argument("--bridge", type=float, default=18.0)
-    ap.add_argument("--temple-length", type=float, default=100.0, help="from the joint to the bend behind the ear (mm)")
-    ap.add_argument("--board-thickness", type=float, default=12.0, help="XIAO + Sense board stack, camera removed (mm)")
+    ap.add_argument("--temple-length", type=float, default=100.0, help="from the hinge to the bend behind the ear (mm)")
+    ap.add_argument("--board-thickness", type=float, default=11.0, help="XIAO + Sense board stack with the camera unplugged (mm)")
     ap.add_argument("--out", default=str(HERE))
-    args = ap.parse_args()
-    p = params(args)
+    p = params(ap.parse_args())
 
-    out = Path(args.out)
-    (out / "stl").mkdir(parents=True, exist_ok=True)
-    (out / "preview").mkdir(parents=True, exist_ok=True)
-    parts = {
-        "front": front(p),
-        # Modelled as a left-hand part; the right-hand parts are its mirror image.
-        "temple_right": temple(p, "right").mirror((1, 0, 0)),
-        "temple_left": temple(p, "left"),
-        "lid_right": lid(p).mirror((1, 0, 0)),
-        "lid_left": lid(p),
-    }
-    for name, m in parts.items():
+    worn = {"front": front(p), "temple_right": temple(p, True), "lid_right": lid(p)}
+    worn["temple_left"] = temple(p, False).mirror((1, 0, 0))
+    worn["lid_left"] = worn["lid_right"].mirror((1, 0, 0))
+    for name, m in worn.items():
         if m.status().name != "NoError" or m.is_empty():
             raise SystemExit(f"{name}: geometry error {m.status()}")
-        # sit each part on the bed at z = 0
-        lo = m.bounding_box()[2]
-        (out / "stl" / f"{name}.stl").write_bytes(stl_bytes(m.translate((0, 0, -lo))))
-        bb = m.bounding_box()
-        print(f"{name:13s} {bb[3]-bb[0]:6.1f} x {bb[4]-bb[1]:6.1f} x {bb[5]-bb[2]:5.1f} mm  {m.volume()/1000:5.1f} cm3")
 
-    placed = {
-        "front": place_front(parts["front"]),
-        "temple_right": place_temple(temple(p, "right"), p, "right"),
-        "temple_left": place_temple(temple(p, "left"), p, "left"),
-        "lid_right": place_temple(lid(p), p, "right", lid_part=True),
-        "lid_left": place_temple(lid(p), p, "left", lid_part=True),
-        **electronics(p),
-    }
-    # every part in place, as base64 STL in one file, for the blueprint page's 3D view
-    bundle = {name: base64.b64encode(stl_bytes(m)).decode() for name, m in placed.items()}
+    problems = check(p, worn)
+    for msg in problems:
+        print("FIT PROBLEM:", msg)
+
+    out = Path(__file__).resolve().parent if not ap.parse_args().out else Path(ap.parse_args().out)
+    (out / "stl").mkdir(parents=True, exist_ok=True)
+    (out / "preview").mkdir(parents=True, exist_ok=True)
+    for old in (out / "stl").glob("*.stl"):
+        old.unlink()
+    flat = to_print(worn)
+    for name, m in flat.items():
+        (out / "stl" / f"{name}.stl").write_bytes(stl_bytes(m))
+        b = m.bounding_box()
+        print(f"{name:13s} {b[3]-b[0]:6.1f} x {b[4]-b[1]:6.1f} x {b[5]-b[2]:5.1f} mm  {m.volume()/1000:5.1f} cm3")
+    pl = plate(flat)
+    (out / "stl" / "lens_glasses_plate.stl").write_bytes(stl_bytes(pl))
+    b = pl.bounding_box()
+    print(f"plate         {b[3]-b[0]:6.1f} x {b[4]-b[1]:6.1f} mm on the {BED:.0f} mm bed")
+
+    shown = {**worn, **electronics(p)}
+    bundle = {name: base64.b64encode(stl_bytes(m)).decode() for name, m in shown.items()}
     (out / "preview" / "model.json").write_text(json.dumps(bundle))
-    print("wrote", out / "stl", "and", out / "preview" / "model.json")
+    if problems:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
