@@ -13,10 +13,10 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-PRESETS = {
-    "machine": "Lulzbot Taz 6 0.5 nozzle",
-    "process": "0.25mm Standard @Lulzbot Taz 6",
-    "filament": "Generic PLA @Lulzbot",   # the owner's own "Lulzbot 2.85mm PLA" is based on it
+PRESETS = {   # first one OrcaSlicer has wins (preset names differ between OrcaSlicer versions)
+    "machine": ["Lulzbot Taz 6 0.5 nozzle"],
+    "process": ["0.25mm Standard @Lulzbot Taz 6"],
+    "filament": ["Lulzbot 2.85mm PLA", "Generic PLA @Lulzbot"],   # the owner prints with the first
 }
 # Plain settings worth carrying over from the owner's own slicing (others stay as OrcaSlicer's preset has them).
 FROM_OWNER = """
@@ -84,7 +84,8 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     by_name = index(profiles)
     owner = {k: v for k, v in owner_settings().items() if k in FROM_OWNER}
-    for kind, name in PRESETS.items():
+    for kind, names in PRESETS.items():
+        name = next((n for n in names if n in by_name), names[0])
         prof = flatten(name, by_name)
         apply(prof, owner, kind)
         apply(prof, CHANGES, kind)
