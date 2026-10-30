@@ -28,8 +28,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # the version the owner slices with; fall back to the newest release if it's not there
-          gh release download v2.4.2 --repo OrcaSlicer/OrcaSlicer --pattern '*Linux*Ubuntu2404*.AppImage' --output orca.AppImage \
-            || gh release download --repo OrcaSlicer/OrcaSlicer --pattern '*Linux*Ubuntu2404*.AppImage' --output orca.AppImage
+          TAG=v2.4.2
+          gh release view "$TAG" --repo OrcaSlicer/OrcaSlicer >/dev/null 2>&1 || TAG=$(gh release view --repo OrcaSlicer/OrcaSlicer --json tagName -q .tagName)
+          gh release view "$TAG" --repo OrcaSlicer/OrcaSlicer --json assets -q '.assets[].name' | tee assets.txt
+          # the 64-bit Intel/AMD Linux build (not the ARM one); prefer the Ubuntu 24.04 build
+          NAME=$(grep -E 'Linux.*\.AppImage$' assets.txt | grep -viE 'aarch64|arm' | grep -i 'ubuntu2404' | head -1)
+          [ -n "$NAME" ] || NAME=$(grep -E 'Linux.*\.AppImage$' assets.txt | grep -viE 'aarch64|arm' | head -1)
+          echo "Using OrcaSlicer $TAG: $NAME"
+          gh release download "$TAG" --repo OrcaSlicer/OrcaSlicer --pattern "$NAME" --output orca.AppImage
           chmod +x orca.AppImage
           ./orca.AppImage --appimage-extract >/dev/null
           ls squashfs-root | head
