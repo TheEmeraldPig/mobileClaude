@@ -47,8 +47,9 @@ jobs:
           xvfb-run -a ./squashfs-root/AppRun --slice 0 --debug 2 \
             --load-settings "profiles/machine.json;profiles/process.json" \
             --load-filaments "profiles/filament.json" \
-            --outputdir out glasses/hardware/stl/lens_glasses_plate.stl 2>&1 | tail -60
+            --outputdir out glasses/hardware/stl/lens_glasses_plate.stl 2>&1 | grep -vE "^\s*$" | tail -80 || true
           ls -la out
+          cat out/result.json 2>/dev/null || true
           G=$(ls out/*.gcode | head -1)
           test -n "$G"
           mv "$G" "Lens-glasses-v2_TAZ6-Aerostruder_PLA.gcode"
