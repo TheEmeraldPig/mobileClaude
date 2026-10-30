@@ -110,15 +110,15 @@ ul.plain { margin: 0; padding-left: 1.1em; display: grid; gap: 4px }
   <section class="title" aria-label="Title block">
     <div class="name">
       <span class="tag">Lens · DIY smart glasses</span>
-      <h1>Glasses v1 build sheet</h1>
-      <p>Everything electronic rides in the right temple: the XIAO board with its USB-C port facing down, the battery behind it, a button on the outside and a power switch underneath. The camera and the recording light look out of the right end piece. The left temple is the same shape so the glasses look even.</p>
+      <h1>Glasses v2 build sheet</h1>
+      <p>The temples fold on printed barrel hinges pinned with a piece of 2.85 mm filament. Everything electronic rides in the right temple, so no wires cross a hinge: the camera and the recording light look out of its front face, with the XIAO board (USB-C facing down), the battery, a button on the outside and a power switch underneath behind them. The left temple is the same shape so the glasses look even.</p>
     </div>
     <dl>
-      <dt>Revision</dt><dd>v1</dd>
-      <dt>Front</dt><dd>163 × 47 mm</dd>
-      <dt>Temples</dt><dd>134 mm, fixed</dd>
-      <dt>Plastic</dt><dd>≈ 43 cm³ solid</dd>
-      <dt>Weight</dt><dd>≈ 45 g built</dd>
+      <dt>Revision</dt><dd>v2</dd>
+      <dt>Front</dt><dd>143 × 50 mm</dd>
+      <dt>Temples</dt><dd>136 mm, folding</dd>
+      <dt>Filament</dt><dd>53 g PLA</dd>
+      <dt>Print</dt><dd>≈ 4 h, TAZ 6</dd>
       <dt>Supports</dt><dd>none</dd>
       <dt>Units</dt><dd>mm</dd>
     </dl>
@@ -140,6 +140,7 @@ ul.plain { margin: 0; padding-left: 1.1em; display: grid; gap: 4px }
       <span><i style="background:var(--w-red)"></i>Camera and light</span>
       <span><i style="background:var(--w-blue)"></i>Button</span>
       <span><i style="background:var(--w-purple)"></i>Power switch</span>
+      <span><i style="background:var(--ink-2)"></i>Hinge pins</span>
     </div>
   </section>
 
@@ -206,7 +207,7 @@ ul.plain { margin: 0; padding-left: 1.1em; display: grid; gap: 4px }
         <text x="30" y="380" class="title">CAMERA</text>
         <rect class="part" x="40" y="392" width="26" height="26" rx="3"/><circle cx="53" cy="405" r="8" fill="none" stroke="var(--ink)" stroke-width="1.5"/>
         <path class="ribbon" d="M66 405 H380 V320"/>
-        <text x="80" y="432" class="small">OV2640 with 75 mm ribbon → camera socket on the Sense board</text>
+        <text x="80" y="432" class="small">OV2640 ribbon → camera socket on the Sense board (camera sits just in front of the board)</text>
       </svg>
     </div>
     <div class="wires">
@@ -219,27 +220,28 @@ ul.plain { margin: 0; padding-left: 1.1em; display: grid; gap: 4px }
   </section>
 
   <section class="panel" aria-labelledby="h-print">
-    <header><h2 id="h-print">Parts to print</h2><span class="tag">glasses/hardware/stl/</span></header>
+    <header><h2 id="h-print">Parts to print</h2><span class="tag">one plate · glasses/hardware/stl/</span></header>
+    <p>Ready-to-print G-code for your LulzBot TAZ 6 with the Aerostruder is in the repo's releases as <code>glasses-print-&lt;number&gt;</code> (take the newest): <code>Lens-glasses-v2_TAZ6-Aerostruder_PLA.gcode</code> prints every part below in one go. The same release has <code>lens_glasses_plate.stl</code> if you'd rather slice it yourself.</p>
     <div class="table"><table>
       <thead><tr><th>File</th><th>Size (mm)</th><th>How it sits on the bed</th></tr></thead>
       <tbody>
-        <tr><td><code>front.stl</code></td><td class="num">163 × 47 × 13</td><td>Face down, end pieces pointing up. Needs a bed at least 170 mm wide.</td></tr>
-        <tr><td><code>temple_right.stl</code></td><td class="num">134 × 29 × 14</td><td>Outer side down, open pocket facing up.</td></tr>
-        <tr><td><code>temple_left.stl</code></td><td class="num">134 × 29 × 14</td><td>Outer side down, open pocket facing up.</td></tr>
-        <tr><td><code>lid_right.stl</code>, <code>lid_left.stl</code></td><td class="num">61 × 26 × 3</td><td>Flat, rim facing up.</td></tr>
+        <tr><td><code>front.stl</code></td><td class="num">143 × 50 × 14</td><td>Face down, hinge knuckles pointing up.</td></tr>
+        <tr><td><code>temple_right.stl</code></td><td class="num">136 × 30 × 19</td><td>Outer side down, open pocket and hinge knuckle facing up.</td></tr>
+        <tr><td><code>temple_left.stl</code></td><td class="num">136 × 30 × 19</td><td>Outer side down, open pocket facing up.</td></tr>
+        <tr><td><code>lid_right.stl</code>, <code>lid_left.stl</code></td><td class="num">59 × 28 × 3</td><td>Flat, rim facing up.</td></tr>
       </tbody>
     </table></div>
     <div class="cols">
       <div><h3>Settings</h3><ul class="plain">
-        <li>PETG is best (handles a hot car); PLA is fine for a first try.</li>
-        <li>0.2 mm layers, 3 walls, 25% infill.</li>
-        <li>No supports, no brim (add a brim to the temples if they lift).</li>
-        <li>About 45 g of filament, 4–5 hours in total.</li>
+        <li>Sliced in OrcaSlicer 2.4.2 with its TAZ 6 presets and your own settings: 0.5 mm nozzle, 2.85 mm PLA at 220 °C, bed 55 °C.</li>
+        <li>0.25 mm layers, 3 walls (stronger knuckles), 25% infill, automatic brim.</li>
+        <li>No supports. Your usual TAZ 6 start: nozzle wipe, then bed probing.</li>
+        <li>About 53 g of PLA and 4 hours.</li>
       </ul></div>
       <div><h3>Make it fit you</h3><ul class="plain">
-        <li>Measure the width of your head just in front of your ears and set <code>--head-width</code> (default 132).</li>
-        <li>Measure your board stack with the camera unplugged; if it's over 11.6 mm, set <code>--board-thickness</code>.</li>
-        <li>Then run <code>python3 frame.py</code> in <code>glasses/hardware</code> to make new STL files.</li>
+        <li>Measure the width of your head just in front of your ears and set <code>--head-width</code> (default 134).</li>
+        <li>Measure your board stack with the camera unplugged; if it's over 11 mm, set <code>--board-thickness</code>.</li>
+        <li>Then run <code>python3 frame.py</code> in <code>glasses/hardware</code>. It checks the hinge and the fit, and pushing the new STL files makes GitHub slice a new G-code.</li>
       </ul></div>
     </div>
   </section>
@@ -250,12 +252,12 @@ ul.plain { margin: 0; padding-left: 1.1em; display: grid; gap: 4px }
       <thead><tr><th>Part</th><th>Notes</th></tr></thead>
       <tbody>
         <tr><td>Seeed XIAO ESP32S3 Sense</td><td>The board and its camera board. Keep the antenna it comes with.</td></tr>
-        <tr><td>OV2640 camera, 75 mm ribbon</td><td>Replaces the short-cable camera so the lens can sit in the end piece. Check it says ESP32/XIAO compatible (24-pin).</td></tr>
+        <tr><td>OV2640 camera with a longer ribbon (40 mm or more)</td><td>Sits in the right temple's front, just ahead of the board. Try the Sense board's own camera first; if its ribbon doesn't reach, use a longer one (ESP32/XIAO compatible, 24-pin) and fold the extra.</td></tr>
         <tr><td>LiPo 502030, 3.7 V, with protection circuit</td><td>5 × 20 × 30 mm, about 250 mAh. Expect roughly 2–4 hours of use.</td></tr>
         <tr><td>SS12D00 slide switch</td><td>Power on and off. The battery only charges while it's on.</td></tr>
         <tr><td>6 × 6 mm push button, 3.5 mm tall</td><td>Talk, stop, and long-press for a photo.</td></tr>
         <tr><td>3 mm LED + 220 Ω resistor</td><td>The recording light. White or red.</td></tr>
-        <tr><td>1.75 mm filament offcut</td><td>Two 11 mm pins join each temple to the front.</td></tr>
+        <tr><td>2.85 mm filament offcut</td><td>Two 20 mm pieces are the hinge pins, one per side.</td></tr>
         <tr><td>M2 × 6 mm screws (2)</td><td>One holds each lid on.</td></tr>
         <tr><td>Clear or tinted lenses (optional)</td><td>Cut from cheap glasses to fit the ledge on the back of each opening, glue in place.</td></tr>
       </tbody>
@@ -268,9 +270,9 @@ ul.plain { margin: 0; padding-left: 1.1em; display: grid; gap: 4px }
       <li><h3>Flash and test on the desk first</h3><p>Upload the firmware with the board loose on the desk (see the glasses README) and check it reaches the hub. It's much easier to fix anything before it's glued in.</p></li>
       <li><h3>Test-fit the board and battery</h3><p>Drop the board into the front of the right temple, USB-C down into the slot in the floor, then the battery behind it. Sand or regenerate with new sizes if anything is tight.</p></li>
       <li><h3>Wire the power</h3><p>Solder battery + to the switch's middle pin, the switch's outer pin to B+, and battery − to B−. Glue the switch inside the floor slot so its lever sticks out underneath. Insulate every joint with heat-shrink.</p></li>
-      <li><h3>Fit the camera</h3><p>Swap in the long-ribbon camera on the Sense board. Feed the camera head first through the opening at the front of the temple into the pocket at the back of the right end piece, lens forward, so it shows through the round window. A dot of glue holds it.</p></li>
-      <li><h3>Fit the light and button</h3><p>Push the LED into the small hole below the camera from behind and wire it with its resistor to D0 and GND; the wires run back into the temple through the same opening. Glue the button inside the round hole on the outer face of the temple and wire it to D1 and GND.</p></li>
-      <li><h3>Join the temples to the front</h3><p>Cut four 11 mm pieces of filament. Push two into the holes on the back of each end piece, add a little superglue to the joint faces, and press each temple on. Hold for a minute.</p></li>
+      <li><h3>Fit the camera</h3><p>From inside the right temple's pocket, push the camera into the square pocket at the front, lens forward, so it shows through the round window in the temple's front face. A dot of glue holds it. Plug its ribbon into the Sense board.</p></li>
+      <li><h3>Fit the light and button</h3><p>Push the LED into the small hole below the camera from inside and wire it with its resistor to D0 and GND. Glue the button inside the round hole on the outer face of the temple and wire it to D1 and GND.</p></li>
+      <li><h3>Hinge the temples on</h3><p>Slide each temple's knuckle between the two knuckles on the front so the holes line up, then push a 20 mm piece of 2.85 mm filament down through all three. Fix the pin at the top only: a drop of superglue, or touch the end with the soldering iron so it mushrooms. Open and close it a few times; each temple folds flat on its own. With one folded, the other only folds part way, because the electronics make the right temple thick.</p></li>
       <li><h3>Close up</h3><p>Stick the antenna flat on the inside of the right lid, plug it into the board, then press the lid on and fit the M2 screw at the back. The left lid can hold a few coins under it if the glasses tip to the right.</p></li>
       <li><h3>Switch on</h3><p>Slide the switch on: the light blinks twice when the glasses are on the hotspot. Charge through the USB-C port underneath with the switch on.</p></li>
     </ol>
@@ -287,7 +289,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const box = document.getElementById("viewer"), msg = document.getElementById("viewerMsg");
 const SHELL = ["front", "temple_right", "temple_left", "lid_right", "lid_left"];
-const PARTS = { board: "--w-green", battery: "--w-yellow", camera: "--w-red", led: "--w-red", button: "--w-blue", switch: "--w-purple" };
+const PARTS = { board: "--w-green", battery: "--w-yellow", camera: "--w-red", led: "--w-red", button: "--w-blue", switch: "--w-purple", pins: "--ink-2" };
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 let renderer;
