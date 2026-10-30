@@ -94,6 +94,9 @@ def main():
         # profiles list the printer profile's name as compatible.
         prof.update({"name": name, "from": "User", "inherits": "", "is_custom_defined": "1"})
         if kind == "machine":
+            # OrcaSlicer 2.4's command line matches a user printer by the name it inherits from; this one
+            # inherits from nothing (it's flattened), so mark it as the system preset it is a copy of.
+            prof["from"] = "system"
             printer = name
         else:
             prof["compatible_printers"] = [printer]
