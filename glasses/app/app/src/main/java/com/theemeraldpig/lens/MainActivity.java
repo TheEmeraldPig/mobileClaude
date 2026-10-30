@@ -38,6 +38,7 @@ public class MainActivity extends Activity {
     static final String RUN_SH = "/data/data/com.termux/files/home/mobileClaude/glasses/pi/android/run.sh";
     static final String PERM_RUN = "com.termux.permission.RUN_COMMAND";
 
+    static volatile boolean visible;   // the updater only opens the install prompt while you're looking
     WebView web;
     SharedPreferences prefs;
     boolean offline;
@@ -53,7 +54,7 @@ public class MainActivity extends Activity {
         // Settings can also come from the launching intent (used by the automated emulator test).
         Intent in = getIntent();
         if (in != null && in.hasExtra("hub")) {
-            prefs.edit().putString("hub", in.getStringExtra("hub")).putString("token", in.getStringExtra("token")).apply();
+            prefs.edit().putString("hub", in.getStringExtra("hub")).putString("token", in.getStringExtra("token")).commit();
         }
 
         web = new WebView(this);
@@ -80,6 +81,24 @@ public class MainActivity extends Activity {
 
         if (prefs.getString("token", "").isEmpty()) openSettings();
         else loadPanel();
+        startListening();
+    }
+
+    /** Runs ListenService, which does the hub's speech recognition, once the microphone is allowed. */
+    void startListening() {
+        java.util.List<String> need = new java.util.ArrayList<>();
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) need.add(Manifest.permission.RECORD_AUDIO);
+        if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+            need.add(Manifest.permission.POST_NOTIFICATIONS);
+        if (!need.isEmpty()) {
+            requestPermissions(need.toArray(new String[0]), 2);
+            return;
+        }
+        try {
+            startForegroundService(new Intent(this, ListenService.class));
+        } catch (Exception e) {
+            Toast.makeText(this, "Couldn't start listening: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     String hub() {
@@ -183,6 +202,11 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        if (code == 2) {
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startListening();
+            else Toast.makeText(this, "Without the microphone, the hub uses Termux's speech recognition, which can cut off your last words.", Toast.LENGTH_LONG).show();
+            return;
+        }
         if (code == 1 && results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) startHub();
         else Toast.makeText(this, "Allow Lens to run commands in Termux to start the hub from here.", Toast.LENGTH_LONG).show();
     }
@@ -196,7 +220,15 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        visible = true;
         if (offline) loadPanel();   // coming back from Termux: try again
+        Updater.check(this, false, null);
+    }
+
+    @Override
+    protected void onPause() {
+        visible = false;
+        super.onPause();
     }
 
     @Override
@@ -211,6 +243,9 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void retry() { main.post(MainActivity.this::loadPanel); }
         @JavascriptInterface public void startHub() { main.post(MainActivity.this::startHub); }
         @JavascriptInterface public void openTermux() { main.post(MainActivity.this::openTermux); }
+        @JavascriptInterface public void checkForUpdate() {
+            Updater.check(MainActivity.this, true, msg -> main.post(() -> Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show()));
+        }
         @JavascriptInterface public String version() {
             try {
                 return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;

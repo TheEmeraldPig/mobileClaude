@@ -81,9 +81,16 @@ jobs:
           disable-animations: true
           script: |
             adb install -r Lens.apk
+            adb shell pm grant com.theemeraldpig.lens android.permission.RECORD_AUDIO
+            adb shell pm grant com.theemeraldpig.lens android.permission.POST_NOTIFICATIONS
             adb logcat -c
             adb shell am start -n com.theemeraldpig.lens/.MainActivity --es hub http://10.0.2.2:8765 --es token test
             sleep 25
+            adb forward tcp:8766 tcp:8766
+            curl -s -m 5 -H "X-Lens-Token: test" localhost:8766/status > listen-check.txt || echo "status failed" > listen-check.txt
+            curl -s -m 5 -H "X-Lens-Token: wrong" localhost:8766/status >> listen-check.txt || true
+            curl -s -m 50 -X POST -H "X-Lens-Token: test" localhost:8766/listen >> listen-check.txt || echo "listen failed" >> listen-check.txt
+            cat listen-check.txt
             adb exec-out screencap -p > shot-panel.png
             adb shell input swipe 540 1800 540 600 400
             sleep 3
@@ -102,8 +109,8 @@ jobs:
       - name: Push screenshots to the lens-ci-shots branch
         if: always()
         run: |
-          mkdir -p /tmp/shots && cp shot-*.png /tmp/shots/ 2>/dev/null || true
-          grep -E "chromium|FATAL|AndroidRuntime|lens" logcat.txt 2>/dev/null | tail -80 > /tmp/shots/logcat-excerpt.txt || true
+          mkdir -p /tmp/shots && cp shot-*.png listen-check.txt /tmp/shots/ 2>/dev/null || true
+          grep -E "chromium|FATAL|AndroidRuntime|lens|Lens" logcat.txt 2>/dev/null | tail -80 > /tmp/shots/logcat-excerpt.txt || true
           cd /tmp/shots
           git init -q && git checkout -q -b lens-ci-shots
           git -c user.name=ci -c user.email=ci@localhost add -A

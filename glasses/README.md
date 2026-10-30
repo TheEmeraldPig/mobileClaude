@@ -121,6 +121,8 @@ The page reads the hub's live event stream (`GET /events`). A display inside the
 - Every push to `glasses/app/` builds it and publishes **Lens.apk** as a GitHub release named `lens-app-<number>`. On the hub phone, open the latest one under the repo's Releases, download `Lens.apk` and open it to install. (Android asks to allow installs from your browser.)
 - First launch asks for the hub address (leave `http://127.0.0.1:8765` when the hub is on the same phone) and the token from `config.toml`.
 - For the app's "Start the hub" button, Termux must allow it once: `echo "allow-external-apps = true" >> ~/.termux/termux.properties`, then restart Termux. The app asks for permission to run commands in Termux the first time.
+- **Microphone:** the app also does the hub's speech recognition (allow the microphone when it asks). Termux's own speech tool stops before Android sends its final result, so it drops your last words; the app waits for the whole sentence. Pressing the glasses button while you talk finishes early without losing anything. When the app isn't running the hub falls back to Termux's, and the panel says so.
+- **Updates:** the app checks GitHub when you open it and every 30 minutes while it runs, and installs any newer `lens-app-<n>` release by itself. Android asks you to confirm the first update (and to allow installs from Lens); after that, on Android 12 and newer, updates install without asking. After an update or a restart, a notification asks you to open Lens once so it can listen again.
 - The same panel also opens in any browser at `http://<hub address>:8765/panel?t=<token>`.
 
 ### Testing without the glasses: your screen as the camera

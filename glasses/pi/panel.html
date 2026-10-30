@@ -79,6 +79,7 @@ details p{color:var(--dim);font-size:13.5px;margin:8px 0 0}
     <span class="pill" id="online"><i></i><span>Connecting</span></span>
     <a class="hbtn" href="/" id="toPhone">Answers</a>
     <button class="hbtn" id="appSettings" hidden>App settings</button>
+    <button class="hbtn" id="appUpdate" hidden>Check for update</button>
   </header>
   <div class="offline" id="offline">Can't reach the hub. Make sure it's running in Termux (<code>bash ~/mobileClaude/glasses/pi/android/run.sh</code>).</div>
 
@@ -151,6 +152,9 @@ const app = window.LensApp;   // set when this page runs inside the Lens app
 if (app) {
   $("appSettings").hidden = false;
   $("appSettings").onclick = () => app.openSettings();
+  $("appUpdate").hidden = false;
+  $("appUpdate").title = "Lens app " + app.version();
+  $("appUpdate").onclick = () => app.checkForUpdate();
 }
 
 function fmtTime(s) {
@@ -205,6 +209,7 @@ function renderStats() {
     ["Microphone engine", st.ears], ["Voice engine", st.mouth], ["Camera", st.camera],
     ["Hub address", (H.address || "unknown yet") + ":" + H.port], ["Data folder", st.data_dir],
   ];
+  if (app) rows.push(["Lens app", app.version() + " (updates itself)"]);
   $("settings").innerHTML = "";
   for (const [k, v] of rows) { const tr = el("tr"); tr.append(el("td", null, k), el("td", null, String(v))); $("settings").append(tr); }
 

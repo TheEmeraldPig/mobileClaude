@@ -43,7 +43,8 @@ DEFAULTS = {
                "fresh_after_minutes": 10},
     "ears": {"engine": "whisper", "whisper_bin": "~/whisper.cpp/build/bin/whisper-cli",
              "whisper_model": "~/whisper.cpp/models/ggml-base.en.bin", "language": "en",
-             "device": "default", "max_seconds": 15, "silence_seconds": 1.2, "level": 500},
+             "device": "default", "max_seconds": 15, "silence_seconds": 1.2, "level": 500,
+             "app_url": "http://127.0.0.1:8766"},
     "mouth": {"engine": "piper", "piper_bin": "~/piper/piper",
               "piper_voice": "~/piper/voices/en_US-lessac-medium.onnx", "device": "default"},
     "eyes": {"source": "glasses", "glasses_url": "http://lens-glasses.local/capture", "send_view": True},
@@ -204,8 +205,10 @@ class Ears:
 
     def __init__(self, cfg, data_dir):
         self.cfg = cfg["ears"]
+        self.token = cfg["hub"]["token"]
         self.wav = data_dir / "last-question.wav"
         self.stop_event = threading.Event()
+        self.using_app = None   # on Android: True while the Lens app does the listening
 
     def record(self):
         c = self.cfg
@@ -248,8 +251,53 @@ class Ears:
         text = re.sub(r"\[[A-Z_ ]+\]|\([^)]*\)", " ", out.stdout)   # [BLANK_AUDIO], (wind noise)
         return " ".join(text.split())
 
+    def _app(self, path, timeout):
+        req = urllib.request.Request(self.cfg["app_url"] + path, data=b"" if path != "/status" else None,
+                                     headers={"X-Lens-Token": self.token}, method="GET" if path == "/status" else "POST")
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read() or b"{}")
+
+    def app_ready(self):
+        """Is the Lens app's listener running? It hears the whole sentence; Termux's drops the last words."""
+        try:
+            return bool(self._app("/status", 1).get("ok"))
+        except Exception:
+            return False
+
+    def listen_app(self):
+        """Listens through the Lens app. Pressing the button again finishes early without losing words."""
+        self.stop_event.clear()
+        result = {}
+
+        def run():
+            try:
+                result.update(self._app("/listen", 45))
+            except Exception as e:
+                result["error"] = str(e)
+
+        t = threading.Thread(target=run, daemon=True)
+        t.start()
+        while t.is_alive():
+            if self.stop_event.wait(0.1):
+                try:
+                    self._app("/stop", 3)
+                except Exception:
+                    pass
+                t.join(6)
+                break
+        if result.get("error"):
+            log.warning("Lens app listening: %s", result["error"])
+        return " ".join(str(result.get("text", "")).split())
+
     def listen_android(self):
-        """Android's own speech recognition through Termux:API; it stops by itself when you pause."""
+        """Android speech recognition: through the Lens app when it's running, otherwise Termux:API."""
+        ready = self.app_ready()
+        if ready != self.using_app:
+            log.info("listening through %s", "the Lens app" if ready else
+                     "Termux:API (it can cut off the last words; open the Lens app to fix that)")
+            self.using_app = ready
+        if ready:
+            return self.listen_app()
         self.stop_event.clear()
         proc = subprocess.Popen(["termux-speech-to-text"], stdout=subprocess.PIPE, text=True)
         try:
@@ -652,9 +700,15 @@ class Hub:
         if ears == "none":
             part("ears", "Microphone", "off", "No microphone set up (ears engine is none).")
         elif ears == "android":
-            ok = bool(shutil.which("termux-speech-to-text"))
-            part("ears", "Microphone", "ok" if ok else "fail", "Android speech recognition through Termux:API."
-                 if ok else "Termux:API commands missing: pkg install termux-api, and install the Termux:API app.", "listen")
+            if self.ears and self.cached("app", 10, self.ears.app_ready):
+                part("ears", "Microphone", "ok", "Android speech recognition through the Lens app. It waits for your "
+                     "whole sentence; pressing the button while you talk finishes early.", "listen")
+            elif shutil.which("termux-speech-to-text"):
+                part("ears", "Microphone", "warn", "Using Termux's speech recognition, which can cut off your last words. "
+                     "Open the Lens app (and allow the microphone) to switch to the better one.", "listen")
+            else:
+                part("ears", "Microphone", "fail", "Termux:API commands missing: pkg install termux-api, and install the "
+                     "Termux:API app.", "listen")
         else:
             ok = expand(c["ears"]["whisper_bin"]).exists() and expand(c["ears"]["whisper_model"]).exists()
             part("ears", "Microphone", "ok" if ok else "fail", "whisper.cpp speech recognition."
