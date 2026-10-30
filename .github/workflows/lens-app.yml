@@ -30,10 +30,15 @@ jobs:
         run: |
           gradle assembleRelease -PlensVersion=${{ github.run_number }} --no-daemon -q
           cp app/build/outputs/apk/release/app-release.apk ../../Lens.apk
+          # an old build number, for testing that the app updates itself from the latest release
+          gradle assembleRelease -PlensVersion=1 --no-daemon -q
+          cp app/build/outputs/apk/release/app-release.apk ../../Lens-old.apk
       - uses: actions/upload-artifact@v4
         with:
           name: lens-apk
-          path: Lens.apk
+          path: |
+            Lens.apk
+            Lens-old.apk
 
   # Runs the app on an emulator, connected to the hub running on the build machine
   # (without Claude Code, which isn't installed there), and prints small screenshots into the log.
@@ -77,7 +82,7 @@ jobs:
           api-level: 33
           arch: x86_64
           target: google_apis
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -dns-server 8.8.8.8
           disable-animations: true
           script: |
             adb install -r Lens.apk
@@ -101,6 +106,20 @@ jobs:
             sleep 12
             adb exec-out screencap -p > shot-offline.png
             adb logcat -d > logcat.txt
+            # self-update: an old build should fetch the newest release and ask Android to install it
+            adb uninstall com.theemeraldpig.lens
+            adb install Lens-old.apk
+            adb shell pm grant com.theemeraldpig.lens android.permission.RECORD_AUDIO
+            adb shell pm grant com.theemeraldpig.lens android.permission.POST_NOTIFICATIONS
+            adb shell appops set com.theemeraldpig.lens REQUEST_INSTALL_PACKAGES allow
+            adb logcat -c
+            adb shell am start -n com.theemeraldpig.lens/.MainActivity --es hub http://10.0.2.2:8765 --es token test
+            sleep 60
+            adb exec-out screencap -p > shot-update.png
+            adb logcat -d > logcat-update.txt
+            grep -E "LensUpdate|PackageInstaller" logcat-update.txt | tail -20 > update-check.txt || true
+            adb shell dumpsys package com.theemeraldpig.lens | grep -E "versionCode|installerPackageName" >> update-check.txt || true
+            cat update-check.txt
             grep -E "chromium|Lens|FATAL|AndroidRuntime" logcat.txt | tail -60 || true
       - name: Hub log
         if: always()
@@ -109,7 +128,7 @@ jobs:
       - name: Push screenshots to the lens-ci-shots branch
         if: always()
         run: |
-          mkdir -p /tmp/shots && cp shot-*.png listen-check.txt /tmp/shots/ 2>/dev/null || true
+          mkdir -p /tmp/shots && cp shot-*.png listen-check.txt update-check.txt /tmp/shots/ 2>/dev/null || true
           grep -E "chromium|FATAL|AndroidRuntime|lens|Lens" logcat.txt 2>/dev/null | tail -80 > /tmp/shots/logcat-excerpt.txt || true
           cd /tmp/shots
           git init -q && git checkout -q -b lens-ci-shots

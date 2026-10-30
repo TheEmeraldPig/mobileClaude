@@ -56,9 +56,10 @@ final class Updater {
         new Thread(() -> {
             try {
                 String msg = checkNow(app);
+                Log.i(TAG, msg);
                 if (report != null) report.say(msg);
             } catch (Exception e) {
-                Log.w(TAG, "update check failed", e);
+                Log.w(TAG, "update check failed: " + e);
                 if (report != null) report.say("Couldn't check for updates: " + e.getMessage());
             } finally {
                 running = false;
