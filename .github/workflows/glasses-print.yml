@@ -55,6 +55,9 @@ jobs:
           mv "$G" "Lens-glasses-v2_TAZ6-Aerostruder_PLA.gcode"
           head -20 Lens-glasses-v2_TAZ6-Aerostruder_PLA.gcode
           grep -E "^; (estimated printing time|total filament|filament used|total layer)" Lens-glasses-v2_TAZ6-Aerostruder_PLA.gcode | head
+          # the bed must heat to the owner's 55 C
+          grep -m1 "^M190" Lens-glasses-v2_TAZ6-Aerostruder_PLA.gcode
+          grep -q "^M190 R55" Lens-glasses-v2_TAZ6-Aerostruder_PLA.gcode
       # keep a copy on a branch so it can be checked without downloading release files
       - name: Push the G-code to the glasses-print branch
         run: |

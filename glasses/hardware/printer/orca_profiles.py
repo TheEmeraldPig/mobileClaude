@@ -90,6 +90,12 @@ def main():
         prof = flatten(name, by_name)
         apply(prof, owner, kind)
         apply(prof, CHANGES, kind)
+        if kind == "filament":
+            # The owner prints on the "High Temp Plate" bed type (55 C). Give every bed type that temperature,
+            # so the bed is right whichever one the slicer picks.
+            for plate in ("cool_plate", "eng_plate", "hot_plate", "textured_plate", "supertack_plate"):
+                for suffix in ("_temp", "_temp_initial_layer"):
+                    prof[plate + suffix] = [owner.get("hot_plate_temp" + suffix, "55")]
         # Keep OrcaSlicer's own preset names: its command line only slices when the print and filament
         # profiles list the printer profile's name as compatible.
         prof.update({"name": name, "from": "User", "inherits": "", "is_custom_defined": "1"})
@@ -97,6 +103,7 @@ def main():
             # OrcaSlicer 2.4's command line matches a user printer by the name it inherits from; this one
             # inherits from nothing (it's flattened), so mark it as the system preset it is a copy of.
             prof["from"] = "system"
+            prof["default_bed_type"] = "High Temp Plate"   # the bed type the owner slices for
             printer = name
         else:
             prof["compatible_printers"] = [printer]
