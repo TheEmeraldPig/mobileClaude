@@ -2,7 +2,7 @@
 
 Two Balatro mods (Lua, Steamodded/SMODS) by Josiah live in `/home/user`:
 
-- `Randomizer/`: the main work in recent sessions, version 1.9.1, prefix `rnd`
+- `Randomizer/`: the main work in recent sessions, version 1.10.0, prefix `rnd`
 - `SimplyJokers/`: an older, larger mod, v1.3.1 (zip: `SimplyJokers-v1.3.1.zip`). Recent work there was only `nailed.lua`.
 
 Other files: `tarot_fusions.md`, `spectral_fusions.md`, `enhancement_combos.md` (design lists for SimplyJokers fusions) and `tools/`.
@@ -74,3 +74,7 @@ The user wants **all** Jokers affected. `R.category` (saved as `ability.rnd_kind
 - Known gaps: action Jokers whose condition can't be forced (DNA's 1-card first hand, Faceless's 3 faces, Vagabond's $4, Superposition's Ace) only act when that condition is also true. Invisible Joker, Diet Cola and Luchador act on the trigger instead of when sold.
 - A small Lua simulation (lupa) was used to check the action, dollar, grow and score paths. It's in the session scratchpad and not kept.
 - 1.9.1: the Jokers whose condition can't be faked now have their effect written out in `OVERRIDES`, at the user's request. On the trigger: DNA copies the card into the deck and hand, Faceless pays $5, Trading Card pays $3 (no destroy, and its text drops "destroy it and"), Vagabond and Superposition create a Tarot.
+
+## 1.10.0 (2026-11-04): ranges in the Config tab
+
+Each random range (Joker amounts, shop prices, Blind scores, poker hands) has `<key>_min`/`<key>_max` in `config.lua`, read by `range()` in `rolls.lua` (missing values fall back to the old defaults; a min above the max is swapped). `settings.lua` gives each Min/Max a slider (0.1-5) and a text box. `G.FUNCS.rnd_slider` replaces the slider's per-frame `slider` function: it keeps the slider, the value and the box in sync. It writes the box's letters through `args.text.letters`, or finds them through the box's `<id>_letter_1` element. The Balatro UI functions (`create_slider`, `create_text_input`, `G.FUNCS.slider`) were written from memory of the base game, not read, since its source isn't available here. If the tab errors, check those first.

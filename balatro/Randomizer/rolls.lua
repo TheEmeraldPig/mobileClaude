@@ -34,6 +34,15 @@ local function between(seed, low, high)
     return low + pseudorandom(seed) * (high - low)
 end
 
+-- The Min and Max set for an option in the Config tab (either way round)
+local function range(option, low, high)
+    local config = MOD.config or {}
+    local a = tonumber(config[option .. "_min"]) or low
+    local b = tonumber(config[option .. "_max"]) or high
+    if a > b then a, b = b, a end
+    return a, b
+end
+
 ----------------------------------------------------------------------
 -- Rolling Jokers the first time they show up in a run
 ----------------------------------------------------------------------
@@ -73,7 +82,7 @@ end
 
 function R.roll_numbers(joker)
     local ability = joker.ability
-    local factor = between("rnd_numbers", 0.5, 2)
+    local factor = between("rnd_numbers", range("numbers", 0.5, 2))
     ability.rnd_factor = factor
     for _, key in ipairs({ "mult", "t_mult", "t_chips" }) do
         if type(ability[key]) == "number" then ability[key] = scale(ability[key], key, factor) end
@@ -135,7 +144,7 @@ local set_cost_ref = Card.set_cost
 function Card:set_cost(...)
     local ret = set_cost_ref(self, ...)
     if on("prices") and G.GAME and G.STAGE == G.STAGES.RUN and self.ability and (self.cost or 0) > 0 then
-        self.ability.rnd_price = self.ability.rnd_price or between("rnd_price", 0.5, 1.5)
+        self.ability.rnd_price = self.ability.rnd_price or between("rnd_price", range("prices", 0.5, 1.5))
         local cost = plain(self.cost)
         if type(cost) == "number" then self.cost = math.max(1, math.floor(cost * self.ability.rnd_price + 0.5)) end
     end
@@ -152,7 +161,7 @@ local function blind_factor(ante, kind)
     G.GAME.rnd_blind_factors = G.GAME.rnd_blind_factors or {}
     local key = tostring(ante) .. "_" .. kind
     if not G.GAME.rnd_blind_factors[key] then
-        G.GAME.rnd_blind_factors[key] = between("rnd_blind" .. key, 0.75, 1.5)
+        G.GAME.rnd_blind_factors[key] = between("rnd_blind" .. key, range("blinds", 0.75, 1.5))
     end
     return G.GAME.rnd_blind_factors[key]
 end
@@ -197,8 +206,8 @@ function Game:start_run(args, ...)
     local loading = args and args.savetext
     if on("hands") and not loading and G.GAME and G.GAME.hands then
         for name, hand in pairs(G.GAME.hands) do
-            local chips = between("rnd_hand_chips" .. name, 0.5, 1.5)
-            local mult = between("rnd_hand_mult" .. name, 0.5, 1.5)
+            local chips = between("rnd_hand_chips" .. name, range("hands", 0.5, 1.5))
+            local mult = between("rnd_hand_mult" .. name, range("hands", 0.5, 1.5))
             hand.s_chips = scaled_round(hand.s_chips, chips)
             hand.s_mult = scaled_round(hand.s_mult, mult)
             local ok = pcall(function()
