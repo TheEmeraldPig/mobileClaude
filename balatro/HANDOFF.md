@@ -2,7 +2,7 @@
 
 Two Balatro mods (Lua, Steamodded/SMODS) by Josiah live in `/home/user`:
 
-- `Randomizer/`: the main work in recent sessions, version 1.7.0, prefix `rnd`
+- `Randomizer/`: the main work in recent sessions, version 1.8.0, prefix `rnd`
 - `SimplyJokers/`: an older, larger mod, v1.3.1 (zip: `SimplyJokers-v1.3.1.zip`). Recent work there was only `nailed.lua`.
 
 Other files: `tarot_fusions.md`, `spectral_fusions.md`, `enhancement_combos.md` (design lists for SimplyJokers fusions) and `tools/`.
@@ -59,3 +59,8 @@ The user reported that a Joker's new trigger worked like an added condition and 
 - "Works once, then stops": the `decays` behaviour went down 0.25 per trigger to nothing. It now stops at normal and resets at end of round.
 - `boosted()` was removed: it pumped up `x_mult`, so through the base game's generic XMult code nearly every Joker (Hallucination, Superposition...) looked like it scored and got a trigger.
 - The user plays with the Multiplayer mod (seeded, The Order), so keeping seeds untouched matters.
+
+## Fixed in 1.8.0 (2026-11-04)
+
+The user said triggers still added conditions and many Jokers were unaffected. `measure` only gets past suit, rank, face, hand type and chance. Jokers that check anything else (Mystic Summit's 0 discards, Half Joker's card count, Acrobat's final hand, Flower Pot's suits, Card Sharp, Blackboard...) gave nothing on their new trigger, or never got a trigger at all. `base_effect` now reads the amount from the Joker's numbers (`t_mult`, `t_chips`, `x_mult`, `extra.*mult/chips`; a bare `extra` number uses the description's "X#1# Mult" / "+#1# Chips"). `fire`, `R.increment` and `triggerable` fall back to it.
+Still unaffected: Jokers that give no Chips/Mult (money, creating cards, hand size...). Ask the user before taking them on.

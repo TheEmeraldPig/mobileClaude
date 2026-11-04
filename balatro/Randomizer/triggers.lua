@@ -563,8 +563,13 @@ local function measure_repetitions(joker, context)
 end
 
 -- The random trigger happened: give the Joker's scoring numbers
+-- What the Joker gives when its own condition is met, read from its numbers (filled in
+-- below). Used when running it can't make its condition pass (Mystic Summit needs 0
+-- discards, Half Joker 3 cards, Flower Pot every suit...), so the new trigger always pays
+local base_effect
+
 local function fire(joker, context)
-    local numbers = measure(joker, context)
+    local numbers = measure(joker, context) or base_effect(joker)
     local effect = numbers and deliver(joker, numbers)
     return effect
 end
@@ -575,7 +580,7 @@ function R.increment(joker)
     local now = G.TIMERS and G.TIMERS.REAL or 0
     local cached = joker.rnd_measure
     if cached and now - cached.at < 0.5 and cached.type == joker.ability.rnd_type then return cached.value end
-    local numbers = measure(joker, {})
+    local numbers = measure(joker, {}) or base_effect(joker)
     local value = numbers and round_effect(retype(joker, numbers)) or nil
     joker.rnd_measure = { at = now, value = value, type = joker.ability.rnd_type }
     return value
@@ -617,6 +622,42 @@ local function desc_text(key)
     end
     walk(d.text)
     return (table.concat(parts, " "):gsub("{[^}]*}", ""))
+end
+
+base_effect = function(joker)
+    local a = joker.ability
+    local out = {}
+    local function put(kind, v)
+        v = plain(v)
+        if type(v) ~= "number" then return end
+        if kind == "xmult" then
+            if v > 1 then out.xmult = v end
+        elseif v > 0 then
+            out[kind] = out[kind] or v
+        end
+    end
+    put("mult", a.t_mult)
+    put("chips", a.t_chips)
+    put("mult", a.mult)
+    put("xmult", a.x_mult)
+    local ex = a.extra
+    if type(ex) == "table" then
+        for k, v in pairs(ex) do
+            local lk = tostring(k):lower()
+            if not (lk:find("mod") or lk:find("gain") or lk:find("add") or lk:find("sub")) then
+                if lk:find("x_?mult") or lk:find("xmult") then put("xmult", v)
+                elseif lk:find("mult") then put("mult", v)
+                elseif lk:find("chip") then put("chips", v) end
+            end
+        end
+    elseif type(plain(ex)) == "number" then
+        -- A bare number: its description says what it is ("X#1# Mult", "+#1# Chips")
+        local text = desc_text(joker.config.center.key)
+        if text:find("X#1#%s*Mult") or text:find("X%d") then put("xmult", ex)
+        elseif text:find("#1#%s*Chips") then put("chips", ex)
+        elseif text:find("#1#%s*Mult") then put("mult", ex) end
+    end
+    return next(out) and out or nil
 end
 
 local function grows_text(text)
@@ -712,7 +753,7 @@ end
 -- get a trigger
 local function triggerable(joker)
     if R.grows(joker) then return true end
-    if measure(joker, {}) then return true end
+    if measure(joker, {}) or base_effect(joker) then return true end
     local card = spare_card()
     if card then
         local ctx = { repetition = true, cardarea = G.play, other_card = card, full_hand = { card }, scoring_hand = { card } }
