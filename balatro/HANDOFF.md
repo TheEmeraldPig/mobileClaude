@@ -2,7 +2,7 @@
 
 Two Balatro mods (Lua, Steamodded/SMODS) by Josiah live in `/home/user`:
 
-- `Randomizer/`: the main work in recent sessions, version 1.8.0, prefix `rnd`
+- `Randomizer/`: the main work in recent sessions, version 1.9.0, prefix `rnd`
 - `SimplyJokers/`: an older, larger mod, v1.3.1 (zip: `SimplyJokers-v1.3.1.zip`). Recent work there was only `nailed.lua`.
 
 Other files: `tarot_fusions.md`, `spectral_fusions.md`, `enhancement_combos.md` (design lists for SimplyJokers fusions) and `tools/`.
@@ -63,4 +63,13 @@ The user reported that a Joker's new trigger worked like an added condition and 
 ## Fixed in 1.8.0 (2026-11-04)
 
 The user said triggers still added conditions and many Jokers were unaffected. `measure` only gets past suit, rank, face, hand type and chance. Jokers that check anything else (Mystic Summit's 0 discards, Half Joker's card count, Acrobat's final hand, Flower Pot's suits, Card Sharp, Blackboard...) gave nothing on their new trigger, or never got a trigger at all. `base_effect` now reads the amount from the Joker's numbers (`t_mult`, `t_chips`, `x_mult`, `extra.*mult/chips`; a bare `extra` number uses the description's "X#1# Mult" / "+#1# Chips"). `fire`, `R.increment` and `triggerable` fall back to it.
-Still unaffected: Jokers that give no Chips/Mult (money, creating cards, hand size...). Ask the user before taking them on.
+
+## 1.9.0 (2026-11-04): every Joker gets a trigger
+
+The user wants **all** Jokers affected. `R.category` (saved as `ability.rnd_kind`) sorts each Joker:
+- `grow`: grows on the trigger (see 1.7.0).
+- `dollar`: end-of-round money (Golden, Cloud 9, Rocket, Satellite, Delayed Gratification, or any center with `calc_dollar_bonus`). `Card:calculate_dollar_bonus` returns nil for them, and the trigger pays `dollar_effect` instead. No type or behaviour.
+- `score`: as before.
+- `action`: anything else (creating cards, sell value, levelling hands...). `ability.rnd_action` is the step it acts in (`ACTION_KEYS`). Base-game ones are in `KNOWN_ACTIONS`; others learn it the first time they act (events, money, a non-cosmetic result or a changed number). That step is then blocked, and on the trigger `replay` builds a context for that step. It probes quietly to find a rank, or a forced enhancement, that makes the Joker act, then runs it for real (`replaying` forces suit, face and chance). Until an action Joker is known, its card text stays the same (`R.shows_trigger`). Passive Jokers (Four Fingers, Juggler, Showman...) never act, so they never change.
+- Known gaps: action Jokers whose condition can't be forced (DNA's 1-card first hand, Faceless's 3 faces, Vagabond's $4, Superposition's Ace) only act when that condition is also true. Invisible Joker, Diet Cola and Luchador act on the trigger instead of when sold.
+- A small Lua simulation (lupa) was used to check the action, dollar, grow and score paths. It's in the session scratchpad and not kept.

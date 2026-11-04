@@ -165,20 +165,37 @@ end
 local measuring = 0
 local measure_card, measure_money = nil, 0
 local MEASURE_IDS = { 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2 }
+-- replaying: a Joker's own action is being run for its random trigger; its card checks
+-- pass like when measuring, but what it does is real
+local replaying = 0
+-- force_enhanced: the card being looked at also counts as having every enhancement
+local force_enhanced = false
+-- Counts of events and money, to tell whether a Joker did something
+local events_seen, money_seen = 0, 0
 
 local add_event_ref = EventManager.add_event
 function EventManager:add_event(...)
+    events_seen = events_seen + 1
     if measuring > 0 then return end
     return add_event_ref(self, ...)
 end
 
 local ease_dollars_ref = ease_dollars
 function ease_dollars(mod, ...)
+    money_seen = money_seen + 1
     if measuring > 0 then
         if type(mod) == "number" then measure_money = measure_money + mod end
         return
     end
     return ease_dollars_ref(mod, ...)
+end
+
+if SMODS.has_enhancement then
+    local has_enhancement_ref = SMODS.has_enhancement
+    function SMODS.has_enhancement(card, key, ...)
+        if force_enhanced and card == measure_card and (measuring > 0 or replaying > 0) then return true end
+        return has_enhancement_ref(card, key, ...)
+    end
 end
 
 -- While measuring, chance rolls always succeed and don't use up the run's seed, so a
@@ -201,7 +218,7 @@ end
 if SMODS.pseudorandom_probability then
     local probability_ref = SMODS.pseudorandom_probability
     function SMODS.pseudorandom_probability(...)
-        if measuring > 0 then return true end
+        if measuring > 0 or replaying > 0 then return true end
         return probability_ref(...)
     end
 end
@@ -215,13 +232,13 @@ end
 -- While measuring, the card being looked at counts as every suit and as a face card
 local is_suit_ref = Card.is_suit
 function Card:is_suit(...)
-    if measuring > 0 and measure_card == self then return true end
+    if (measuring > 0 or replaying > 0) and measure_card == self then return true end
     return is_suit_ref(self, ...)
 end
 
 local is_face_ref = Card.is_face
 function Card:is_face(...)
-    if measuring > 0 and measure_card == self then return true end
+    if (measuring > 0 or replaying > 0) and measure_card == self then return true end
     return is_face_ref(self, ...)
 end
 
@@ -260,6 +277,7 @@ end
 
 -- Run once with everything copied back afterwards; returns its result and any money it
 -- tried to pay directly
+local last_quiet_ability, last_quiet_other
 local function run_quietly(joker, ctx, rank)
     local other = ctx.other_card
     local joker_ability, other_ability = joker.ability, other and other.ability
@@ -277,6 +295,7 @@ local function run_quietly(joker, ctx, rank)
         other.rnd_force_id = nil
         other.ability = other_ability
     end
+    last_quiet_ability, last_quiet_other = joker.ability, other and other.ability
     joker.ability = joker_ability
     if buffers then G.GAME.consumeable_buffer, G.GAME.joker_buffer, G.GAME.dollar_buffer = buffers[1], buffers[2], buffers[3] end
     if not ok then
@@ -456,7 +475,7 @@ end
 
 -- Apply the Joker's random behaviour (this is where its state moves on)
 local function behave(joker, effect)
-    local mode = on("behaviours") and joker.ability.rnd_behaviour or "normal"
+    local mode = on("behaviours") and joker.ability.rnd_kind ~= "dollar" and joker.ability.rnd_behaviour or "normal"
     local a = joker.ability
     if mode == "scales" or mode == "resets" or mode == "stacks" then
         -- All three build up a running total; they differ only in when it resets
@@ -566,10 +585,11 @@ end
 -- What the Joker gives when its own condition is met, read from its numbers (filled in
 -- below). Used when running it can't make its condition pass (Mystic Summit needs 0
 -- discards, Half Joker 3 cards, Flower Pot every suit...), so the new trigger always pays
-local base_effect
+local base_effect, dollar_effect
 
 local function fire(joker, context)
     local numbers = measure(joker, context) or base_effect(joker)
+        or (joker.ability.rnd_kind == "dollar" and dollar_effect(joker) or nil)
     local effect = numbers and deliver(joker, numbers)
     return effect
 end
@@ -581,6 +601,7 @@ function R.increment(joker)
     local cached = joker.rnd_measure
     if cached and now - cached.at < 0.5 and cached.type == joker.ability.rnd_type then return cached.value end
     local numbers = measure(joker, {}) or base_effect(joker)
+        or (joker.ability.rnd_kind == "dollar" and dollar_effect(joker) or nil)
     local value = numbers and round_effect(retype(joker, numbers)) or nil
     joker.rnd_measure = { at = now, value = value, type = joker.ability.rnd_type }
     return value
@@ -749,11 +770,193 @@ local function apply_gain(joker)
     return applied
 end
 
--- Only Jokers that give Chips, Mult, money or retriggers while scoring, or that grow,
--- get a trigger
-local function triggerable(joker)
-    if R.grows(joker) then return true end
+----------------------------------------------------------------------
+-- Jokers that pay money at end of round (Golden Joker, Cloud 9, Rocket...): they pay
+-- on the random trigger instead
+----------------------------------------------------------------------
+
+local DOLLAR_JOKERS = { j_golden = true, j_cloud_9 = true, j_rocket = true, j_satellite = true, j_delayed_grat = true }
+local function pays_at_end(joker)
+    local center = joker.config.center
+    return DOLLAR_JOKERS[center.key] or type(center.calc_dollar_bonus) == "function"
+end
+
+local dollar_bonus_ref = Card.calculate_dollar_bonus
+function Card:calculate_dollar_bonus(...)
+    if measuring == 0 and self.ability and self.ability.rnd_kind == "dollar" and R.trigger_of(self) then return nil end
+    return dollar_bonus_ref(self, ...)
+end
+
+dollar_effect = function(joker)
+    local ok, n = pcall(dollar_bonus_ref, joker)
+    n = ok and plain(n) or nil
+    if type(n) ~= "number" or n <= 0 then
+        local ex = joker.ability.extra
+        n = plain(type(ex) == "table" and ex.dollars or ex)
+    end
+    if type(n) == "number" and n > 0 then return { dollars = n } end
+end
+
+----------------------------------------------------------------------
+-- Jokers that do something other than score (create cards, gain sell value, level up
+-- hands...): what they do now happens on the random trigger instead of their own
+-- condition. Where a Joker acts is known for base-game Jokers and learned for others the
+-- first time it acts.
+----------------------------------------------------------------------
+
+-- The step a context belongs to, most specific first
+local ACTION_KEYS = {
+    "setting_blind", "end_of_round", "open_booster", "skipping_booster", "buying_card", "selling_card",
+    "selling_self", "reroll_shop", "ending_shop", "first_hand_drawn", "hand_drawn", "pre_discard", "discard",
+    "skip_blind", "using_consumeable", "playing_card_added", "remove_playing_cards", "before", "after",
+    "joker_main", "individual",
+}
+local ASKING = {}
+for k in pairs(PASS_THROUGH) do ASKING[k] = true end
+ASKING.selling_self = nil
+local function action_key(context)
+    if context.repetition or context.destroying_card or context.game_over then return nil end
+    for k in pairs(ASKING) do
+        if context[k] then return nil end
+    end
+    for _, k in ipairs(ACTION_KEYS) do
+        if context[k] then return k end
+    end
+end
+
+local KNOWN_ACTIONS = {
+    j_hallucination = "open_booster", j_cartomancer = "setting_blind", j_marble = "setting_blind",
+    j_riff_raff = "setting_blind", j_burglar = "setting_blind", j_chicot = "setting_blind",
+    j_certificate = "first_hand_drawn", j_8_ball = "individual", j_seance = "joker_main",
+    j_superposition = "joker_main", j_vagabond = "joker_main", j_space = "before", j_dna = "before",
+    j_midas_mask = "before", j_gift = "end_of_round", j_egg = "end_of_round", j_turtle_bean = "end_of_round",
+    j_invisible = "selling_self", j_luchador = "selling_self", j_diet_cola = "selling_self",
+    j_perkeo = "ending_shop", j_mail = "discard", j_faceless = "discard", j_trading = "discard",
+    j_burnt = "pre_discard", j_hiker = "individual", j_ticket = "individual",
+}
+
+-- Numbers in a Joker's state, to see whether running it changed anything (Egg's sell value)
+local function numbers_of(a)
+    local out = {}
+    for k, v in pairs(a or {}) do
+        if type(plain(v)) == "number" and tostring(k):sub(1, 4) ~= "rnd_" then out[k] = plain(v) end
+    end
+    if a and type(a.extra) == "table" then
+        for k, v in pairs(a.extra) do
+            if type(plain(v)) == "number" then out["extra." .. tostring(k)] = plain(v) end
+        end
+    end
+    return out
+end
+local function changed(before, after)
+    for k, v in pairs(after) do if before[k] ~= v then return true end end
+    for k in pairs(before) do if after[k] == nil then return true end end
+    return false
+end
+
+local function acted(ret, events, money, before, after)
+    return events > 0 or money or (type(ret) == "table" and has_effect(ret)) or changed(before, after)
+end
+
+local function flags_of(context)
+    local out = {}
+    for k, v in pairs(context or {}) do
+        if type(v) ~= "table" and type(v) ~= "function" and type(v) ~= "userdata" then out[k] = v end
+    end
+    return out
+end
+
+-- A context for the Joker's own step, built from what's happening now
+local function action_context(joker, act, context)
+    local ctx = flags_of(joker.rnd_flags)
+    ctx[act] = ctx[act] or true
+    local played = context.scoring_hand or (G.play and next(G.play.cards) and G.play.cards) or {}
+    ctx.cardarea = (act == "individual" and (context.cardarea == G.hand and G.hand or G.play)) or G.jokers
+    ctx.full_hand = context.full_hand or played
+    ctx.scoring_hand = played
+    ctx.scoring_name = context.scoring_name or "High Card"
+    ctx.poker_hands = every_hand(context.poker_hands, played)
+    ctx.other_card = context.other_card or spare_card()
+    ctx.blind = G.GAME and G.GAME.blind
+    ctx.card = joker
+    ctx.cards, ctx.removed = {}, {}
+    if act == "end_of_round" then ctx.main_eval, ctx.game_over = true, false end
+    return ctx
+end
+
+-- Find a way to make the Joker act (any rank, then also counting as enhanced) without it
+-- sticking, then do it for real. Returns the Joker's result, or nil if it can't act.
+local DROP = { remove = true, saved = true, debuff = true, prevent_debuff = true }
+local function replay(joker, act, context)
+    local ctx = action_context(joker, act, context)
+    local other = ctx.other_card
+    local found
+    local ranks = { false }
+    if other then for _, r in ipairs(MEASURE_IDS) do ranks[#ranks + 1] = r end end
+    for _, enhanced in ipairs({ false, true }) do
+        force_enhanced = enhanced
+        for _, rank in ipairs(ranks) do
+            local before = numbers_of(joker.ability)
+            local before_other = other and numbers_of(other.ability) or {}
+            local e = events_seen
+            local ret, money = run_quietly(joker, ctx, rank or nil)
+            -- Hiker changes the card, not itself
+            local other_changed = other and changed(before_other, numbers_of(last_quiet_other))
+            if other_changed or acted(ret, events_seen - e, money ~= 0, before, numbers_of(last_quiet_ability)) then
+                found = { rank = rank, enhanced = enhanced }
+                break
+            end
+        end
+        if found then break end
+    end
+    force_enhanced = false
+    if not found then return nil end
+
+    force_enhanced = found.enhanced
+    measure_card = other
+    if other and found.rank then other.rnd_force_id = found.rank end
+    replaying = replaying + 1
+    local ok, ret = pcall(calculate_joker_ref, joker, ctx)
+    replaying = replaying - 1
+    if other then other.rnd_force_id = nil end
+    measure_card, force_enhanced = nil, false
+    if not ok then
+        report(ret)
+        return nil
+    end
+    if type(ret) ~= "table" then return { message = localize("k_active_ex"), colour = G.C.FILTER, card = joker } end
+    for k in pairs(DROP) do ret[k] = nil end
+    ret.card = joker
+    return ret
+end
+
+-- What kind of Joker this is: "grow", "dollar", "score" or "action"
+local scores
+function R.category(joker)
+    local a = joker.ability
+    if not a.rnd_kind then
+        local key = joker.config.center.key
+        if R.grows(joker) then a.rnd_kind = "grow"
+        elseif pays_at_end(joker) then a.rnd_kind = "dollar"
+        elseif KNOWN_ACTIONS[key] then a.rnd_kind, a.rnd_action = "action", KNOWN_ACTIONS[key]
+        elseif scores(joker) then a.rnd_kind = "score"
+        else a.rnd_kind = "action" end
+    end
+    return a.rnd_kind
+end
+
+-- Whether the card text shows the new trigger (a Joker that hasn't acted yet, and isn't
+-- a known one, still shows its own text; one that never acts is passive)
+function R.shows_trigger(joker)
+    return R.category(joker) ~= "action" or joker.ability.rnd_action ~= nil
+end
+
+R.action_key, R.replay, R.acted, R.numbers_of, R.flags_of = action_key, replay, acted, numbers_of, flags_of
+
+-- Jokers that give Chips, Mult, money or retriggers while scoring
+scores = function(joker)
     if measure(joker, {}) or base_effect(joker) then return true end
+
     local card = spare_card()
     if card then
         local ctx = { repetition = true, cardarea = G.play, other_card = card, full_hand = { card }, scoring_hand = { card } }
@@ -769,16 +972,17 @@ function R.note_passive(joker)
     end
 end
 
+-- Every Joker gets a trigger
 function R.roll_trigger(joker)
-    if not triggerable(joker) then return end
     local trigger = pseudorandom_element(R.TRIGGERS, pseudoseed("rnd_trigger"))
     joker.ability.rnd_trigger = trigger.key
+    R.category(joker)
     -- Type and behaviour are always rolled; the settings decide whether they apply
     joker.ability.rnd_type = pseudorandom_element(R.TYPES, pseudoseed("rnd_type"))
     joker.ability.rnd_behaviour = pseudorandom_element(R.BEHAVIOURS, pseudoseed("rnd_behaviour"))
     if logged < 40 and R.log then
         logged = logged + 1
-        R.log(("%s -> trigger '%s'"):format(tostring(joker.config.center.key), trigger.key))
+        R.log(("%s -> trigger '%s' (%s)"):format(tostring(joker.config.center.key), trigger.key, tostring(joker.ability.rnd_kind)))
     end
 end
 
@@ -815,8 +1019,46 @@ function Card:calculate_joker(context, ...)
         return calculate_joker_ref(self, context, ...)
     end
 
+    local category = R.category(self)
+
+    -- Jokers that act (create cards, gain sell value...) act on the random trigger
+    -- instead of in their own step
+    if category == "action" then
+        local a = self.ability
+        local step = action_key(context)
+        local kind = context_kind(context)
+        local hit = a.rnd_action and kind and kind == trigger.kind and trigger.check(context, self)
+        local ret, post
+        if step and step == a.rnd_action then
+            -- Its own step: blocked (but remembered, to copy its details on the trigger)
+            self.rnd_flags = flags_of(context)
+        elseif step and not a.rnd_action then
+            -- Not known yet where it acts: let it act this once and learn the step
+            local before, e, m = numbers_of(a), events_seen, money_seen
+            ret, post = calculate_joker_ref(self, context, ...)
+            if acted(ret, events_seen - e, money_seen ~= m, before, numbers_of(a)) then
+                a.rnd_action, self.rnd_flags = step, flags_of(context)
+                if R.log then R.log(("%s acts in '%s', now on trigger '%s'"):format(tostring(self.config.center.key), step, trigger.key)) end
+            end
+        else
+            ret, post = calculate_joker_ref(self, context, ...)
+        end
+        if hit then
+            local extra = replay(self, a.rnd_action, context)
+            if extra then
+                if R.log and scoring_logged < 60 then
+                    scoring_logged = scoring_logged + 1
+                    R.log(("%s [%s]: trigger '%s' fired (acted)"):format(tostring(self.config.center.key), kind, trigger.key))
+                end
+                if type(ret) == "table" then return SMODS.merge_effects({ ret, extra }), post end
+                return extra, post
+            end
+        end
+        return ret, post
+    end
+
     -- Growing Jokers grow on the random trigger instead of their own condition
-    if R.grows(self) then
+    if category == "grow" then
         local kind = context_kind(context)
         local hit = kind and kind == trigger.kind and trigger.check(context, self)
         local grew = hit and apply_gain(self)
@@ -887,6 +1129,8 @@ local LEADING = {
     "^[Aa]t end of [^,]-, ", "^[Aa]t the end of [^,]-, ", "^[Aa]fter [^,]-, ", "^[Bb]efore [^,]-, ",
     "^[Oo]n [^,]-, ", "^[Dd]uring [^,]-, ", "^[Uu]pon [^,]-, ", "^[Ee]very [^,]-hands?[^,]-, ",
     "^[Ff]or the [^,]-, ", "^[Oo]nce per [^,]-, ",
+    -- "1 in 2 chance to create...", "1 in 2 chance for played Hearts to give..."
+    "^[^,]-[Cc]hance to ", "^[^,]-[Cc]hance for [^,]- to ",
 }
 
 -- "Played cards with X suit give ...", "Each King held in hand gives ..." -> "Gives ..."
@@ -1036,12 +1280,14 @@ local function rewrite_lines(lines, trigger, joker, conversions)
     local joined = table.concat(body, " ")
     -- Growing Jokers keep their own scoring, so type and behaviour don't apply to them
     local grows = R.grows(joker)
-    local to = not grows and on("types") and joker.ability.rnd_type
+    -- Only Jokers that score get a random type and behaviour
+    local own = R.category(joker) ~= "score"
+    local to = not own and on("types") and joker.ability.rnd_type
     local effect = strip_condition(joined, grows)
     if effect == "" then effect = "Activates" end
     if to then effect = retype_text(effect, to, conversions) end
     local out = wrap(effect .. " when " .. trigger.text, 30)
-    local mode = not grows and on("behaviours") and BEHAVIOUR_LINES[joker.ability.rnd_behaviour]
+    local mode = not own and on("behaviours") and BEHAVIOUR_LINES[joker.ability.rnd_behaviour]
     for _, line in ipairs(mode or {}) do out[#out + 1] = line end
     for _, note in ipairs(notes) do
         if to then note = retype_text(note, to, conversions) end
@@ -1056,9 +1302,9 @@ local function rewritten_key(key, trigger, joker)
     local descs = G.localization.descriptions.Joker
     local original = descs and descs[key]
     if not (original and original.text) then return nil end
-    local grows = R.grows(joker)
-    local to = not grows and on("types") and joker.ability.rnd_type or "same"
-    local mode = not grows and on("behaviours") and joker.ability.rnd_behaviour or "normal"
+    local own = R.category(joker) ~= "score"
+    local to = not own and on("types") and joker.ability.rnd_type or "same"
+    local mode = not own and on("behaviours") and joker.ability.rnd_behaviour or "normal"
     local new_key = "rnd_" .. key .. "__" .. trigger.key .. "__" .. to .. "__" .. mode
     if cache[new_key] and descs[new_key] then return new_key, cache[new_key] end
 
@@ -1098,7 +1344,7 @@ local generate_card_ui_ref = generate_card_ui
 function generate_card_ui(_c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end, card, ...)
     local ret = generate_card_ui_ref(_c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end, card, ...)
     local trigger = card and not full_UI_table and not hide_desc and _c and _c.set == "Joker" and _c == card.config.center
-        and card.ability and card.ability.rnd_trigger and BY_KEY[card.ability.rnd_trigger]
+        and card.ability and card.ability.rnd_trigger and BY_KEY[card.ability.rnd_trigger] and R.shows_trigger(card)
     if not (trigger and ret and ret.main) then return ret end
 
     -- The same key and #vars# the Joker's own description uses
