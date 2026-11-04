@@ -31,7 +31,7 @@ local function trigger_count(trigger, joker)
         if text == "Unknown" then return nil end
         local n = 0
         for _, c in pairs(scoring_hand or {}) do
-            local ok, hit = pcall(trigger.check, { other_card = c }, joker)
+            local ok, hit = pcall(trigger.check, { other_card = c, scoring_hand = scoring_hand }, joker)
             if ok and hit then n = n + JokerDisplay.calculate_card_triggers(c, scoring_hand) end
         end
         return n

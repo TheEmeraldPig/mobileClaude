@@ -111,6 +111,10 @@ function Card:update(dt)
     -- Every Joker gets a random trigger. One that has none yet (passive, or a check that
     -- failed) tries again once a round, so it can still pick one up later
     local round = G.GAME.round or 0
+    -- A trigger from an older version that no longer exists gets rolled again
+    if self.ability.rnd_trigger and not R.trigger_of(self) then
+        self.ability.rnd_trigger, self.ability.rnd_trigger_tried = nil, nil
+    end
     if not self.ability.rnd_trigger and self.ability.rnd_trigger_tried ~= round then
         self.ability.rnd_trigger_tried = round
         R.roll_trigger(self)

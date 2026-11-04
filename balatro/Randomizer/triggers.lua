@@ -17,15 +17,6 @@ local MOD = R.mod
 local function id(c) return c and c:get_id() or 0 end
 local function has_hand(ctx, name) return ctx.poker_hands and ctx.poker_hands[name] and next(ctx.poker_hands[name]) end
 
-local function most_played()
-    local best, played = nil, -1
-    for _, name in ipairs(G.handlist or {}) do
-        local h = G.GAME.hands[name]
-        if h and h.played > played then best, played = name, h.played end
-    end
-    return best
-end
-
 local function any_face(cards)
     for _, c in ipairs(cards or {}) do
         if c:is_face() then return true end
@@ -33,46 +24,110 @@ local function any_face(cards)
     return false
 end
 
+-- Lowest ranked card held in hand (Raised Fist)
+local function lowest_held(card)
+    local low
+    for _, c in ipairs(G.hand and G.hand.cards or {}) do
+        if not low or id(c) < id(low) then low = c end
+    end
+    return low == card
+end
+
+-- First face card in the scoring hand (Photograph)
+local function first_face(ctx)
+    for _, c in ipairs(ctx.scoring_hand or {}) do
+        if c:is_face() then return c == ctx.other_card end
+    end
+    return false
+end
+
+local function all_held(suits)
+    for _, c in ipairs(G.hand and G.hand.cards or {}) do
+        local ok = false
+        for _, s in ipairs(suits) do if c:is_suit(s) then ok = true end end
+        if not ok then return false end
+    end
+    return true
+end
+
+local function every_suit(cards)
+    for _, s in ipairs({ "Hearts", "Diamonds", "Spades", "Clubs" }) do
+        local found = false
+        for _, c in ipairs(cards or {}) do if c:is_suit(s) then found = true end end
+        if not found then return false end
+    end
+    return true
+end
+
+-- Not the most played hand (Obelisk): another hand has been played at least as often
+local function not_most_played(name)
+    local mine = G.GAME.hands[name] and G.GAME.hands[name].played or 0
+    for k, h in pairs(G.GAME.hands) do
+        if k ~= name and h.visible and h.played >= mine then return true end
+    end
+    return false
+end
+
+-- Every trigger is the condition of a base-game Joker (named after each one).
 -- kind: "play" = each scored card, "hand" = each card held in hand, "main" = once per hand
 R.TRIGGERS = {
+    -- Greedy, Lusty, Wrathful and Gluttonous Joker
     { key = "hearts", kind = "play", text = "a {C:hearts}Heart{} is scored", check = function(ctx) return ctx.other_card:is_suit("Hearts") end },
     { key = "diamonds", kind = "play", text = "a {C:diamonds}Diamond{} is scored", check = function(ctx) return ctx.other_card:is_suit("Diamonds") end },
     { key = "spades", kind = "play", text = "a {C:spades}Spade{} is scored", check = function(ctx) return ctx.other_card:is_suit("Spades") end },
     { key = "clubs", kind = "play", text = "a {C:clubs}Club{} is scored", check = function(ctx) return ctx.other_card:is_suit("Clubs") end },
+    -- Scary Face / Smiley Face
     { key = "face", kind = "play", text = "a {C:attention}face{} card is scored", check = function(ctx) return ctx.other_card:is_face() end },
-    { key = "numbered", kind = "play", text = "a {C:attention}numbered{} card is scored", check = function(ctx) local i = id(ctx.other_card) return i >= 2 and i <= 10 end },
+    -- Photograph
+    { key = "first_face", kind = "play", text = "the first {C:attention}face{} card is scored", check = first_face },
+    -- Scholar
     { key = "ace", kind = "play", text = "an {C:attention}Ace{} is scored", check = function(ctx) return id(ctx.other_card) == 14 end },
-    { key = "seven", kind = "play", text = "a {C:attention}7{} is scored", check = function(ctx) return id(ctx.other_card) == 7 end },
-    { key = "even", kind = "play", text = "an {C:attention}even{} card is scored", check = function(ctx) local i = id(ctx.other_card) return i >= 2 and i <= 10 and i % 2 == 0 end },
-    { key = "odd", kind = "play", text = "an {C:attention}odd{} card is scored", check = function(ctx) local i = id(ctx.other_card) return i == 14 or (i >= 3 and i <= 9 and i % 2 == 1) end },
-    { key = "enhanced", kind = "play", text = "an {C:attention}enhanced{} card is scored", check = function(ctx) return ctx.other_card.config.center.set == "Enhanced" end },
-    { key = "sealed", kind = "play", text = "a card with a {C:attention}seal{} is scored", check = function(ctx) return ctx.other_card.seal ~= nil end },
-    { key = "edition", kind = "play", text = "a card with an {C:dark_edition}edition{} is scored", check = function(ctx) return ctx.other_card.edition ~= nil end },
+    -- Even Steven / Odd Todd
+    { key = "even", kind = "play", text = "a {C:attention}10, 8, 6, 4 or 2{} is scored", check = function(ctx) local i = id(ctx.other_card) return i >= 2 and i <= 10 and i % 2 == 0 end },
+    { key = "odd", kind = "play", text = "an {C:attention}A, 9, 7, 5 or 3{} is scored", check = function(ctx) local i = id(ctx.other_card) return i == 14 or (i >= 3 and i <= 9 and i % 2 == 1) end },
+    -- Fibonacci
+    { key = "fibonacci", kind = "play", text = "an {C:attention}A, 2, 3, 5 or 8{} is scored", check = function(ctx) local i = id(ctx.other_card) return i == 14 or i == 2 or i == 3 or i == 5 or i == 8 end },
+    -- Walkie Talkie
+    { key = "ten_four", kind = "play", text = "a {C:attention}10 or 4{} is scored", check = function(ctx) local i = id(ctx.other_card) return i == 10 or i == 4 end },
+    -- Hack
+    { key = "low", kind = "play", text = "a {C:attention}2, 3, 4 or 5{} is scored", check = function(ctx) local i = id(ctx.other_card) return i >= 2 and i <= 5 end },
+    -- Triboulet
+    { key = "king_queen", kind = "play", text = "a {C:attention}King or Queen{} is scored", check = function(ctx) local i = id(ctx.other_card) return i == 13 or i == 12 end },
 
-    { key = "held_face", kind = "hand", text = "a {C:attention}face{} card is held in hand", check = function(ctx) return ctx.other_card:is_face() end },
+    -- Baron / Shoot the Moon / Reserved Parking / Raised Fist
     { key = "held_king", kind = "hand", text = "a {C:attention}King{} is held in hand", check = function(ctx) return id(ctx.other_card) == 13 end },
     { key = "held_queen", kind = "hand", text = "a {C:attention}Queen{} is held in hand", check = function(ctx) return id(ctx.other_card) == 12 end },
-    { key = "held_low", kind = "hand", text = "a {C:attention}2, 3, 4 or 5{} is held in hand", check = function(ctx) local i = id(ctx.other_card) return i >= 2 and i <= 5 end },
+    { key = "held_face", kind = "hand", text = "a {C:attention}face{} card is held in hand", check = function(ctx) return ctx.other_card:is_face() end },
+    { key = "held_lowest", kind = "hand", text = "a card held in hand is the {C:attention}lowest{} rank", check = function(ctx) return lowest_held(ctx.other_card) end },
 
+    -- Jolly, Mad, Zany, Crazy, Droll Joker and The Family
     { key = "pair", kind = "main", text = "the hand contains a {C:attention}Pair{}", check = function(ctx) return has_hand(ctx, "Pair") end },
     { key = "two_pair", kind = "main", text = "the hand contains {C:attention}Two Pair{}", check = function(ctx) return has_hand(ctx, "Two Pair") end },
     { key = "three", kind = "main", text = "the hand contains {C:attention}Three of a Kind{}", check = function(ctx) return has_hand(ctx, "Three of a Kind") end },
     { key = "straight", kind = "main", text = "the hand contains a {C:attention}Straight{}", check = function(ctx) return has_hand(ctx, "Straight") end },
     { key = "flush", kind = "main", text = "the hand contains a {C:attention}Flush{}", check = function(ctx) return has_hand(ctx, "Flush") end },
-    { key = "full_house", kind = "main", text = "the hand is a {C:attention}Full House{}", check = function(ctx) return has_hand(ctx, "Full House") end },
-    { key = "one_card", kind = "main", text = "exactly {C:attention}1{} card is played", check = function(ctx) return #(ctx.full_hand or {}) == 1 end },
+    { key = "four", kind = "main", text = "the hand contains {C:attention}Four of a Kind{}", check = function(ctx) return has_hand(ctx, "Four of a Kind") end },
+    -- Half Joker / Square Joker
     { key = "few_cards", kind = "main", text = "{C:attention}3{} or fewer cards are played", check = function(ctx) return #(ctx.full_hand or {}) <= 3 end },
-    { key = "five_cards", kind = "main", text = "exactly {C:attention}5{} cards are played", check = function(ctx) return #(ctx.full_hand or {}) == 5 end },
+    { key = "four_cards", kind = "main", text = "exactly {C:attention}4{} cards are played", check = function(ctx) return #(ctx.full_hand or {}) == 4 end },
+    -- DNA / Dusk / Acrobat
     { key = "first_hand", kind = "main", text = "it's the {C:attention}first hand{} of the round", check = function() return G.GAME.current_round.hands_played == 0 end },
     { key = "final_hand", kind = "main", text = "it's the {C:attention}final hand{} of the round", check = function() return G.GAME.current_round.hands_left == 0 end },
-    { key = "rich", kind = "main", text = "you have {C:money}$20{} or more", check = function() return G.GAME.dollars >= 20 end },
-    { key = "broke", kind = "main", text = "you have {C:money}$5{} or less", check = function() return G.GAME.dollars <= 5 end },
+    -- Mystic Summit / Delayed Gratification
+    { key = "no_discards_left", kind = "main", text = "you have {C:attention}0{} discards left", check = function() return G.GAME.current_round.discards_left == 0 end },
     { key = "no_discards", kind = "main", text = "no {C:red}discards{} were used this round", check = function() return G.GAME.current_round.discards_used == 0 end },
+    -- Bloodstone / Space Joker
     { key = "coin", kind = "main", text = "a {C:green}1 in 2{} chance hits", check = function(ctx, joker) return SMODS.pseudorandom_probability(joker, "rnd_coin", 1, 2) end },
-    { key = "has_face", kind = "main", text = "the hand has a {C:attention}face{} card", check = function(ctx) return any_face(ctx.full_hand) end },
-    { key = "no_face", kind = "main", text = "the hand has no {C:attention}face{} cards", check = function(ctx) return not any_face(ctx.full_hand) end },
-    { key = "most_played", kind = "main", text = "you play your {C:attention}most played{} hand", check = function(ctx) return ctx.scoring_name and ctx.scoring_name == most_played() end },
-    { key = "deck_low", kind = "main", text = "{C:attention}15{} or fewer cards are left in deck", check = function() return #G.deck.cards <= 15 end },
+    -- Ride the Bus
+    { key = "no_face", kind = "main", text = "the hand has no {C:attention}face{} cards", check = function(ctx) return not any_face(ctx.scoring_hand) end },
+    -- Card Sharp
+    { key = "repeat_hand", kind = "main", text = "the hand was already played this round", check = function(ctx) local h = ctx.scoring_name and G.GAME.hands[ctx.scoring_name] return h and h.played_this_round > 1 end },
+    -- Obelisk
+    { key = "not_most_played", kind = "main", text = "it's not your {C:attention}most played{} hand", check = function(ctx) return ctx.scoring_name and not_most_played(ctx.scoring_name) end },
+    -- Blackboard
+    { key = "dark_held", kind = "main", text = "all held cards are {C:spades}Spades{} or {C:clubs}Clubs{}", check = function() return all_held({ "Spades", "Clubs" }) end },
+    -- Flower Pot
+    { key = "all_suits", kind = "main", text = "the hand has a {C:diamonds}Diamond{}, {C:clubs}Club{}, {C:hearts}Heart{} and {C:spades}Spade{}", check = function(ctx) return every_suit(ctx.scoring_hand) end },
 }
 
 local BY_KEY = {}
@@ -124,6 +179,31 @@ function ease_dollars(mod, ...)
         return
     end
     return ease_dollars_ref(mod, ...)
+end
+
+-- While measuring, chance rolls always succeed and don't use up the run's seed, so a
+-- Joker's own odds (Bloodstone's 1 in 2...) don't become an extra condition on the trigger
+local pseudoseed_ref = pseudoseed
+function pseudoseed(key, ...)
+    if measuring > 0 then return 0.5 end
+    return pseudoseed_ref(key, ...)
+end
+
+local pseudorandom_ref = pseudorandom
+function pseudorandom(seed, min, max, ...)
+    if measuring > 0 then
+        if min and max then return max end
+        return 0
+    end
+    return pseudorandom_ref(seed, min, max, ...)
+end
+
+if SMODS.pseudorandom_probability then
+    local probability_ref = SMODS.pseudorandom_probability
+    function SMODS.pseudorandom_probability(...)
+        if measuring > 0 then return true end
+        return probability_ref(...)
+    end
 end
 
 local get_id_ref = Card.get_id
