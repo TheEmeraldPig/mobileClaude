@@ -16,10 +16,11 @@ local RANGES = {
     { "blinds", "Blind scores", 0.75, 1.5 },
     { "hands", "Poker hands", 0.5, 1.5 },
 }
-local SLIDER_MIN, SLIDER_MAX = 0.1, 5
+-- The slider covers 0x to 10x; the box takes any number
+local SLIDER_MIN, SLIDER_MAX = 0, 10
 
 local function format(v) return string.format("%.2f", v) end
-local function clamp(v) return math.min(SLIDER_MAX, math.max(SLIDER_MIN, v)) end
+local function on_slider(v) return math.min(SLIDER_MAX, math.max(SLIDER_MIN, v)) end
 
 -- Text typed into a box: what the box's ref holds, and what the slider shows
 local inputs = {}
@@ -52,7 +53,7 @@ G.FUNCS.rnd_slider = function(e)
     if text ~= state.last_text then
         -- Typed into the box
         local n = tonumber(text)
-        if n then value = clamp(n) end
+        if n then value = n end
         state.last_text = text
     elseif value ~= state.last_value then
         -- Dragged the slider
@@ -64,7 +65,7 @@ G.FUNCS.rnd_slider = function(e)
     rt.ref_table[rt.ref_value] = value
     state.last_value = value
     rt.text = format(value)
-    bar.T.w = (value - rt.min) / (rt.max - rt.min) * rt.w
+    bar.T.w = (on_slider(value) - rt.min) / (rt.max - rt.min) * rt.w
     bar.config.w = bar.T.w
 end
 
@@ -77,7 +78,7 @@ end
 
 local function number_setting(field, label)
     local value = MOD.config[field]
-    MOD.config[field] = clamp(type(value) == "number" and value or 1)
+    MOD.config[field] = type(value) == "number" and value or 1
     inputs[field] = format(MOD.config[field])
     local state = { field = field, last_text = inputs[field], last_value = MOD.config[field] }
     local slider_args = {
@@ -85,10 +86,13 @@ local function number_setting(field, label)
         ref_table = MOD.config, ref_value = field, min = SLIDER_MIN, max = SLIDER_MAX, decimal_places = 2,
         colour = G.C.RED, rnd_state = state,
     }
+    -- The slider starts from a value on its own scale; the real value is put back after
+    MOD.config[field] = on_slider(MOD.config[field])
     local slider = create_slider(slider_args)
+    MOD.config[field] = state.last_value
     use_sync(slider)
     local box_args = {
-        id = "rnd_box_" .. field, w = 1.1, h = 0.4, text_scale = 0.3, max_length = 5,
+        id = "rnd_box_" .. field, w = 1.1, h = 0.4, text_scale = 0.3, max_length = 8,
         prompt_text = format(MOD.config[field]), ref_table = inputs, ref_value = field,
         extended_corpus = true, colour = G.C.RED, hooked_colour = darken(G.C.RED, 0.3),
     }
@@ -130,7 +134,7 @@ MOD.config_tab = function()
         } }
     end
     rows[#rows + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
-        text_node("Min and Max multiply the normal value (1 = normal). Rolls happen as things appear;", 0.27, G.C.UI.TEXT_INACTIVE),
+        text_node("Min and Max multiply the normal value (1 = normal; type any number). Rolls happen as things appear;", 0.27, G.C.UI.TEXT_INACTIVE),
     } }
     rows[#rows + 1] = { n = G.UIT.R, config = { align = "cm" }, nodes = {
         text_node("poker hands roll at the start of a run", 0.27, G.C.UI.TEXT_INACTIVE),
