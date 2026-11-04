@@ -2,7 +2,7 @@
 
 Two Balatro mods (Lua, Steamodded/SMODS) by Josiah live in `/home/user`:
 
-- `Randomizer/`: the main work in recent sessions, version 1.6.0, prefix `rnd`
+- `Randomizer/`: the main work in recent sessions, version 1.7.0, prefix `rnd`
 - `SimplyJokers/`: an older, larger mod, v1.3.1 (zip: `SimplyJokers-v1.3.1.zip`). Recent work there was only `nailed.lua`.
 
 Other files: `tarot_fusions.md`, `spectral_fusions.md`, `enhancement_combos.md` (design lists for SimplyJokers fusions) and `tools/`.
@@ -51,3 +51,11 @@ Conventions to keep:
 ## Fixed in 1.6.0 (2026-11-04)
 
 The user reported that a Joker's new trigger worked like an added condition and made it harder to score. The log showed the own effect *was* being blocked; the real cause was that measuring still rolled the Joker's own odds (Bloodstone's 1 in 2), so the trigger only paid out half the time. The user also wants every trigger to be one a real Joker has: made-up ones (seed, edition, $20, deck size...) were replaced. Jokers saved with a removed trigger roll a new one. 1.5.4's scoring log lines are still there.
+
+## Fixed in 1.7.0 (2026-11-04)
+
+- The user wants a trigger **replaced**, never added. Any Joker with a "(Currently ...)" note used to keep its old text plus "Scores only when ...". Now every Joker's text has its condition swapped for the new trigger.
+- Growing Jokers (`R.grows`: the description says "gain(s) ... Mult/Chips") now **grow** on the random trigger and score their "Currently" amount as normal. Their own growth is undone after each `calculate_joker` (`growth_snapshot`/`undo_growth`), and the amount is learned into `ability.rnd_gain`. Before it's learned, `guess_gain` reads it from `ability.extra` (Runner's `chip_mod`, Hologram's 0.25...). Types and behaviours don't apply to growers, and JokerDisplay keeps their own display.
+- "Works once, then stops": the `decays` behaviour went down 0.25 per trigger to nothing. It now stops at normal and resets at end of round.
+- `boosted()` was removed: it pumped up `x_mult`, so through the base game's generic XMult code nearly every Joker (Hallucination, Superposition...) looked like it scored and got a trigger.
+- The user plays with the Multiplayer mod (seeded, The Order), so keeping seeds untouched matters.

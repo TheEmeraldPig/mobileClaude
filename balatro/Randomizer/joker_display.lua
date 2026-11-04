@@ -93,7 +93,7 @@ local function with_definitions(fn, ...)
     for _, area in ipairs({ G.jokers, G.shop_jokers, G.pack_cards }) do
         for _, j in ipairs(area and area.cards or {}) do
             local key = j.config and j.config.center and j.config.center.key
-            if key and j.ability and j.ability.rnd_trigger and saved[key] == nil then
+            if key and j.ability and j.ability.rnd_trigger and not R.grows(j) and saved[key] == nil then
                 saved[key] = defs[key] or false
                 defs[key] = DEFINITION
             end

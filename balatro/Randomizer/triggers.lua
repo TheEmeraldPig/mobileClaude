@@ -465,7 +465,7 @@ local function behave(joker, effect)
     elseif mode == "decays" then
         a.rnd_decay = a.rnd_decay or 2
         local out = times(effect, a.rnd_decay)
-        a.rnd_decay = math.max(0, a.rnd_decay - 0.25)
+        a.rnd_decay = math.max(1, a.rnd_decay - 0.25)
         return out
     end
     return effect
@@ -600,39 +600,119 @@ end
 
 local logged = 0
 
--- A copy of the Joker's state with its stored bonuses pumped up, so Jokers that start at
--- nothing and build up (Hit the Road, Ride the Bus, Obelisk...) show what they'd give
-local BOOST_HINTS = { "mult", "chip", "x_", "xmult", "dollar" }
-local function boosted(ability)
-    local a = safe_copy(ability)
-    if type(plain(a.x_mult)) == "number" then a.x_mult = math.max(plain(a.x_mult), 2) end
-    if type(plain(a.mult)) == "number" then a.mult = plain(a.mult) + 5 end
-    if type(plain(a.t_chips)) == "number" then a.t_chips = plain(a.t_chips) + 20 end
+----------------------------------------------------------------------
+-- Jokers that grow (Runner, Ride the Bus, Hologram...): they keep scoring their
+-- "Currently" amount as normal, but they only grow on the random trigger. Their own
+-- growth is undone, and the amount it grew by is remembered for the trigger to use.
+----------------------------------------------------------------------
+
+local function desc_text(key)
+    local d = G.localization and G.localization.descriptions.Joker[key]
+    if not (d and d.text) then return "" end
+    local parts = {}
+    local function walk(t)
+        for _, l in ipairs(t) do
+            if type(l) == "table" then walk(l) else parts[#parts + 1] = tostring(l) end
+        end
+    end
+    walk(d.text)
+    return (table.concat(parts, " "):gsub("{[^}]*}", ""))
+end
+
+local function grows_text(text)
+    return (text:find("[Gg]ains?[^%.]-Mult") or text:find("[Gg]ains?[^%.]-Chips")) and true or false
+end
+
+function R.grows(joker)
+    local a = joker.ability
+    if a.rnd_grows == nil then a.rnd_grows = grows_text(desc_text(joker.config.center.key)) end
+    return a.rnd_grows
+end
+
+local GROWTH_HINTS = { "mult", "chip" }
+local GROWTH_SKIP = { "mod", "gain", "add", "sub", "inc", "odds", "every", "remaining", "size", "limit" }
+local function growth_key(k)
+    local lk = tostring(k):lower()
+    if lk:sub(1, 4) == "rnd_" then return false end
+    for _, w in ipairs(GROWTH_SKIP) do if lk:find(w, 1, true) then return false end end
+    for _, h in ipairs(GROWTH_HINTS) do if lk:find(h, 1, true) then return true end end
+    return false
+end
+
+-- The numbers a Joker grows: its Mult, XMult and the Mult/Chips in its extra table
+local function growth_snapshot(a)
+    local snap = {}
+    for _, k in ipairs({ "mult", "x_mult" }) do
+        if type(plain(a[k])) == "number" then snap[#snap + 1] = { a, k, a[k] } end
+    end
     if type(a.extra) == "table" then
         for k, v in pairs(a.extra) do
-            local n = plain(v)
-            local lk = tostring(k):lower()
-            if type(n) == "number" then
-                for _, hint in ipairs(BOOST_HINTS) do
-                    if lk:find(hint, 1, true) then
-                        a.extra[k] = (lk:find("x", 1, true) and math.max(n, 2)) or (n + 5)
-                        break
-                    end
-                end
+            if growth_key(k) and type(plain(v)) == "number" then snap[#snap + 1] = { a.extra, k, v } end
+        end
+    end
+    return snap
+end
+
+-- Undo whatever the Joker grew by on its own, and remember how much it grew
+local function undo_growth(joker, snap)
+    local learned
+    for _, entry in ipairs(snap) do
+        local t, k, old = entry[1], entry[2], entry[3]
+        local now_n, old_n = plain(t[k]), plain(old)
+        if now_n ~= old_n then
+            t[k] = old
+            if type(now_n) == "number" and type(old_n) == "number" and now_n > old_n then
+                learned = learned or {}
+                learned[#learned + 1] = { where = t == joker.ability and "top" or "extra", key = k, amount = now_n - old_n }
             end
         end
     end
-    return a
+    if learned then joker.ability.rnd_gain = learned end
 end
 
--- Only Jokers that give Chips, Mult, money or retriggers while scoring get a trigger
+-- Before a Joker has grown once on its own, guess the amount from its settings
+-- (Runner's chip_mod grows its chips, Hologram's 0.25 grows its XMult...)
+local function guess_gain(joker)
+    local a = joker.ability
+    local ex = a.extra
+    if type(plain(ex)) == "number" and plain(ex) > 0 then
+        local n = plain(ex)
+        return { { where = "top", key = n < 1 and "x_mult" or "mult", amount = n } }
+    end
+    if type(ex) ~= "table" then return nil end
+    for k, v in pairs(ex) do
+        local lk, n = tostring(k):lower(), plain(v)
+        if type(n) == "number" and n > 0 and (lk:find("mod") or lk:find("gain") or lk:find("add") or lk:find("inc")) then
+            local base = lk:gsub("_?mod$", ""):gsub("_?gain$", ""):gsub("_?add$", ""):sub(1, 4)
+            for k2, v2 in pairs(ex) do
+                if k2 ~= k and growth_key(k2) and type(plain(v2)) == "number" and tostring(k2):lower():find(base, 1, true) then
+                    return { { where = "extra", key = k2, amount = n } }
+                end
+            end
+            return { { where = "top", key = lk:find("x") and "x_mult" or "mult", amount = n } }
+        end
+    end
+end
+
+local function apply_gain(joker)
+    local a = joker.ability
+    local gains = a.rnd_gain or guess_gain(joker)
+    local applied = false
+    for _, g in ipairs(gains or {}) do
+        local t = g.where == "extra" and a.extra or a
+        if type(t) == "table" and t[g.key] ~= nil then
+            local ok, v = pcall(function() return t[g.key] + g.amount end)
+            if ok then t[g.key], applied = v, true end
+        end
+    end
+    return applied
+end
+
+-- Only Jokers that give Chips, Mult, money or retriggers while scoring, or that grow,
+-- get a trigger
 local function triggerable(joker)
+    if R.grows(joker) then return true end
     if measure(joker, {}) then return true end
-    local own = joker.ability
-    joker.ability = boosted(own)
-    local ok, found = pcall(measure, joker, {})
-    joker.ability = own
-    if ok and found then return true end
     local card = spare_card()
     if card then
         local ctx = { repetition = true, cardarea = G.play, other_card = card, full_hand = { card }, scoring_hand = { card } }
@@ -694,9 +774,30 @@ function Card:calculate_joker(context, ...)
         return calculate_joker_ref(self, context, ...)
     end
 
+    -- Growing Jokers grow on the random trigger instead of their own condition
+    if R.grows(self) then
+        local kind = context_kind(context)
+        local hit = kind and kind == trigger.kind and trigger.check(context, self)
+        local grew = hit and apply_gain(self)
+        local snap = growth_snapshot(self.ability)
+        local ret, post = calculate_joker_ref(self, context, ...)
+        undo_growth(self, snap)
+        if grew then
+            if R.log and scoring_logged < 60 then
+                scoring_logged = scoring_logged + 1
+                R.log(("%s [%s]: trigger '%s' fired (grew)"):format(tostring(self.config.center.key), kind, trigger.key))
+            end
+            local msg = { message = localize("k_upgrade_ex"), colour = G.C.FILTER, card = self }
+            if type(ret) == "table" then return SMODS.merge_effects({ msg, ret }), post end
+            return msg, post
+        end
+        return ret, post
+    end
+
     if context.before and self.ability.rnd_behaviour == "stacks" then self.ability.rnd_total = nil end
-    if context.end_of_round and context.main_eval and self.ability.rnd_behaviour == "resets" then
-        self.ability.rnd_total = nil
+    if context.end_of_round and context.main_eval then
+        if self.ability.rnd_behaviour == "resets" then self.ability.rnd_total = nil end
+        if self.ability.rnd_behaviour == "decays" then self.ability.rnd_decay = nil end
     end
 
     -- Retriggers happen on the random trigger instead of their own condition
@@ -781,7 +882,10 @@ local function capitalise(s)
     return s
 end
 
-local function strip_condition(sentence)
+-- Growing Jokers also say how often they grow: "per reroll", "for each card sold"...
+local GROW_TRAILING = { " per .*$", " for each .*$", " for every .*$", " every .*$" }
+
+local function strip_condition(sentence, grows)
     local s = trim(sentence)
     local again = true
     while again do
@@ -799,6 +903,10 @@ local function strip_condition(sentence)
         end
     end
     for _, pat in ipairs(TRAILING) do
+        local out = s:gsub(pat, "", 1)
+        if out ~= s then s = trim(out) end
+    end
+    for _, pat in ipairs(grows and GROW_TRAILING or {}) do
         local out = s:gsub(pat, "", 1)
         if out ~= s then s = trim(out) end
     end
@@ -874,7 +982,7 @@ local BEHAVIOUR_LINES = {
     scales = { "{C:attention}Increases{} by {C:attention}#61#{}", "every trigger", "{C:inactive}(Currently #60#)" },
     resets = { "{C:attention}Increases{} by {C:attention}#61#{}", "every trigger, resets at", "end of round", "{C:inactive}(Currently #60#)" },
     stacks = { "{C:attention}Increases{} by {C:attention}#61#{}", "every trigger, resets", "after each hand", "{C:inactive}(Currently #60#)" },
-    decays = { "{C:red}Decreases{} by {C:attention}#61#{}", "every trigger", "{C:inactive}(Currently #60#)" },
+    decays = { "{C:red}Decreases{} by {C:attention}#61#{}", "every trigger, down to normal,", "resets at end of round", "{C:inactive}(Currently #60#)" },
 }
 
 local function rewrite_lines(lines, trigger, joker, conversions)
@@ -885,26 +993,14 @@ local function rewrite_lines(lines, trigger, joker, conversions)
         end
     end
     local joined = table.concat(body, " ")
-    local plain_text = joined:gsub("{[^}]*}", "")
-    -- Jokers that grow (Hit the Road, Ride the Bus...) still grow on their own condition;
-    -- only when they score moves, so their text stays and gains a "Scores when" line
-    local grows = plain_text:find("[Gg]ains") or plain_text:find("[Ll]oses") or plain_text:find("[Ii]ncreases")
-    for _, note in ipairs(notes) do
-        if note:find("Currently") then grows = true end
-    end
-    local to = on("types") and joker.ability.rnd_type
-    local out
-    if grows then
-        out = {}
-        for _, line in ipairs(body) do out[#out + 1] = to and retype_text(line, to, conversions) or line end
-        for _, line in ipairs(wrap("{C:purple}Scores{} only when " .. trigger.text, 30)) do out[#out + 1] = line end
-    else
-        local effect = strip_condition(joined)
-        if effect == "" then effect = "Activates" end
-        if to then effect = retype_text(effect, to, conversions) end
-        out = wrap(effect .. " when " .. trigger.text, 30)
-    end
-    local mode = on("behaviours") and BEHAVIOUR_LINES[joker.ability.rnd_behaviour]
+    -- Growing Jokers keep their own scoring, so type and behaviour don't apply to them
+    local grows = R.grows(joker)
+    local to = not grows and on("types") and joker.ability.rnd_type
+    local effect = strip_condition(joined, grows)
+    if effect == "" then effect = "Activates" end
+    if to then effect = retype_text(effect, to, conversions) end
+    local out = wrap(effect .. " when " .. trigger.text, 30)
+    local mode = not grows and on("behaviours") and BEHAVIOUR_LINES[joker.ability.rnd_behaviour]
     for _, line in ipairs(mode or {}) do out[#out + 1] = line end
     for _, note in ipairs(notes) do
         if to then note = retype_text(note, to, conversions) end
@@ -919,8 +1015,9 @@ local function rewritten_key(key, trigger, joker)
     local descs = G.localization.descriptions.Joker
     local original = descs and descs[key]
     if not (original and original.text) then return nil end
-    local to = on("types") and joker.ability.rnd_type or "same"
-    local mode = on("behaviours") and joker.ability.rnd_behaviour or "normal"
+    local grows = R.grows(joker)
+    local to = not grows and on("types") and joker.ability.rnd_type or "same"
+    local mode = not grows and on("behaviours") and joker.ability.rnd_behaviour or "normal"
     local new_key = "rnd_" .. key .. "__" .. trigger.key .. "__" .. to .. "__" .. mode
     if cache[new_key] and descs[new_key] then return new_key, cache[new_key] end
 
