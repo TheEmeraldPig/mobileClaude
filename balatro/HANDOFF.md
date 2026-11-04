@@ -2,7 +2,7 @@
 
 Two Balatro mods (Lua, Steamodded/SMODS) by Josiah live in `/home/user`:
 
-- `Randomizer/`: the main work in recent sessions, version 1.11.0, prefix `rnd`
+- `Randomizer/`: the main work in recent sessions, version 1.11.1, prefix `rnd`
 - `SimplyJokers/`: an older, larger mod, v1.3.1 (zip: `SimplyJokers-v1.3.1.zip`). Recent work there was only `nailed.lua`.
 
 Other files: `tarot_fusions.md`, `spectral_fusions.md`, `enhancement_combos.md` (design lists for SimplyJokers fusions) and `tools/`.
@@ -79,3 +79,4 @@ The user wants **all** Jokers affected. `R.category` (saved as `ability.rnd_kind
 
 Each random range (Joker amounts, shop prices, Blind scores, poker hands) has `<key>_min`/`<key>_max` in `config.lua`, read by `range()` in `rolls.lua` (missing values fall back to the old defaults; a min above the max is swapped). `settings.lua` gives each Min/Max a slider (0-10) and a text box that takes any number, with no limit (1.10.1, at the user's request). `G.FUNCS.rnd_slider` replaces the slider's per-frame `slider` function: it keeps the slider, the value and the box in sync. It writes the box's letters through `args.text.letters`, or finds them through the box's `<id>_letter_1` element. The Balatro UI functions (`create_slider`, `create_text_input`, `G.FUNCS.slider`) were written from memory of the base game, not read, since its source isn't available here. If the tab errors, check those first.
 - 1.11.0: everything can go negative (user request). Joker amounts aren't kept at a minimum of 1 any more; type conversion only clamps positive amounts; `base_effect`, `guess_gain` and `dollar_effect` take negative amounts; shop prices can be 0 or negative, and then the sell value follows the price so buying and selling can't make money forever. The base game's own card text can still read "+-4 Mult".
+- 1.11.1: fixed a crash when hovering a Joker (from 1.9.0): `trigger` in the `generate_card_ui` hook had become `true` instead of the trigger.

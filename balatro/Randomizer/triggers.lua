@@ -1404,8 +1404,8 @@ local generate_card_ui_ref = generate_card_ui
 function generate_card_ui(_c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end, card, ...)
     local ret = generate_card_ui_ref(_c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end, card, ...)
     local trigger = card and not full_UI_table and not hide_desc and _c and _c.set == "Joker" and _c == card.config.center
-        and card.ability and card.ability.rnd_trigger and BY_KEY[card.ability.rnd_trigger] and R.shows_trigger(card)
-    if not (trigger and ret and ret.main) then return ret end
+        and card.ability and card.ability.rnd_trigger and BY_KEY[card.ability.rnd_trigger]
+    if not (trigger and ret and ret.main and R.shows_trigger(card)) then return ret end
 
     -- The same key and #vars# the Joker's own description uses
     local key, vars = _c.key, specific_vars
