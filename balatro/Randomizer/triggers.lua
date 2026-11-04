@@ -376,10 +376,11 @@ local POINTS = {
     xchips = function(v) return (v - 1) * 10 end,
 }
 local FROM_POINTS = {
-    mult = function(p) return math.max(1, math.floor(p + 0.5)) end,
-    chips = function(p) return math.max(1, math.floor(p * 4 + 0.5)) end,
-    xmult = function(p) return math.max(1.1, math.floor((1 + p / 20) * 10 + 0.5) / 10) end,
-    xchips = function(p) return math.max(1.1, math.floor((1 + p / 10) * 10 + 0.5) / 10) end,
+    -- A positive amount stays at least +1 / X1.1; a negative one can go as low as it goes
+    mult = function(p) local v = math.floor(p + 0.5) return p > 0 and math.max(1, v) or v end,
+    chips = function(p) local v = math.floor(p * 4 + 0.5) return p > 0 and math.max(1, v) or v end,
+    xmult = function(p) local v = math.floor((1 + p / 20) * 10 + 0.5) / 10 return p > 0 and math.max(1.1, v) or v end,
+    xchips = function(p) local v = math.floor((1 + p / 10) * 10 + 0.5) / 10 return p > 0 and math.max(1.1, v) or v end,
 }
 
 function R.convert(kind, value, to)
@@ -495,6 +496,10 @@ local function number_text(v)
     return str
 end
 
+-- "+4" / "-4"; money as "$4" / "-$4"
+local function signed(v) return (v < 0 and "-" or "+") .. number_text(math.abs(v)) end
+local function money(v) return (v < 0 and "-$" or "$") .. number_text(math.abs(v)) end
+
 local UNIT_OF = { chips = " Chips", mult = " Mult", xchips = " Chips", xmult = " Mult" }
 local EFFECT_ORDER = { "chips", "mult", "xchips", "xmult", "dollars" }
 
@@ -504,9 +509,9 @@ function R.format_total(effect, kind)
     for _, k in ipairs(EFFECT_ORDER) do
         local v = effect and effect[k]
         if v then
-            if k == "dollars" then parts[#parts + 1] = "$" .. number_text(v)
+            if k == "dollars" then parts[#parts + 1] = money(v)
             elseif MULTIPLIERS[k] then parts[#parts + 1] = "X" .. number_text(v) .. UNIT_OF[k]
-            else parts[#parts + 1] = "+" .. number_text(v) .. UNIT_OF[k] end
+            else parts[#parts + 1] = signed(v) .. UNIT_OF[k] end
         end
     end
     if #parts > 0 then return table.concat(parts, ", ") end
@@ -521,9 +526,9 @@ function R.format_increase(effect, kind)
     for _, k in ipairs(EFFECT_ORDER) do
         local v = effect and effect[k]
         if v then
-            if k == "dollars" then parts[#parts + 1] = "$" .. number_text(v)
+            if k == "dollars" then parts[#parts + 1] = money(v)
             elseif MULTIPLIERS[k] then parts[#parts + 1] = "X" .. number_text(v - 1) .. UNIT_OF[k]
-            else parts[#parts + 1] = "+" .. number_text(v) .. UNIT_OF[k] end
+            else parts[#parts + 1] = signed(v) .. UNIT_OF[k] end
         end
     end
     if #parts > 0 then return table.concat(parts, ", ") end
@@ -652,8 +657,9 @@ base_effect = function(joker)
         v = plain(v)
         if type(v) ~= "number" then return end
         if kind == "xmult" then
-            if v > 1 then out.xmult = v end
-        elseif v > 0 then
+            -- Below X1 only counts when the amount was rolled down (a negative or small factor)
+            if v > 1 or (v < 1 and (a.rnd_factor or 1) < 1) then out.xmult = v end
+        elseif v ~= 0 then
             out[kind] = out[kind] or v
         end
     end
@@ -737,14 +743,14 @@ end
 local function guess_gain(joker)
     local a = joker.ability
     local ex = a.extra
-    if type(plain(ex)) == "number" and plain(ex) > 0 then
+    if type(plain(ex)) == "number" and plain(ex) ~= 0 then
         local n = plain(ex)
         return { { where = "top", key = n < 1 and "x_mult" or "mult", amount = n } }
     end
     if type(ex) ~= "table" then return nil end
     for k, v in pairs(ex) do
         local lk, n = tostring(k):lower(), plain(v)
-        if type(n) == "number" and n > 0 and (lk:find("mod") or lk:find("gain") or lk:find("add") or lk:find("inc")) then
+        if type(n) == "number" and n ~= 0 and (lk:find("mod") or lk:find("gain") or lk:find("add") or lk:find("inc")) then
             local base = lk:gsub("_?mod$", ""):gsub("_?gain$", ""):gsub("_?add$", ""):sub(1, 4)
             for k2, v2 in pairs(ex) do
                 if k2 ~= k and growth_key(k2) and type(plain(v2)) == "number" and tostring(k2):lower():find(base, 1, true) then
@@ -794,7 +800,7 @@ dollar_effect = function(joker)
         local ex = joker.ability.extra
         n = plain(type(ex) == "table" and ex.dollars or ex)
     end
-    if type(n) == "number" and n > 0 then return { dollars = n } end
+    if type(n) == "number" and n ~= 0 then return { dollars = n } end
 end
 
 ----------------------------------------------------------------------

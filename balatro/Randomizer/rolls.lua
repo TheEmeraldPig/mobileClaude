@@ -75,9 +75,8 @@ local function scale(value, key, factor)
         -- Scale the part above X1, to one decimal place
         return math.floor((1 + (value - 1) * factor) * 10 + 0.5) / 10
     end
-    local scaled = math.floor(value * factor + 0.5)
-    if value > 0 then return math.max(1, scaled) end
-    return scaled
+    -- Any factor works, negative too (+4 Mult with -1 becomes -4 Mult)
+    return math.floor(value * factor + 0.5)
 end
 
 function R.roll_numbers(joker)
@@ -146,7 +145,15 @@ function Card:set_cost(...)
     if on("prices") and G.GAME and G.STAGE == G.STAGES.RUN and self.ability and (self.cost or 0) > 0 then
         self.ability.rnd_price = self.ability.rnd_price or between("rnd_price", range("prices", 0.5, 1.5))
         local cost = plain(self.cost)
-        if type(cost) == "number" then self.cost = math.max(1, math.floor(cost * self.ability.rnd_price + 0.5)) end
+        if type(cost) == "number" then
+            self.cost = math.floor(cost * self.ability.rnd_price + 0.5)
+            -- A free or negative price (the shop pays you) also sells for that, so it
+            -- can't be bought and sold for money forever
+            if self.cost < 1 then
+                self.sell_cost = math.floor(self.cost / 2) + (self.ability.extra_value or 0)
+                self.sell_cost_label = self.facing == "back" and "?" or self.sell_cost
+            end
+        end
     end
     return ret
 end
