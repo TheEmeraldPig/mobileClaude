@@ -2,7 +2,7 @@
 
 Two Balatro mods (Lua, Steamodded/SMODS) by Josiah live in `/home/user`:
 
-- `Randomizer/`: the main work in recent sessions, version 1.9.0, prefix `rnd`
+- `Randomizer/`: the main work in recent sessions, version 1.9.1, prefix `rnd`
 - `SimplyJokers/`: an older, larger mod, v1.3.1 (zip: `SimplyJokers-v1.3.1.zip`). Recent work there was only `nailed.lua`.
 
 Other files: `tarot_fusions.md`, `spectral_fusions.md`, `enhancement_combos.md` (design lists for SimplyJokers fusions) and `tools/`.
@@ -73,3 +73,4 @@ The user wants **all** Jokers affected. `R.category` (saved as `ability.rnd_kind
 - `action`: anything else (creating cards, sell value, levelling hands...). `ability.rnd_action` is the step it acts in (`ACTION_KEYS`). Base-game ones are in `KNOWN_ACTIONS`; others learn it the first time they act (events, money, a non-cosmetic result or a changed number). That step is then blocked, and on the trigger `replay` builds a context for that step. It probes quietly to find a rank, or a forced enhancement, that makes the Joker act, then runs it for real (`replaying` forces suit, face and chance). Until an action Joker is known, its card text stays the same (`R.shows_trigger`). Passive Jokers (Four Fingers, Juggler, Showman...) never act, so they never change.
 - Known gaps: action Jokers whose condition can't be forced (DNA's 1-card first hand, Faceless's 3 faces, Vagabond's $4, Superposition's Ace) only act when that condition is also true. Invisible Joker, Diet Cola and Luchador act on the trigger instead of when sold.
 - A small Lua simulation (lupa) was used to check the action, dollar, grow and score paths. It's in the session scratchpad and not kept.
+- 1.9.1: the Jokers whose condition can't be faked now have their effect written out in `OVERRIDES`, at the user's request. On the trigger: DNA copies the card into the deck and hand, Faceless pays $5, Trading Card pays $3 (no destroy, and its text drops "destroy it and"), Vagabond and Superposition create a Tarot.

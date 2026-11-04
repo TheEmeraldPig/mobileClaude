@@ -930,6 +930,51 @@ local function replay(joker, act, context)
     return ret
 end
 
+-- Jokers whose own condition can't be faked: on the trigger they just do their effect
+local function make_tarot(joker, seed)
+    if not (G.consumeables and #G.consumeables.cards + G.GAME.consumeable_buffer < G.consumeables.config.card_limit) then return nil end
+    G.GAME.consumeable_buffer = G.GAME.consumeable_buffer + 1
+    G.E_MANAGER:add_event(Event({ func = function()
+        local card = create_card("Tarot", G.consumeables, nil, nil, nil, nil, nil, seed)
+        card:add_to_deck()
+        G.consumeables:emplace(card)
+        G.GAME.consumeable_buffer = 0
+        return true
+    end }))
+    return { message = localize("k_plus_tarot"), colour = G.C.PURPLE, card = joker }
+end
+
+local function extra_number(joker, key, default)
+    local ex = joker.ability.extra
+    local v = plain(type(ex) == "table" and ex[key] or ex)
+    return type(v) == "number" and v or default
+end
+
+local OVERRIDES = {
+    -- DNA: add a permanent copy of the card to the deck and draw it to hand
+    j_dna = function(joker, context)
+        local source = context.other_card or (context.full_hand or {})[1]
+        if not (source and G.hand and G.deck) then return nil end
+        G.playing_card = (G.playing_card and G.playing_card + 1) or 1
+        local copy = copy_card(source, nil, nil, G.playing_card)
+        copy:add_to_deck()
+        G.deck.config.card_limit = G.deck.config.card_limit + 1
+        table.insert(G.playing_cards, copy)
+        G.hand:emplace(copy)
+        copy.states.visible = nil
+        G.E_MANAGER:add_event(Event({ func = function() copy:start_materialize() return true end }))
+        if SMODS.calculate_context then SMODS.calculate_context({ playing_card_added = true, cards = { copy } }) end
+        return { message = localize("k_copied_ex"), colour = G.C.CHIPS, card = joker }
+    end,
+    -- Faceless Joker: earn $5
+    j_faceless = function(joker) return { dollars = extra_number(joker, "dollars", 5), card = joker } end,
+    -- Trading Card: earn $3
+    j_trading = function(joker) return { dollars = extra_number(joker, "dollars", 3), card = joker } end,
+    -- Vagabond and Superposition: create a Tarot card
+    j_vagabond = function(joker) return make_tarot(joker, "vag") end,
+    j_superposition = function(joker) return make_tarot(joker, "sup") end,
+}
+
 -- What kind of Joker this is: "grow", "dollar", "score" or "action"
 local scores
 function R.category(joker)
@@ -1044,7 +1089,14 @@ function Card:calculate_joker(context, ...)
             ret, post = calculate_joker_ref(self, context, ...)
         end
         if hit then
-            local extra = replay(self, a.rnd_action, context)
+            local own_effect = OVERRIDES[self.config.center.key]
+            local extra
+            if own_effect then
+                local ok, res = pcall(own_effect, self, context)
+                if ok then extra = res else report(res) end
+            else
+                extra = replay(self, a.rnd_action, context)
+            end
             if extra then
                 if R.log and scoring_logged < 60 then
                     scoring_logged = scoring_logged + 1
@@ -1131,6 +1183,8 @@ local LEADING = {
     "^[Ff]or the [^,]-, ", "^[Oo]nce per [^,]-, ",
     -- "1 in 2 chance to create...", "1 in 2 chance for played Hearts to give..."
     "^[^,]-[Cc]hance to ", "^[^,]-[Cc]hance for [^,]- to ",
+    -- Trading Card only pays on its trigger
+    "^[Dd]estroy it and ",
 }
 
 -- "Played cards with X suit give ...", "Each King held in hand gives ..." -> "Gives ..."
