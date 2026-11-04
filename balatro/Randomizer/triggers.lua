@@ -165,14 +165,27 @@ local function report(err)
     if sendWarnMessage then sendWarnMessage(tostring(err), "Randomizer") end
 end
 
+-- Copy a Joker's saved state without following links to Cards or other objects
+-- (anything with a metatable is shared, not copied) and without looping on cycles.
+-- Never use copy_table here: a Card's parent/children links loop back and overflow the stack.
+local function safe_copy(t, seen)
+    if type(t) ~= "table" or getmetatable(t) then return t end
+    seen = seen or {}
+    if seen[t] then return seen[t] end
+    local out = {}
+    seen[t] = out
+    for k, v in pairs(t) do out[k] = safe_copy(v, seen) end
+    return out
+end
+
 -- Run once with everything copied back afterwards; returns its result and any money it
 -- tried to pay directly
 local function run_quietly(joker, ctx, rank)
     local other = ctx.other_card
     local joker_ability, other_ability = joker.ability, other and other.ability
-    joker.ability = copy_table(joker_ability)
+    joker.ability = safe_copy(joker_ability)
     if other then
-        other.ability = copy_table(other_ability)
+        other.ability = safe_copy(other_ability)
         other.rnd_force_id = rank or nil
     end
     local buffers = G.GAME and { G.GAME.consumeable_buffer, G.GAME.joker_buffer, G.GAME.dollar_buffer }
@@ -368,7 +381,7 @@ local function behave(joker, effect)
     if mode == "scales" or mode == "resets" or mode == "stacks" then
         -- All three build up a running total; they differ only in when it resets
         a.rnd_total = add(a.rnd_total, effect)
-        return copy_table(a.rnd_total)
+        return safe_copy(a.rnd_total)
     elseif mode == "decays" then
         a.rnd_decay = a.rnd_decay or 2
         local out = times(effect, a.rnd_decay)
@@ -511,7 +524,7 @@ local logged = 0
 -- nothing and build up (Hit the Road, Ride the Bus, Obelisk...) show what they'd give
 local BOOST_HINTS = { "mult", "chip", "x_", "xmult", "dollar" }
 local function boosted(ability)
-    local a = copy_table(ability)
+    local a = safe_copy(ability)
     if type(plain(a.x_mult)) == "number" then a.x_mult = math.max(plain(a.x_mult), 2) end
     if type(plain(a.mult)) == "number" then a.mult = plain(a.mult) + 5 end
     if type(plain(a.t_chips)) == "number" then a.t_chips = plain(a.t_chips) + 20 end

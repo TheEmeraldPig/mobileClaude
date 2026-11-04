@@ -2,14 +2,14 @@
 
 Two Balatro mods (Lua, Steamodded/SMODS) by Josiah live in `/home/user`:
 
-- `Randomizer/`: the main work in recent sessions, version 1.5.2, prefix `rnd` (zip: `Randomizer-v1.5.2.zip`)
+- `Randomizer/`: the main work in recent sessions, version 1.5.3, prefix `rnd`
 - `SimplyJokers/`: an older, larger mod, v1.3.1 (zip: `SimplyJokers-v1.3.1.zip`). Recent work there was only `nailed.lua`.
 
 Other files: `tarot_fusions.md`, `spectral_fusions.md`, `enhancement_combos.md` (design lists for SimplyJokers fusions) and `tools/`.
 
 ## Latest state (2026-11-03)
 
-- **Stack overflow fixed in 1.5.2, not yet tested in game.** The user reported `stack overflow` (with JokerDisplay 2.0.8, Handy 2.0.6, Amulet 3.6.1). The traceback was `rolls.lua:116` → `R.roll_trigger` → `triggerable` → `measure` (`triggers.lua`), then `copy_table` recursing thousands of times. `measure` deep-copied a Joker's result table, and that table holds a `card` whose `parent`/`children` links loop back. The fix is `copy_chain`, which copies only the `ret` → `ret.extra` chain that `take_scoring` edits. **Never `copy_table` anything that can hold a Card.** The first thing to ask the user is whether 1.5.2 still crashes.
+- **Stack overflow fixed in 1.5.2, not yet tested in game.** The user reported `stack overflow` (with JokerDisplay 2.0.8, Handy 2.0.6, Amulet 3.6.1). The traceback was `rolls.lua:116` → `R.roll_trigger` → `triggerable` → `measure` (`triggers.lua`), then `copy_table` recursing thousands of times. `measure` deep-copied a Joker's result table, and that table holds a `card` whose `parent`/`children` links loop back. The fix is `copy_chain`, which copies only the `ret` → `ret.extra` chain that `take_scoring` edits. **Never `copy_table` anything that can hold a Card.** 1.5.3 also replaced the remaining `copy_table` calls on Joker state with `safe_copy` (shares tables that have a metatable, such as Cards, and handles loops). The first thing to ask the user is whether 1.5.2 still crashes.
 - The user asked for the mods to be put in a GitHub repo (the only one this account can reach is `TheEmeraldPig/mobileClaude`). Adding it was blocked by a permission check, so it isn't done. If you have repo access, copy `Randomizer/`, `SimplyJokers/`, this note and the `.md` design files into it, commit, and push.
 - The user prefers things to be **simple**. They pushed back hard on overbuilt card text and display. The `trigger_only` setting must change *only* triggers.
 
