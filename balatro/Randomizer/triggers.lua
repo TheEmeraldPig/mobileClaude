@@ -585,6 +585,27 @@ end
 -- The hook: a Joker's scoring numbers only come on its random trigger
 ----------------------------------------------------------------------
 
+-- Logs the first scoring events, so a log shows whether a Joker's own effect was blocked
+-- and when its random trigger fired
+local scoring_logged = 0
+local function describe(numbers)
+    local parts = {}
+    for k, v in pairs(numbers or {}) do parts[#parts + 1] = k .. " " .. tostring(v) end
+    table.sort(parts)
+    return table.concat(parts, ", ")
+end
+local function note_scoring(joker, kind, trigger, blocked, effect)
+    if scoring_logged >= 60 or not (R.log and (blocked or effect)) then return end
+    scoring_logged = scoring_logged + 1
+    local key = tostring(joker.config.center.key)
+    if blocked then R.log(("%s [%s]: own effect blocked (%s)"):format(key, kind, describe(blocked))) end
+    if effect then
+        local shown = {}
+        for k, v in pairs(effect) do if k ~= "card" then shown[k] = v end end
+        R.log(("%s [%s]: trigger '%s' fired (%s)"):format(key, kind, trigger.key, describe(shown)))
+    end
+end
+
 function Card:calculate_joker(context, ...)
     local trigger = self.ability and self.ability.set == "Joker" and self.ability.rnd_trigger and BY_KEY[self.ability.rnd_trigger]
     -- Not randomized, being measured, or copied by Blueprint/Brainstorm (the copier's own
@@ -615,8 +636,10 @@ function Card:calculate_joker(context, ...)
     -- In the scoring steps its own result is replaced: its scoring numbers come only on
     -- the random trigger, anything else it does here still happens
     local own = calculate_joker_ref(self, context, ...)
-    local rest = type(own) == "table" and select(2, take_scoring(own)) or nil
+    local blocked, rest
+    if type(own) == "table" then blocked, rest = take_scoring(own) end
     local effect = (kind == trigger.kind and trigger.check(context, self)) and fire(self, context) or nil
+    note_scoring(self, kind, trigger, blocked, effect)
     if rest and effect then return SMODS.merge_effects({ rest, effect }) end
     return rest or effect
 end

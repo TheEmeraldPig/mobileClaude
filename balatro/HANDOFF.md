@@ -2,7 +2,7 @@
 
 Two Balatro mods (Lua, Steamodded/SMODS) by Josiah live in `/home/user`:
 
-- `Randomizer/`: the main work in recent sessions, version 1.5.3, prefix `rnd`
+- `Randomizer/`: the main work in recent sessions, version 1.5.4, prefix `rnd`
 - `SimplyJokers/`: an older, larger mod, v1.3.1 (zip: `SimplyJokers-v1.3.1.zip`). Recent work there was only `nailed.lua`.
 
 Other files: `tarot_fusions.md`, `spectral_fusions.md`, `enhancement_combos.md` (design lists for SimplyJokers fusions) and `tools/`.
@@ -47,3 +47,7 @@ Conventions to keep:
 - Art was generated with a Python script at `/tmp/claude-0/-home-user/ff149113-ed13-511c-874a-9cf55b95ca00/scratchpad/gen/specials_gen.py`. That scratchpad may be gone in a new session. Read the script before reusing it.
 - Nothing has been tested inside the game from this container; there's no Balatro here. Check behaviour by reading the code, and ask the user for `lovely`/Steamodded logs when debugging. Randomizer logs lines like `"<key> -> trigger '<key>'"` (the first 40 Jokers) and `"Run detected..."`.
 - `/home/user` isn't a git repo, so nothing is committed or pushed. Files changed here only reach the user through the zips or if they copy them out.
+
+## Open bug (2026-11-04)
+
+The user reports that randomized Jokers still score on their **own** condition as well as the new trigger, for both growing and plain Jokers, in scoring and in card text. The user does not run SimplyJokers. Reading the code (and Steamodded's scoring in `eval_card`/`SMODS.score_card`) didn't show the cause. 1.5.4 logs the first 60 scoring events (`<key> [kind]: own effect blocked (...)` / `trigger '<t>' fired (...)`) and rebuilds the JokerDisplay display when a trigger is rolled after the display was built. Next step: read the user's log.

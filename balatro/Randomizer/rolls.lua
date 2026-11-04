@@ -114,7 +114,12 @@ function Card:update(dt)
     if not self.ability.rnd_trigger and self.ability.rnd_trigger_tried ~= round then
         self.ability.rnd_trigger_tried = round
         R.roll_trigger(self)
-        if not self.ability.rnd_trigger then R.note_passive(self) end
+        if not self.ability.rnd_trigger then
+            R.note_passive(self)
+        elseif self.joker_display_values and self.update_joker_display then
+            -- JokerDisplay already built this Joker's display from its own trigger; rebuild it
+            pcall(self.update_joker_display, self, true, true)
+        end
     end
 end
 
