@@ -981,10 +981,63 @@ local OVERRIDES = {
     j_superposition = function(joker) return make_tarot(joker, "sup") end,
 }
 
--- What kind of Joker this is: "grow", "dollar", "score" or "action"
+----------------------------------------------------------------------
+-- Blueprint and Brainstorm: every time their trigger hits, they give the copied
+-- Joker's effect (what that Joker gives on its own trigger)
+----------------------------------------------------------------------
+
+local COPIERS = {
+    j_blueprint = function(joker)
+        for i, j in ipairs(G.jokers and G.jokers.cards or {}) do
+            if j == joker then return G.jokers.cards[i + 1] end
+        end
+    end,
+    j_brainstorm = function() return G.jokers and G.jokers.cards[1] end,
+}
+
+local function copy_target(copier)
+    local find = COPIERS[copier.config.center.key]
+    local target = find and find(copier)
+    if not target or target == copier or target.debuff then return nil end
+    if target.config.center.blueprint_compat == false then return nil end
+    return target
+end
+
+local copying = 0
+local function copied_effect(copier, context)
+    local target = copy_target(copier)
+    if not target or copying > 3 then return nil end
+    copying = copying + 1
+    local ok, out = pcall(function()
+        local kind = R.category(target)
+        local effect
+        if kind == "copy" then
+            effect = copied_effect(target, context)
+        elseif kind == "action" then
+            local own = OVERRIDES[target.config.center.key]
+            if own then effect = own(copier, context)
+            elseif target.ability.rnd_action then effect = replay(target, target.ability.rnd_action, context) end
+        else
+            local numbers = measure(target, context) or (kind ~= "grow" and base_effect(target) or nil)
+                or (kind == "dollar" and dollar_effect(target) or nil)
+            if numbers and not blank(numbers) then effect = round_effect(numbers) end
+        end
+        if effect then effect.card = copier end
+        return effect
+    end)
+    copying = copying - 1
+    if not ok then
+        report(out)
+        return nil
+    end
+    return out
+end
+
+-- What kind of Joker this is: "grow", "dollar", "score", "action" or "copy"
 local scores
 function R.category(joker)
     local a = joker.ability
+    if COPIERS[joker.config.center.key] then a.rnd_kind = "copy" end
     if not a.rnd_kind then
         local key = joker.config.center.key
         if R.grows(joker) then a.rnd_kind = "grow"
@@ -1050,6 +1103,23 @@ local function describe(numbers)
     table.sort(parts)
     return table.concat(parts, ", ")
 end
+-- Whether a retrigger Joker's trigger hits for this card: played cards on a played-card
+-- or whole-hand trigger, held cards (Mime) on a held-card or whole-hand trigger
+local function repetition_hit(context, trigger, joker)
+    if context.cardarea == G.play then
+        return (trigger.kind == "play" or trigger.kind == "main") and trigger.check(context, joker)
+    elseif context.cardarea == G.hand then
+        return (trigger.kind == "hand" or trigger.kind == "main") and trigger.check(context, joker)
+    end
+    return false
+end
+
+-- A retrigger set off by a card trigger retriggers that card once
+local function capped(ret, trigger)
+    if type(ret) == "table" and trigger.kind ~= "main" and (ret.repetitions or 0) > 1 then ret.repetitions = 1 end
+    return ret
+end
+
 local function note_scoring(joker, kind, trigger, blocked, effect)
     if scoring_logged >= 60 or not (R.log and (blocked or effect)) then return end
     scoring_logged = scoring_logged + 1
@@ -1071,6 +1141,27 @@ function Card:calculate_joker(context, ...)
     end
 
     local category = R.category(self)
+
+    -- Blueprint/Brainstorm: their own copying is replaced by giving the copied Joker's
+    -- effect each time their trigger hits
+    if category == "copy" then
+        if context.repetition then
+            if not repetition_hit(context, trigger, self) then return end
+            local target = copy_target(self)
+            local reps = target and measure_repetitions(target, context)
+            if reps then reps.card = self end
+            return capped(reps, trigger)
+        end
+        local kind = context_kind(context)
+        if kind then
+            if not (kind == trigger.kind and trigger.check(context, self)) then return nil end
+            local effect = copied_effect(self, context)
+            if effect then note_scoring(self, kind, trigger, nil, effect) end
+            return effect
+        end
+        if action_key(context) then return nil end
+        return calculate_joker_ref(self, context, ...)
+    end
 
     -- Jokers that act (create cards, gain sell value...) act on the random trigger
     -- instead of in their own step
@@ -1143,10 +1234,8 @@ function Card:calculate_joker(context, ...)
 
     -- Retriggers happen on the random trigger instead of their own condition
     if context.repetition then
-        if context.cardarea ~= G.play then return end
-        local hit = (trigger.kind == "play" or trigger.kind == "main") and trigger.check(context, self)
-        if not hit then return end
-        return measure_repetitions(self, context)
+        if not repetition_hit(context, trigger, self) then return end
+        return capped(measure_repetitions(self, context), trigger)
     end
 
     local kind = context_kind(context)
