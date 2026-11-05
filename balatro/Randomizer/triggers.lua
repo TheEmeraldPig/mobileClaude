@@ -1114,10 +1114,21 @@ local function repetition_hit(context, trigger, joker)
     return false
 end
 
--- A retrigger set off by a card trigger retriggers that card once
-local function capped(ret, trigger)
-    if type(ret) == "table" and trigger.kind ~= "main" and (ret.repetitions or 0) > 1 then ret.repetitions = 1 end
-    return ret
+-- Retriggers of cards work as normal
+local function capped(ret) return ret end
+
+-- A Joker itself is retriggered (by another Joker retriggering Jokers) at most once per
+-- step and card, so retriggers can't stack up endlessly
+local function retriggered_already(joker, context)
+    if context.before then joker.rnd_rt_seen = {} end
+    if not context.retrigger_joker then return false end
+    local other = context.other_card
+    local key = tostring(action_key(context) or context_kind(context) or "other") .. ":" .. tostring(other)
+        .. ":" .. tostring(other and other.repetition_trigger or 0)
+    joker.rnd_rt_seen = joker.rnd_rt_seen or {}
+    if joker.rnd_rt_seen[key] then return true end
+    joker.rnd_rt_seen[key] = true
+    return false
 end
 
 local function note_scoring(joker, kind, trigger, blocked, effect)
@@ -1140,6 +1151,7 @@ function Card:calculate_joker(context, ...)
         return calculate_joker_ref(self, context, ...)
     end
 
+    if retriggered_already(self, context) then return nil end
     local category = R.category(self)
 
     -- Blueprint/Brainstorm: their own copying is replaced by giving the copied Joker's
