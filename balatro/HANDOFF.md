@@ -2,7 +2,7 @@
 
 Two Balatro mods (Lua, Steamodded/SMODS) by Josiah live in `/home/user`:
 
-- `Randomizer/`: the main work in recent sessions, version 1.12.1, prefix `rnd`
+- `Randomizer/`: the main work in recent sessions, version 1.12.2, prefix `rnd`
 - `SimplyJokers/`: an older, larger mod, v1.3.1 (zip: `SimplyJokers-v1.3.1.zip`). Recent work there was only `nailed.lua`.
 
 Other files: `tarot_fusions.md`, `spectral_fusions.md`, `enhancement_combos.md` (design lists for SimplyJokers fusions) and `tools/`.
@@ -82,3 +82,4 @@ Each random range (Joker amounts, shop prices, Blind scores, poker hands) has `<
 - 1.11.1: fixed a crash when hovering a Joker (from 1.9.0): `trigger` in the `generate_card_ui` hook had become `true` instead of the trigger.
 - 1.12.0: the user wants every Joker to fire each time its trigger hits. Blueprint and Brainstorm (`COPIERS`, kind `copy`) used to run their normal once-per-hand copying when the trigger hit. Now their own copying steps are blocked, and each hit gives the copied Joker's effect (`copied_effect`: its numbers, its action, its override or its retriggers). Retriggers: `repetition_hit` also lets held cards be retriggered (Mime) on held-card or whole-hand triggers, and `capped` limits retriggers from a card trigger to 1 per card, as the user asked.
 - 1.12.1: the user wants card retriggers to work as normal (the 1.12.0 cap is gone; `capped` now does nothing). Instead, a Joker itself can be retriggered (a `retrigger_joker` pass) at most once per step and card (`retriggered_already`, reset at `before`).
+- 1.12.2: what the user actually wants: any Joker can be retriggered without limit (the 1.12.1 limit is gone). A retrigger Joker can fire any number of times, but never because of what it retriggered (`retriggered_by_itself`: its own `retrigger_joker` pass, or a repetition check on an already-retriggered card).

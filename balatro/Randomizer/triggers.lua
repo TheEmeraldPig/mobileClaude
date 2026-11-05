@@ -1117,17 +1117,12 @@ end
 -- Retriggers of cards work as normal
 local function capped(ret) return ret end
 
--- A Joker itself is retriggered (by another Joker retriggering Jokers) at most once per
--- step and card, so retriggers can't stack up endlessly
-local function retriggered_already(joker, context)
-    if context.before then joker.rnd_rt_seen = {} end
-    if not context.retrigger_joker then return false end
-    local other = context.other_card
-    local key = tostring(action_key(context) or context_kind(context) or "other") .. ":" .. tostring(other)
-        .. ":" .. tostring(other and other.repetition_trigger or 0)
-    joker.rnd_rt_seen = joker.rnd_rt_seen or {}
-    if joker.rnd_rt_seen[key] then return true end
-    joker.rnd_rt_seen[key] = true
+-- Any Joker can be retriggered as many times as it's retriggered. A retrigger Joker is
+-- just never set off by what it retriggered: not by its own Joker retrigger, and not by
+-- a card's retriggered scoring (cards ask for retriggers on their first scoring only)
+local function retriggered_by_itself(joker, context)
+    if context.retrigger_joker and context.retrigger_joker == joker then return true end
+    if context.repetition and context.other_card and context.other_card.repetition_trigger then return true end
     return false
 end
 
@@ -1151,7 +1146,7 @@ function Card:calculate_joker(context, ...)
         return calculate_joker_ref(self, context, ...)
     end
 
-    if retriggered_already(self, context) then return nil end
+    if retriggered_by_itself(self, context) then return nil end
     local category = R.category(self)
 
     -- Blueprint/Brainstorm: their own copying is replaced by giving the copied Joker's
