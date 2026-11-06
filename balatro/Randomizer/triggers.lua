@@ -1139,10 +1139,22 @@ end
 -- its trigger hits in the hand: Hack on "a Heart is scored" with 3 Hearts played
 -- retriggers each card 3 times
 local function retriggers(joker, context, trigger)
-    local base = measure_repetitions(joker, context)
-    -- Jokers whose retrigger depends on something else (Dusk's final hand) retrigger once
-    if not base and context.cardarea == G.play and is_retrigger_joker(joker) then
-        base = { repetitions = 1, message = localize("k_again_ex"), card = joker }
+    local base
+    if is_retrigger_joker(joker) then
+        -- Exactly what the card says: every played card (every held card if it says
+        -- "held in hand"), its "#1# additional times" or once, for each trigger hit
+        local text = desc_text(joker.config.center.key)
+        local area = text:find("held in hand") and G.hand or G.play
+        if context.cardarea ~= area then return nil end
+        local times = 1
+        if text:find("#1#%s*additional") then
+            local ex = joker.ability.extra
+            local n = plain(type(ex) == "table" and (ex.repetitions or ex.retriggers) or ex)
+            if type(n) == "number" then times = n end
+        end
+        base = { repetitions = times, message = localize("k_again_ex"), card = joker }
+    else
+        base = measure_repetitions(joker, context)
     end
     if not base then return nil end
     local hits = hits_in_hand(trigger, context, joker)
@@ -1386,8 +1398,13 @@ local function strip_condition(sentence, grows)
         local out = s:gsub(pat, "", 1)
         if out ~= s then s = trim(out) end
     end
-    -- Retrigger Jokers retrigger whichever card set them off
-    if s:match("^[Rr]etrigger") then s = "Retrigger played cards" end
+    -- Retrigger Jokers retrigger every played card (every held card for Mime), as many
+    -- times as their card says
+    if s:match("^[Rr]etrigger") then
+        local plain_sentence = sentence:gsub("{[^}]*}", "")
+        s = plain_sentence:find("held in hand") and "Retrigger all cards held in hand" or "Retrigger all played cards"
+        if plain_sentence:find("#1#%s*additional") then s = s .. " {C:attention}#1#{} additional times" end
+    end
     s = s:gsub("[%.,]+$", "")
     return capitalise(s)
 end

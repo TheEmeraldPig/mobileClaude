@@ -2,7 +2,7 @@
 
 Two Balatro mods (Lua, Steamodded/SMODS) by Josiah live in `/home/user`:
 
-- `Randomizer/`: the main work in recent sessions, version 1.13.1, prefix `rnd`
+- `Randomizer/`: the main work in recent sessions, version 1.13.2, prefix `rnd`
 - `SimplyJokers/`: an older, larger mod, v1.3.1 (zip: `SimplyJokers-v1.3.1.zip`). Recent work there was only `nailed.lua`.
 
 Other files: `tarot_fusions.md`, `spectral_fusions.md`, `enhancement_combos.md` (design lists for SimplyJokers fusions) and `tools/`.
@@ -85,3 +85,4 @@ Each random range (Joker amounts, shop prices, Blind scores, poker hands) has `<
 - 1.12.2: what the user actually wants: any Joker can be retriggered without limit (the 1.12.1 limit is gone). A retrigger Joker can fire any number of times, but never because of what it retriggered (`retriggered_by_itself`: its own `retrigger_joker` pass, or a repetition check on an already-retriggered card).
 - 1.13.0: retrigger Jokers now retrigger the cards they normally work on (every played card for Hack, every held card for Mime) their normal amount × `hits_in_hand`. That counts matching scoring cards for played-card triggers (retriggers don't count), matching held cards for held-card triggers, and 1 for a whole-hand trigger. Text: action Jokers also lose "for each..."/"per..." (Mail), and a "#n# in #m# chance this card is destroyed" downside clause is dropped from the text (Gros Michel still has the downside).
 - 1.13.1: Photograph text kept "First played face card" (new SUBJECTS patterns). Played-card measuring and `measure_repetitions` now look at the card on its own (`scoring_hand = {card}`), so "first card" checks (Photograph, Hanging Chad) pass for any card. Retrigger Jokers whose own condition is game state (Dusk's final hand) fall back to 1 retrigger (`is_retrigger_joker`: the description starts with "Retrigger"), and are never sorted as `action`.
+- 1.13.2: the user wants every effect to do exactly what the rewritten card says. Retrigger Jokers (description starts with "Retrigger") no longer run their own code: in `retriggers` every played card, or every held card if the text says "held in hand", gets the "#1# additional times" amount (`ability.extra`, or 1 if the text has no such phrase) × trigger hits. Their text reads "Retrigger all played cards [#1# additional times] when ...".
