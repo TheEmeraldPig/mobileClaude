@@ -1103,19 +1103,38 @@ local function describe(numbers)
     table.sort(parts)
     return table.concat(parts, ", ")
 end
--- Whether a retrigger Joker's trigger hits for this card: played cards on a played-card
--- or whole-hand trigger, held cards (Mime) on a held-card or whole-hand trigger
-local function repetition_hit(context, trigger, joker)
-    if context.cardarea == G.play then
-        return (trigger.kind == "play" or trigger.kind == "main") and trigger.check(context, joker)
-    elseif context.cardarea == G.hand then
-        return (trigger.kind == "hand" or trigger.kind == "main") and trigger.check(context, joker)
+-- How many times a trigger hits in this hand, counting each card once (retriggers of a
+-- card don't count): played-card triggers count the scoring cards that match, held-card
+-- triggers the held cards that match, whole-hand triggers 1 if they hit
+local function hits_in_hand(trigger, context, joker)
+    local function count(cards, extra)
+        local n = 0
+        for _, c in ipairs(cards or {}) do
+            local ctx = { other_card = c, scoring_hand = context.scoring_hand, full_hand = context.full_hand }
+            for k, v in pairs(extra or {}) do ctx[k] = v end
+            local ok, hit = pcall(trigger.check, ctx, joker)
+            if ok and hit then n = n + 1 end
+        end
+        return n
     end
-    return false
+    if trigger.kind == "play" then return count(context.scoring_hand) end
+    if trigger.kind == "hand" then return count(G.hand and G.hand.cards) end
+    local ok, hit = pcall(trigger.check, context, joker)
+    return (ok and hit) and 1 or 0
 end
 
--- Retriggers of cards work as normal
-local function capped(ret) return ret end
+-- A retrigger Joker (Hack, Mime...) retriggers the cards it normally works on (every
+-- played card for Hack, every held card for Mime) its normal amount, once for each time
+-- its trigger hits in the hand: Hack on "a Heart is scored" with 3 Hearts played
+-- retriggers each card 3 times
+local function retriggers(joker, context, trigger)
+    local base = measure_repetitions(joker, context)
+    if not base then return nil end
+    local hits = hits_in_hand(trigger, context, joker)
+    if hits <= 0 then return nil end
+    base.repetitions = (base.repetitions or 1) * hits
+    return base
+end
 
 -- Any Joker can be retriggered as many times as it's retriggered. A retrigger Joker is
 -- just never set off by what it retriggered: not by its own Joker retrigger, and not by
@@ -1153,11 +1172,10 @@ function Card:calculate_joker(context, ...)
     -- effect each time their trigger hits
     if category == "copy" then
         if context.repetition then
-            if not repetition_hit(context, trigger, self) then return end
             local target = copy_target(self)
-            local reps = target and measure_repetitions(target, context)
+            local reps = target and retriggers(target, context, trigger)
             if reps then reps.card = self end
-            return capped(reps, trigger)
+            return reps
         end
         local kind = context_kind(context)
         if kind then
@@ -1241,8 +1259,7 @@ function Card:calculate_joker(context, ...)
 
     -- Retriggers happen on the random trigger instead of their own condition
     if context.repetition then
-        if not repetition_hit(context, trigger, self) then return end
-        return capped(measure_repetitions(self, context), trigger)
+        return retriggers(self, context, trigger)
     end
 
     local kind = context_kind(context)
@@ -1347,6 +1364,8 @@ local function strip_condition(sentence, grows)
         local out = s:gsub(pat, "", 1)
         if out ~= s then s = trim(out) end
     end
+    -- A chance for the Joker to destroy itself is its own downside, not when it scores
+    s = s:gsub("%s*{[^}]*}#%d+# in #%d+#{}%s*chance this.*$", "")
     for _, pat in ipairs(grows and GROW_TRAILING or {}) do
         local out = s:gsub(pat, "", 1)
         if out ~= s then s = trim(out) end
@@ -1439,7 +1458,8 @@ local function rewrite_lines(lines, trigger, joker, conversions)
     -- Only Jokers that score get a random type and behaviour
     local own = R.category(joker) ~= "score"
     local to = not own and on("types") and joker.ability.rnd_type
-    local effect = strip_condition(joined, grows)
+    -- Jokers that act also lose "for each discarded Jack...", like growing ones
+    local effect = strip_condition(joined, grows or R.category(joker) == "action")
     if effect == "" then effect = "Activates" end
     if to then effect = retype_text(effect, to, conversions) end
     local out = wrap(effect .. " when " .. trigger.text, 30)
