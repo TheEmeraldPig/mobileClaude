@@ -1088,9 +1088,24 @@ function R.note_passive(joker)
 end
 
 -- Every Joker gets a trigger
+-- Legendary Jokers get a second trigger, always one that can hit many times a round
+local ONCE_A_ROUND = { first_hand = true, final_hand = true }
+function R.is_legendary(joker)
+    local r = joker.config.center.rarity
+    return r == 4 or r == "Legendary"
+end
+function R.roll_second(joker)
+    local options = {}
+    for _, t in ipairs(R.TRIGGERS) do
+        if not ONCE_A_ROUND[t.key] and t.key ~= joker.ability.rnd_trigger then options[#options + 1] = t end
+    end
+    joker.ability.rnd_trigger2 = pseudorandom_element(options, pseudoseed("rnd_trigger2")).key
+end
+
 function R.roll_trigger(joker)
     local trigger = pseudorandom_element(R.TRIGGERS, pseudoseed("rnd_trigger"))
     joker.ability.rnd_trigger = trigger.key
+    if R.is_legendary(joker) then R.roll_second(joker) end
     R.category(joker)
     -- Type and behaviour are always rolled; the settings decide whether they apply
     joker.ability.rnd_type = pseudorandom_element(R.TYPES, pseudoseed("rnd_type"))
@@ -1114,6 +1129,36 @@ local function describe(numbers)
     table.sort(parts)
     return table.concat(parts, ", ")
 end
+-- A Joker's triggers: one, or two for Legendary Jokers
+local function triggers_of(joker)
+    local list = { BY_KEY[joker.ability.rnd_trigger] }
+    local second = joker.ability.rnd_trigger2 and BY_KEY[joker.ability.rnd_trigger2]
+    if second then list[#list + 1] = second end
+    return list
+end
+
+-- How many of the Joker's triggers hit in this scoring step (each one that hits works)
+local function hit_count(joker, kind, context)
+    local n = 0
+    if not kind then return 0 end
+    for _, t in ipairs(triggers_of(joker)) do
+        if t.kind == kind and t.check(context, joker) then n = n + 1 end
+    end
+    return n
+end
+
+-- Run an effect once per hit and put the results together
+local function repeated(n, make)
+    local list = {}
+    for _ = 1, n do
+        local e = make()
+        if e then list[#list + 1] = e end
+    end
+    if #list == 0 then return nil end
+    if #list == 1 then return list[1] end
+    return SMODS.merge_effects(list)
+end
+
 -- How many times a trigger hits in this hand, counting each card once (retriggers of a
 -- card don't count): played-card triggers count the scoring cards that match, held-card
 -- triggers the held cards that match, whole-hand triggers 1 if they hit
@@ -1138,7 +1183,7 @@ end
 -- played card for Hack, every held card for Mime) its normal amount, once for each time
 -- its trigger hits in the hand: Hack on "a Heart is scored" with 3 Hearts played
 -- retriggers each card 3 times
-local function retriggers(joker, context, trigger)
+local function retriggers(joker, context, triggers)
     local base
     if is_retrigger_joker(joker) then
         -- Exactly what the card says: every played card (every held card if it says
@@ -1157,7 +1202,8 @@ local function retriggers(joker, context, trigger)
         base = measure_repetitions(joker, context)
     end
     if not base then return nil end
-    local hits = hits_in_hand(trigger, context, joker)
+    local hits = 0
+    for _, t in ipairs(triggers) do hits = hits + hits_in_hand(t, context, joker) end
     if hits <= 0 then return nil end
     base.repetitions = (base.repetitions or 1) * hits
     return base
@@ -1200,14 +1246,15 @@ function Card:calculate_joker(context, ...)
     if category == "copy" then
         if context.repetition then
             local target = copy_target(self)
-            local reps = target and retriggers(target, context, trigger)
+            local reps = target and retriggers(target, context, triggers_of(self))
             if reps then reps.card = self end
             return reps
         end
         local kind = context_kind(context)
         if kind then
-            if not (kind == trigger.kind and trigger.check(context, self)) then return nil end
-            local effect = copied_effect(self, context)
+            local n = hit_count(self, kind, context)
+            if n == 0 then return nil end
+            local effect = repeated(n, function() return copied_effect(self, context) end)
             if effect then note_scoring(self, kind, trigger, nil, effect) end
             return effect
         end
@@ -1221,7 +1268,7 @@ function Card:calculate_joker(context, ...)
         local a = self.ability
         local step = action_key(context)
         local kind = context_kind(context)
-        local hit = a.rnd_action and kind and kind == trigger.kind and trigger.check(context, self)
+        local hit = a.rnd_action and hit_count(self, kind, context) or 0
         local ret, post
         if step and step == a.rnd_action then
             -- Its own step: blocked (but remembered, to copy its details on the trigger)
@@ -1237,15 +1284,17 @@ function Card:calculate_joker(context, ...)
         else
             ret, post = calculate_joker_ref(self, context, ...)
         end
-        if hit then
+        if hit > 0 then
             local own_effect = OVERRIDES[self.config.center.key]
-            local extra
-            if own_effect then
-                local ok, res = pcall(own_effect, self, context)
-                if ok then extra = res else report(res) end
-            else
-                extra = replay(self, a.rnd_action, context)
-            end
+            local extra = repeated(hit, function()
+                if own_effect then
+                    local ok, res = pcall(own_effect, self, context)
+                    if ok then return res end
+                    report(res)
+                    return nil
+                end
+                return replay(self, a.rnd_action, context)
+            end)
             if extra then
                 if R.log and scoring_logged < 60 then
                     scoring_logged = scoring_logged + 1
@@ -1261,8 +1310,8 @@ function Card:calculate_joker(context, ...)
     -- Growing Jokers grow on the random trigger instead of their own condition
     if category == "grow" then
         local kind = context_kind(context)
-        local hit = kind and kind == trigger.kind and trigger.check(context, self)
-        local grew = hit and apply_gain(self)
+        local grew = false
+        for _ = 1, hit_count(self, kind, context) do grew = apply_gain(self) or grew end
         local snap = growth_snapshot(self.ability)
         local ret, post = calculate_joker_ref(self, context, ...)
         undo_growth(self, snap)
@@ -1286,7 +1335,7 @@ function Card:calculate_joker(context, ...)
 
     -- Retriggers happen on the random trigger instead of their own condition
     if context.repetition then
-        return retriggers(self, context, trigger)
+        return retriggers(self, context, triggers_of(self))
     end
 
     local kind = context_kind(context)
@@ -1300,7 +1349,7 @@ function Card:calculate_joker(context, ...)
     local own = calculate_joker_ref(self, context, ...)
     local blocked, rest
     if type(own) == "table" then blocked, rest = take_scoring(own) end
-    local effect = (kind == trigger.kind and trigger.check(context, self)) and fire(self, context) or nil
+    local effect = repeated(hit_count(self, kind, context), function() return fire(self, context) end)
     note_scoring(self, kind, trigger, blocked, effect)
     if rest and effect then return SMODS.merge_effects({ rest, effect }) end
     return rest or effect
@@ -1495,7 +1544,8 @@ local function rewrite_lines(lines, trigger, joker, conversions)
     local effect = strip_condition(joined, grows or R.category(joker) == "action")
     if effect == "" then effect = "Activates" end
     if to then effect = retype_text(effect, to, conversions) end
-    local out = wrap(effect .. " when " .. trigger.text, 30)
+    local second = joker.ability.rnd_trigger2 and BY_KEY[joker.ability.rnd_trigger2]
+    local out = wrap(effect .. " when " .. trigger.text .. (second and (", and also when " .. second.text) or ""), 30)
     local mode = not own and on("behaviours") and BEHAVIOUR_LINES[joker.ability.rnd_behaviour]
     for _, line in ipairs(mode or {}) do out[#out + 1] = line end
     for _, note in ipairs(notes) do
@@ -1514,7 +1564,7 @@ local function rewritten_key(key, trigger, joker)
     local own = R.category(joker) ~= "score"
     local to = not own and on("types") and joker.ability.rnd_type or "same"
     local mode = not own and on("behaviours") and joker.ability.rnd_behaviour or "normal"
-    local new_key = "rnd_" .. key .. "__" .. trigger.key .. "__" .. to .. "__" .. mode
+    local new_key = "rnd_" .. key .. "__" .. trigger.key .. "__" .. tostring(joker.ability.rnd_trigger2 or "") .. "__" .. to .. "__" .. mode
     if cache[new_key] and descs[new_key] then return new_key, cache[new_key] end
 
     local text

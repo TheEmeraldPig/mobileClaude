@@ -123,6 +123,8 @@ function Card:update(dt)
     if self.ability.rnd_trigger and not R.trigger_of(self) then
         self.ability.rnd_trigger, self.ability.rnd_trigger_tried = nil, nil
     end
+    -- Legendary Jokers from before they had two triggers get their second one
+    if self.ability.rnd_trigger and not self.ability.rnd_trigger2 and R.is_legendary(self) then R.roll_second(self) end
     if not self.ability.rnd_trigger and self.ability.rnd_trigger_tried ~= round then
         self.ability.rnd_trigger_tried = round
         R.roll_trigger(self)

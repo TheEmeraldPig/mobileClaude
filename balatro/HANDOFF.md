@@ -2,7 +2,7 @@
 
 Two Balatro mods (Lua, Steamodded/SMODS) by Josiah live in `/home/user`:
 
-- `Randomizer/`: the main work in recent sessions, version 1.13.2, prefix `rnd`
+- `Randomizer/`: the main work in recent sessions, version 1.14.0, prefix `rnd`
 - `SimplyJokers/`: an older, larger mod, v1.3.1 (zip: `SimplyJokers-v1.3.1.zip`). Recent work there was only `nailed.lua`.
 
 Other files: `tarot_fusions.md`, `spectral_fusions.md`, `enhancement_combos.md` (design lists for SimplyJokers fusions) and `tools/`.
@@ -86,3 +86,4 @@ Each random range (Joker amounts, shop prices, Blind scores, poker hands) has `<
 - 1.13.0: retrigger Jokers now retrigger the cards they normally work on (every played card for Hack, every held card for Mime) their normal amount × `hits_in_hand`. That counts matching scoring cards for played-card triggers (retriggers don't count), matching held cards for held-card triggers, and 1 for a whole-hand trigger. Text: action Jokers also lose "for each..."/"per..." (Mail), and a "#n# in #m# chance this card is destroyed" downside clause is dropped from the text (Gros Michel still has the downside).
 - 1.13.1: Photograph text kept "First played face card" (new SUBJECTS patterns). Played-card measuring and `measure_repetitions` now look at the card on its own (`scoring_hand = {card}`), so "first card" checks (Photograph, Hanging Chad) pass for any card. Retrigger Jokers whose own condition is game state (Dusk's final hand) fall back to 1 retrigger (`is_retrigger_joker`: the description starts with "Retrigger"), and are never sorted as `action`.
 - 1.13.2: the user wants every effect to do exactly what the rewritten card says. Retrigger Jokers (description starts with "Retrigger") no longer run their own code: in `retriggers` every played card, or every held card if the text says "held in hand", gets the "#1# additional times" amount (`ability.extra`, or 1 if the text has no such phrase) × trigger hits. Their text reads "Retrigger all played cards [#1# additional times] when ...".
+- 1.14.0: Legendary Jokers (rarity 4) get `ability.rnd_trigger2` (`R.roll_second`, never `first_hand`/`final_hand`, never the same as the first; Legendaries in an existing run get one in `Card:update`). `triggers_of`/`hit_count` count every trigger that hits, and each hit runs the effect once (`repeated`, chained with `SMODS.merge_effects`). Retriggers add both triggers' hits. Text: "... when A, and also when B".
