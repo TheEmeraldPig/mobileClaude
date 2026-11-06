@@ -336,7 +336,7 @@ local function scoring_contexts(context)
     local card = context.other_card or spare_card()
     local list = { make({ joker_main = true, cardarea = G.jokers }) }
     if card then
-        list[#list + 1] = make({ individual = true, cardarea = G.play, other_card = card })
+        list[#list + 1] = make({ individual = true, cardarea = G.play, other_card = card, scoring_hand = { card } })
         list[#list + 1] = make({ individual = true, cardarea = G.hand, other_card = card })
     end
     return list
@@ -579,9 +579,14 @@ local function measure(joker, context)
 end
 
 -- Retriggers (Hack, Dusk, Sock and Buskin...): how many it would give this card
+-- The card is looked at on its own, so "first played card" checks (Hanging Chad,
+-- Photograph) pass for any card
 local function measure_repetitions(joker, context)
+    local ctx = {}
+    for k, v in pairs(context) do ctx[k] = v end
+    if ctx.other_card then ctx.scoring_hand, ctx.full_hand = { ctx.other_card }, { ctx.other_card } end
     for _, r in ipairs(MEASURE_IDS) do
-        local ret = run_quietly(joker, context, r)
+        local ret = run_quietly(joker, ctx, r)
         if type(ret) == "table" and (ret.repetitions or 0) > 0 then return ret end
     end
 end
@@ -685,6 +690,10 @@ base_effect = function(joker)
         elseif text:find("#1#%s*Mult") then put("mult", ex) end
     end
     return next(out) and out or nil
+end
+
+local function is_retrigger_joker(joker)
+    return desc_text(joker.config.center.key):find("^%s*[Rr]etrigger") ~= nil
 end
 
 local function grows_text(text)
@@ -1038,6 +1047,8 @@ local scores
 function R.category(joker)
     local a = joker.ability
     if COPIERS[joker.config.center.key] then a.rnd_kind = "copy" end
+    -- Retrigger Jokers whose own condition failed when they were sorted (Dusk) still retrigger
+    if a.rnd_kind == "action" and is_retrigger_joker(joker) then a.rnd_kind, a.rnd_action = "score", nil end
     if not a.rnd_kind then
         local key = joker.config.center.key
         if R.grows(joker) then a.rnd_kind = "grow"
@@ -1059,7 +1070,7 @@ R.action_key, R.replay, R.acted, R.numbers_of, R.flags_of = action_key, replay, 
 
 -- Jokers that give Chips, Mult, money or retriggers while scoring
 scores = function(joker)
-    if measure(joker, {}) or base_effect(joker) then return true end
+    if measure(joker, {}) or base_effect(joker) or is_retrigger_joker(joker) then return true end
 
     local card = spare_card()
     if card then
@@ -1129,6 +1140,10 @@ end
 -- retriggers each card 3 times
 local function retriggers(joker, context, trigger)
     local base = measure_repetitions(joker, context)
+    -- Jokers whose retrigger depends on something else (Dusk's final hand) retrigger once
+    if not base and context.cardarea == G.play and is_retrigger_joker(joker) then
+        base = { repetitions = 1, message = localize("k_again_ex"), card = joker }
+    end
     if not base then return nil end
     local hits = hits_in_hand(trigger, context, joker)
     if hits <= 0 then return nil end
@@ -1309,6 +1324,7 @@ local LEADING = {
 -- "Played cards with X suit give ...", "Each King held in hand gives ..." -> "Gives ..."
 local SUBJECTS = {
     "^[Pp]layed cards with .- give ", "^[Pp]layed .- cards give ", "^[Pp]layed .- give ",
+    "^[Ff]irst played .- gives? ", "^[Ff]irst .- gives? ", "^[Aa]ll played .- give ",
     "^[Ee]ach played .- gives? ", "^[Ee]very played .- gives? ", "^[Ee]ach .- held in hand gives? ",
     "^[Ee]ach .- in hand gives? ", "^[Ee]ach .- gives? ", "^[Ee]very .- gives? ",
     "^[Cc]ards held in hand give ", "^[Ss]cored .- give ",
