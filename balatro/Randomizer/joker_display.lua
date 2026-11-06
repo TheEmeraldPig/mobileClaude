@@ -87,7 +87,7 @@ end
 -- Point every randomized Joker's key at the Randomizer display while fn runs
 local depth = 0
 local function with_definitions(fn, ...)
-    if depth > 0 or not (JokerDisplay and JokerDisplay.Definitions) then return fn(...) end
+    if depth > 0 or not (JokerDisplay and JokerDisplay.Definitions) or not R.triggers_on() then return fn(...) end
     local defs = JokerDisplay.Definitions
     local saved = {}
     for _, area in ipairs({ G.jokers, G.shop_jokers, G.pack_cards }) do

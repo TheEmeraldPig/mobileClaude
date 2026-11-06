@@ -350,11 +350,8 @@ end
 ----------------------------------------------------------------------
 
 -- "Only randomize triggers" leaves a Joker's numbers, type and scaling alone
-local JOKER_OPTIONS = { numbers = true, types = true, behaviours = true }
 local function on(option)
-    local config = MOD.config or {}
-    if config.trigger_only and JOKER_OPTIONS[option] then return false end
-    return config[option]
+    return (MOD.config or {})[option] ~= false
 end
 
 local SCORE_KEYS = {
@@ -642,8 +639,9 @@ local logged = 0
 -- growth is undone, and the amount it grew by is remembered for the trigger to use.
 ----------------------------------------------------------------------
 
-local function desc_text(key)
-    local d = G.localization and G.localization.descriptions.Joker[key]
+local function desc_text(key, set)
+    local descs = G.localization and G.localization.descriptions[set or "Joker"]
+    local d = descs and descs[key]
     if not (d and d.text) then return "" end
     local parts = {}
     local function walk(t)
@@ -694,6 +692,13 @@ end
 
 local function is_retrigger_joker(joker)
     return desc_text(joker.config.center.key):find("^%s*[Rr]etrigger") ~= nil
+end
+
+R.desc_text = desc_text
+
+-- Random triggers can be turned off in the Config tab (Jokers then work as normal)
+function R.triggers_on()
+    return (MOD.config or {}).triggers ~= false
 end
 
 local function grows_text(text)
@@ -798,7 +803,7 @@ end
 
 local dollar_bonus_ref = Card.calculate_dollar_bonus
 function Card:calculate_dollar_bonus(...)
-    if measuring == 0 and self.ability and self.ability.rnd_kind == "dollar" and R.trigger_of(self) then return nil end
+    if measuring == 0 and self.ability and self.ability.rnd_kind == "dollar" and R.trigger_of(self) and R.triggers_on() then return nil end
     return dollar_bonus_ref(self, ...)
 end
 
@@ -1234,7 +1239,7 @@ function Card:calculate_joker(context, ...)
     local trigger = self.ability and self.ability.set == "Joker" and self.ability.rnd_trigger and BY_KEY[self.ability.rnd_trigger]
     -- Not randomized, being measured, or copied by Blueprint/Brainstorm (the copier's own
     -- trigger decides when it copies)
-    if not trigger or measuring > 0 or context.blueprint then
+    if not trigger or measuring > 0 or context.blueprint or not R.triggers_on() then
         return calculate_joker_ref(self, context, ...)
     end
 
@@ -1601,10 +1606,16 @@ end
 
 local generate_card_ui_ref = generate_card_ui
 function generate_card_ui(_c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end, card, ...)
-    local ret = generate_card_ui_ref(_c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end, card, ...)
+    -- Rolled Vouchers and consumables show their rolled numbers
+    local ret
+    if card and card.ability and card.ability.rnd_card_rolled and R.with_rolled_center and _c == card.config.center then
+        ret = R.with_rolled_center(card, generate_card_ui_ref, _c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end, card, ...)
+    else
+        ret = generate_card_ui_ref(_c, full_UI_table, specific_vars, card_type, badges, hide_desc, main_start, main_end, card, ...)
+    end
     local trigger = card and not full_UI_table and not hide_desc and _c and _c.set == "Joker" and _c == card.config.center
         and card.ability and card.ability.rnd_trigger and BY_KEY[card.ability.rnd_trigger]
-    if not (trigger and ret and ret.main and R.shows_trigger(card)) then return ret end
+    if not (trigger and ret and ret.main and R.triggers_on() and R.shows_trigger(card)) then return ret end
 
     -- The same key and #vars# the Joker's own description uses
     local key, vars = _c.key, specific_vars

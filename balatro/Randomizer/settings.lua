@@ -1,20 +1,22 @@
---- Config tab: on/off toggles, and for each random range a Min and a Max, each with a
---- slider and a box you can type a number into. The slider and the box stay in sync.
+--- Config menu, in two tabs: "Jokers" and "Run". Each thing that's randomized has an
+--- on/off toggle; each random range has a Min and a Max, each with a slider (0x-10x) and a
+--- box you can type any number into (negative too). The slider and the box stay in sync.
 
 local MOD = Randomizer.mod
 
-local TOGGLES = {
-    { "trigger_only", "Only randomize triggers" },
-    { "behaviours", "Random scaling" },
+-- key, label, default min, default max (no min/max: just a toggle)
+local JOKER_ROWS = {
+    { "triggers", "Random triggers" },
     { "types", "Random type (Chips, Mult, XMult, XChips)" },
+    { "behaviours", "Random scaling (grows, resets, stacks, decays)" },
+    { "numbers", "Joker values", 0.5, 2 },
 }
-
--- key, label, default min, default max
-local RANGES = {
-    { "numbers", "Joker amounts", 0.5, 2 },
+local RUN_ROWS = {
     { "prices", "Shop prices", 0.5, 1.5 },
+    { "vouchers", "Voucher values", 0.5, 1.5 },
+    { "consumables", "Tarot & Spectral values", 0.5, 1.5 },
     { "blinds", "Blind scores", 0.75, 1.5 },
-    { "hands", "Poker hands", 0.5, 1.5 },
+    { "hands", "Poker hand values", 0.5, 1.5 },
 }
 -- The slider covers 0x to 10x; the box takes any number
 local SLIDER_MIN, SLIDER_MAX = 0, 10
@@ -108,36 +110,52 @@ local function text_node(text, scale, colour)
     return { n = G.UIT.T, config = { text = text, scale = scale, colour = colour or G.C.UI.TEXT_LIGHT } }
 end
 
+local function heading(text)
+    return { n = G.UIT.R, config = { align = "cm", padding = 0.08 }, nodes = { text_node(text, 0.42) } }
+end
+
+local function note(text)
+    return { n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = { text_node(text, 0.27, G.C.UI.TEXT_INACTIVE) } }
+end
+
+local function row(entry)
+    local key = entry[1]
+    if MOD.config[key] == nil then MOD.config[key] = true end
+    local toggle = create_toggle({ label = entry[2], ref_table = MOD.config, ref_value = key, label_scale = 0.3 })
+    if not entry[3] then
+        return { n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = { toggle } }
+    end
+    if MOD.config[key .. "_min"] == nil then MOD.config[key .. "_min"] = entry[3] end
+    if MOD.config[key .. "_max"] == nil then MOD.config[key .. "_max"] = entry[4] end
+    return { n = G.UIT.R, config = { align = "cm", padding = 0.03 }, nodes = {
+        { n = G.UIT.C, config = { align = "cm", minw = 3.6 }, nodes = { toggle } },
+        number_setting(key .. "_min", "Min"),
+        number_setting(key .. "_max", "Max"),
+    } }
+end
+
+local function page(title, rows, notes)
+    local nodes = { heading(title) }
+    for _, entry in ipairs(rows) do nodes[#nodes + 1] = row(entry) end
+    for _, text in ipairs(notes) do nodes[#nodes + 1] = note(text) end
+    return { n = G.UIT.ROOT, config = { align = "cm", padding = 0.15, colour = G.C.BLACK, r = 0.1, minw = 9 }, nodes = nodes }
+end
+
+local NOTES = {
+    "Min and Max multiply the normal value (1 = normal; type any number, negative too).",
+    "Values roll when a card first appears; poker hands roll at the start of a run.",
+}
+
 MOD.config_tab = function()
-    local rows = {
-        { n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
-            text_node("Randomize (Joker triggers are always random)", 0.4),
-        } },
-    }
-    local toggles = {}
-    for _, option in ipairs(TOGGLES) do
-        toggles[#toggles + 1] = { n = G.UIT.C, config = { align = "cm" }, nodes = {
-            create_toggle({ label = option[2], ref_table = MOD.config, ref_value = option[1], label_scale = 0.3 }),
-        } }
-    end
-    rows[#rows + 1] = { n = G.UIT.R, config = { align = "cm" }, nodes = toggles }
-    for _, range in ipairs(RANGES) do
-        local key = range[1]
-        if MOD.config[key .. "_min"] == nil then MOD.config[key .. "_min"] = range[3] end
-        if MOD.config[key .. "_max"] == nil then MOD.config[key .. "_max"] = range[4] end
-        rows[#rows + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.03 }, nodes = {
-            { n = G.UIT.C, config = { align = "cm", minw = 3.2 }, nodes = {
-                create_toggle({ label = range[2], ref_table = MOD.config, ref_value = key, label_scale = 0.3 }),
-            } },
-            number_setting(key .. "_min", "Min"),
-            number_setting(key .. "_max", "Max"),
-        } }
-    end
-    rows[#rows + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
-        text_node("Min and Max multiply the normal value (1 = normal; type any number). Rolls happen as things appear;", 0.27, G.C.UI.TEXT_INACTIVE),
+    return page("Jokers", JOKER_ROWS, {
+        "Random triggers off: every Joker uses its own trigger again.",
+        NOTES[1],
+    })
+end
+
+MOD.extra_tabs = function()
+    return { {
+        label = "Run",
+        tab_definition_function = function() return page("Run", RUN_ROWS, NOTES) end,
     } }
-    rows[#rows + 1] = { n = G.UIT.R, config = { align = "cm" }, nodes = {
-        text_node("poker hands roll at the start of a run", 0.27, G.C.UI.TEXT_INACTIVE),
-    } }
-    return { n = G.UIT.ROOT, config = { align = "cm", padding = 0.15, colour = G.C.BLACK, r = 0.1, minw = 8 }, nodes = rows }
 end

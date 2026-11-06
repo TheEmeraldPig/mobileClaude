@@ -4,13 +4,9 @@
 local R = Randomizer
 local MOD = R.mod
 
--- "Only randomize triggers" leaves a Joker's numbers, type and scaling alone; shop prices,
--- Blind scores and poker hands still follow their own settings
-local JOKER_OPTIONS = { numbers = true, types = true, behaviours = true }
+-- Each option is on unless it was turned off in the Config tab
 local function on(option)
-    local config = MOD.config or {}
-    if config.trigger_only and JOKER_OPTIONS[option] then return false end
-    return config[option]
+    return (MOD.config or {})[option] ~= false
 end
 
 -- Talisman (Amulet) turns big numbers into objects; these work on both kinds
@@ -79,20 +75,108 @@ local function scale(value, key, factor)
     return math.floor(value * factor + 0.5)
 end
 
+-- A single number as a card's extra: what its description says it is. "+#1# Mult",
+-- "X#1# Mult", "$#1#" are amounts; "#1# in #2#" odds are left alone
+local function bare_extra_kind(card)
+    local text = R.desc_text and R.desc_text(card.config.center.key, card.config.center.set) or ""
+    if text:find("#1#%s*in%s*#") then return nil end
+    if text:find("X%s*#1#") then return "x_mult" end
+    if text:find("[%+%-]%s*#1#") or text:find("%$%s*#1#") or text:find("#1#%s*Mult") or text:find("#1#%s*Chips") then return "extra" end
+end
+
 function R.roll_numbers(joker)
     local ability = joker.ability
     local factor = between("rnd_numbers", range("numbers", 0.5, 2))
     ability.rnd_factor = factor
     for _, key in ipairs({ "mult", "t_mult", "t_chips" }) do
-        if type(ability[key]) == "number" then ability[key] = scale(ability[key], key, factor) end
+        if type(plain(ability[key])) == "number" then ability[key] = scale(ability[key], key, factor) end
     end
-    if type(ability.x_mult) == "number" and ability.x_mult > 1 then
+    if type(plain(ability.x_mult)) == "number" and plain(ability.x_mult) > 1 then
         ability.x_mult = scale(ability.x_mult, "x_mult", factor)
     end
     if type(ability.extra) == "table" then
         for k, v in pairs(ability.extra) do
-            if type(v) == "number" and is_effect_key(k) then ability.extra[k] = scale(v, k, factor) end
+            if type(plain(v)) == "number" and is_effect_key(k) then ability.extra[k] = scale(v, k, factor) end
         end
+    elseif type(plain(ability.extra)) == "number" then
+        -- Fibonacci's +8 Mult, Acrobat's X3, Golden Joker's $4...
+        local kind = bare_extra_kind(joker)
+        if kind then ability.extra = scale(ability.extra, kind, factor) end
+    end
+end
+
+----------------------------------------------------------------------
+-- Vouchers and consumables (Tarot, Spectral): their numbers are rolled once
+----------------------------------------------------------------------
+
+-- Whole numbers stay whole (slots, hands), others get two decimals
+local function scale_plain(v, factor)
+    v = plain(v)
+    if type(v) ~= "number" or v == 0 then return v end
+    if v == math.floor(v) then return math.floor(v * factor + 0.5) end
+    return math.floor(v * factor * 100 + 0.5) / 100
+end
+
+local ODDS_KEYS = { odds = true, chance = true }
+local function roll_card_numbers(card, option, seed)
+    local ability = card.ability
+    local factor = between(seed, range(option, 0.5, 1.5))
+    ability.rnd_factor = factor
+    if type(ability.extra) == "table" then
+        for k, v in pairs(ability.extra) do
+            if not ODDS_KEYS[tostring(k):lower()] then ability.extra[k] = scale_plain(v, factor) end
+        end
+    elseif type(plain(ability.extra)) == "number" then
+        local text = R.desc_text and R.desc_text(card.config.center.key, card.config.center.set) or ""
+        if not text:find("#1#%s*in%s*#") then ability.extra = scale_plain(ability.extra, factor) end
+    end
+    -- Consumables also keep a copy of their numbers here
+    if type(ability.consumeable) == "table" and ability.consumeable.extra ~= nil then ability.consumeable.extra = ability.extra end
+end
+
+local CONSUMABLE_SETS = { Tarot = true, Spectral = true }
+
+-- While a rolled card is shown or used, its center's numbers are the rolled ones, so the
+-- text and the base game's code (which read the center) match what was rolled
+function R.with_rolled_center(card, fn, ...)
+    local center = card and card.config and card.config.center
+    local a = card and card.ability
+    if not (center and center.config and a and a.rnd_card_rolled and a.extra ~= nil) then return fn(...) end
+    local saved = center.config.extra
+    center.config.extra = a.extra
+    local results = { n = 0 }
+    local function keep(...) results = { n = select("#", ...), ... } end
+    keep(pcall(fn, ...))
+    center.config.extra = saved
+    if not results[1] then error(results[2], 0) end
+    return unpack(results, 2, results.n)
+end
+
+local use_consumeable_ref = Card.use_consumeable
+function Card:use_consumeable(...)
+    if self.ability and self.ability.rnd_card_rolled then
+        return R.with_rolled_center(self, use_consumeable_ref, self, ...)
+    end
+    return use_consumeable_ref(self, ...)
+end
+
+local apply_to_run_ref = Card.apply_to_run
+function Card:apply_to_run(center, ...)
+    if self and self.ability and self.ability.rnd_card_rolled then
+        return R.with_rolled_center(self, apply_to_run_ref, self, center, ...)
+    end
+    return apply_to_run_ref(self, center, ...)
+end
+
+local function roll_other_cards(card)
+    local a = card.ability
+    if a.rnd_card_rolled or not G.GAME or G.STAGE ~= G.STAGES.RUN then return end
+    if a.set == "Voucher" then
+        a.rnd_card_rolled = true
+        if on("vouchers") then roll_card_numbers(card, "vouchers", "rnd_voucher") end
+    elseif CONSUMABLE_SETS[a.set] then
+        a.rnd_card_rolled = true
+        if on("consumables") then roll_card_numbers(card, "consumables", "rnd_consumable") end
     end
 end
 
@@ -108,6 +192,10 @@ function Card:update(dt)
         R.log("Run detected, Jokers will roll triggers as they appear")
     end
     update_ref(self, dt)
+    if self.ability and self.ability.set ~= "Joker" then
+        roll_other_cards(self)
+        return
+    end
     if not (self.ability and self.ability.set == "Joker" and G.GAME and G.STAGE == G.STAGES.RUN and ROLL_AREAS(self)) then
         return
     end
