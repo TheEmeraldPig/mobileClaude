@@ -8,8 +8,8 @@ return {
     -- Each value is multiplied by a random number between min and max when it first appears
     numbers = true, numbers_min = 0.5, numbers_max = 2,
     prices = true, prices_min = 0.5, prices_max = 1.5,
-    vouchers = true, vouchers_min = 0.5, vouchers_max = 1.5,
-    consumables = true, consumables_min = 0.5, consumables_max = 1.5,
+    vouchers = true, vouchers_min = 0.5, vouchers_max = 7,
+    consumables = true, consumables_min = 0.5, consumables_max = 4,
     blinds = true, blinds_min = 0.75, blinds_max = 1.5,
     hands = true, hands_min = 0.5, hands_max = 1.5,
 }

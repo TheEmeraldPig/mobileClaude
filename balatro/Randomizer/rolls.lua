@@ -117,37 +117,104 @@ local function scale_plain(v, factor)
     return math.floor(v * factor * 100 + 0.5) / 100
 end
 
-local ODDS_KEYS = { odds = true, chance = true }
-local function roll_card_numbers(card, option, seed)
-    local ability = card.ability
-    local factor = between(seed, range(option, 0.5, 1.5))
-    ability.rnd_factor = factor
-    if type(ability.extra) == "table" then
-        for k, v in pairs(ability.extra) do
-            if not ODDS_KEYS[tostring(k):lower()] then ability.extra[k] = scale_plain(v, factor) end
-        end
-    elseif type(plain(ability.extra)) == "number" then
-        local text = R.desc_text and R.desc_text(card.config.center.key, card.config.center.set) or ""
-        if not text:find("#1#%s*in%s*#") then ability.extra = scale_plain(ability.extra, factor) end
-    end
-    -- Consumables also keep a copy of their numbers here
-    if type(ability.consumeable) == "table" and ability.consumeable.extra ~= nil then ability.consumeable.extra = ability.extra end
+-- Numbers that must stay at least 1 (cards to select, the "4" in "1 in 4")
+local AT_LEAST_ONE = { max_highlighted = true, min_highlighted = true, odds = true }
+
+local function copy_config(t)
+    if type(t) ~= "table" then return t end
+    local out = {}
+    for k, v in pairs(t) do out[k] = copy_config(v) end
+    return out
 end
 
-local CONSUMABLE_SETS = { Tarot = true, Spectral = true }
+local function keys_of(list, field)
+    local out = {}
+    for _, v in ipairs(list or {}) do
+        local k = field and type(v) == "table" and v[field] or v
+        if type(k) == "string" then out[#out + 1] = k end
+    end
+    return out
+end
+
+-- What a card can turn into: enhancements, suits, seals, poker hands
+local function enhancements()
+    local list = keys_of(G.P_CENTER_POOLS and G.P_CENTER_POOLS.Enhanced, "key")
+    return #list > 0 and list or { "m_bonus", "m_mult", "m_wild", "m_glass", "m_steel", "m_stone", "m_gold", "m_lucky" }
+end
+local function suits()
+    local list = keys_of(SMODS.Suit and SMODS.Suit.obj_buffer)
+    return #list > 0 and list or { "Spades", "Hearts", "Clubs", "Diamonds" }
+end
+local function seals()
+    local list = keys_of(SMODS.Seal and SMODS.Seal.obj_buffer)
+    return #list > 0 and list or { "Gold", "Red", "Blue", "Purple" }
+end
+local function is_seal(v)
+    for _, s in ipairs(seals()) do if s == v then return true end end
+    return false
+end
+
+-- Every number is multiplied by the rolled factor (whole numbers stay whole)
+local function scale_all(t, factor)
+    for k, v in pairs(t) do
+        if type(v) == "table" and not getmetatable(v) then
+            scale_all(v, factor)
+        elseif type(plain(v)) == "number" then
+            local n = scale_plain(v, factor)
+            if AT_LEAST_ONE[k] and plain(v) >= 1 and n < 1 then n = 1 end
+            t[k] = n
+        end
+    end
+end
+
+-- A Voucher's or consumable's whole setup rolled: every number (amounts, slots, cards to
+-- select, odds), and what it turns cards into (enhancement, suit, seal) or levels up
+local function roll_card_numbers(card, option, seed)
+    local a = card.ability
+    local center = card.config.center
+    local factor = between(seed, range(option, 0.5, 4))
+    a.rnd_factor = factor
+    local cfg = copy_config(center.config or {})
+    scale_all(cfg, factor)
+    if type(cfg.mod_conv) == "string" and cfg.mod_conv:sub(1, 2) == "m_" then
+        cfg.mod_conv = pseudorandom_element(enhancements(), pseudoseed("rnd_enhance"))
+    end
+    if type(cfg.suit_conv) == "string" then
+        cfg.suit_conv = pseudorandom_element(suits(), pseudoseed("rnd_suit"))
+    end
+    if type(cfg.extra) == "string" and is_seal(cfg.extra) then
+        cfg.extra = pseudorandom_element(seals(), pseudoseed("rnd_seal"))
+    end
+    if type(cfg.hand_type) == "string" and G.handlist and #G.handlist > 0 then
+        cfg.hand_type = pseudorandom_element(G.handlist, pseudoseed("rnd_planet"))
+    end
+    a.rnd_config = cfg
+    -- The card's own copies: its extra, and (consumables) the setup the game reads
+    a.extra = copy_config(cfg.extra)
+    if a.consumeable ~= nil then a.consumeable = cfg end
+end
+
+local CONSUMABLE_SETS = { Tarot = true, Spectral = true, Planet = true }
 
 -- While a rolled card is shown or used, its center's numbers are the rolled ones, so the
 -- text and the base game's code (which read the center) match what was rolled
 function R.with_rolled_center(card, fn, ...)
     local center = card and card.config and card.config.center
     local a = card and card.ability
-    if not (center and center.config and a and a.rnd_card_rolled and a.extra ~= nil) then return fn(...) end
-    local saved = center.config.extra
-    center.config.extra = a.extra
+    local rolled = a and a.rnd_card_rolled and (a.rnd_config or (a.extra ~= nil and { extra = a.extra }))
+    if not (center and center.config and rolled) then return fn(...) end
+    local saved = center.config
+    if a.rnd_config then
+        center.config = a.rnd_config
+    else
+        -- Rolled by an older version: only its extra was rolled
+        center.config = copy_config(saved)
+        center.config.extra = a.extra
+    end
     local results = { n = 0 }
     local function keep(...) results = { n = select("#", ...), ... } end
     keep(pcall(fn, ...))
-    center.config.extra = saved
+    center.config = saved
     if not results[1] then error(results[2], 0) end
     return unpack(results, 2, results.n)
 end

@@ -11,10 +11,17 @@ local JOKER_ROWS = {
     { "behaviours", "Random scaling (grows, resets, stacks, decays)" },
     { "numbers", "Joker values", 0.5, 2 },
 }
+-- Settings saved by 1.15 still have the old narrow Voucher/consumable ranges
+if MOD.config and not MOD.config.rnd_wide_cards then
+    MOD.config.rnd_wide_cards = true
+    if MOD.config.vouchers_max == 1.5 then MOD.config.vouchers_max = 7 end
+    if MOD.config.consumables_max == 1.5 then MOD.config.consumables_max = 4 end
+end
+
 local RUN_ROWS = {
     { "prices", "Shop prices", 0.5, 1.5 },
-    { "vouchers", "Voucher values", 0.5, 1.5 },
-    { "consumables", "Tarot & Spectral values", 0.5, 1.5 },
+    { "vouchers", "Voucher values", 0.5, 7 },
+    { "consumables", "Tarot, Planet & Spectral", 0.5, 4 },
     { "blinds", "Blind scores", 0.75, 1.5 },
     { "hands", "Poker hand values", 0.5, 1.5 },
 }
@@ -144,6 +151,7 @@ end
 local NOTES = {
     "Min and Max multiply the normal value (1 = normal; type any number, negative too).",
     "Values roll when a card first appears; poker hands roll at the start of a run.",
+    "Tarots, Planets and Spectrals also roll what they turn cards into or level up.",
 }
 
 MOD.config_tab = function()
