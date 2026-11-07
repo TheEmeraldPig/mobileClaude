@@ -180,8 +180,41 @@ function EventManager:add_event(...)
     return add_event_ref(self, ...)
 end
 
+-- Multiplayer keeps its own copy of your money as text and reads it back with tonumber.
+-- Amulet/Talisman big numbers turn into text like "1,952", which tonumber can't read, and
+-- the next money change crashes. Money changes are kept as plain numbers, and the copy is
+-- cleaned of commas, so that can't happen.
+local function plain_money(mod)
+    if type(mod) == "table" and to_number then
+        local ok, n = pcall(to_number, mod)
+        if ok and type(n) == "number" then return n end
+    end
+    return mod
+end
+local function clean_multiplayer_money()
+    local game = rawget(_G, "PVP") and PVP.GAME or rawget(_G, "MP") and MP.GAME
+    if type(game) == "table" and type(game.real_money) == "string" then
+        game.real_money = game.real_money:gsub("[^%d%.%-eE]", "")
+    end
+end
+
+-- Multiplayer writes the copy back with tostring every time, so its reader also accepts
+-- numbers written with thousands commas ("1,952"); nothing else changes
+do
+    local tonumber_ref = tonumber
+    function tonumber(v, base, ...)
+        local n = tonumber_ref(v, base, ...)
+        if n == nil and base == nil and type(v) == "string" and v:find("^%s*%-?%d[%d,]*%.?%d*%s*$") then
+            n = tonumber_ref((v:gsub(",", "")))
+        end
+        return n
+    end
+end
+
 local ease_dollars_ref = ease_dollars
 function ease_dollars(mod, ...)
+    mod = plain_money(mod)
+    pcall(clean_multiplayer_money)
     money_seen = money_seen + 1
     if measuring > 0 then
         if type(mod) == "number" then measure_money = measure_money + mod end
