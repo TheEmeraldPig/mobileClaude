@@ -227,12 +227,58 @@ function Card:use_consumeable(...)
     return use_consumeable_ref(self, ...)
 end
 
+-- Vouchers whose "+1" is written into the base game's code instead of read from the card:
+-- the rest of the rolled amount is added after the Voucher applies
+local FIXED_ONE = {
+    v_overstock_norm = function(n) change_shop_size(n) end,
+    v_overstock_plus = function(n) change_shop_size(n) end,
+    v_crystal_ball = function(n) G.consumeables.config.card_limit = G.consumeables.config.card_limit + n end,
+    v_antimatter = function(n) G.jokers.config.card_limit = G.jokers.config.card_limit + n end,
+    v_paint_brush = function(n) G.hand:change_size(n) end,
+    v_palette = function(n) G.hand:change_size(n) end,
+}
+
 local apply_to_run_ref = Card.apply_to_run
 function Card:apply_to_run(center, ...)
     if self and self.ability and self.ability.rnd_card_rolled then
-        return R.with_rolled_center(self, apply_to_run_ref, self, center, ...)
+        local ret = R.with_rolled_center(self, apply_to_run_ref, self, center, ...)
+        local fix = FIXED_ONE[self.config.center.key]
+        local factor = self.ability.rnd_factor
+        if fix and type(factor) == "number" then
+            local extra = math.floor(factor + 0.5) - 1
+            if extra ~= 0 then
+                G.E_MANAGER:add_event(Event({ func = function() pcall(fix, extra) return true end }))
+            end
+        end
+        return ret
     end
     return apply_to_run_ref(self, center, ...)
+end
+
+-- The base game works out a card's description numbers here, before the description is
+-- built, so the rolled numbers are swapped in for this too
+local function replace_plus_one(node, amount, seen)
+    if type(node) ~= "table" or seen[node] then return end
+    seen[node] = true
+    if node.config and type(node.config.text) == "string" then
+        node.config.text = node.config.text:gsub("%+1%f[%D]", (amount < 0 and "" or "+") .. tostring(amount))
+    end
+    for _, child in ipairs(node) do replace_plus_one(child, amount, seen) end
+    for _, child in ipairs(node.nodes or {}) do replace_plus_one(child, amount, seen) end
+end
+
+local ability_table_ref = Card.generate_UIBox_ability_table
+function Card:generate_UIBox_ability_table(...)
+    if self.ability and self.ability.rnd_card_rolled then
+        local ret = R.with_rolled_center(self, ability_table_ref, self, ...)
+        -- Those Vouchers' text says "+1" outright; show the rolled amount
+        local factor = self.ability.rnd_factor
+        if FIXED_ONE[self.config.center.key] and type(factor) == "number" and type(ret) == "table" then
+            pcall(replace_plus_one, ret.main, math.floor(factor + 0.5), {})
+        end
+        return ret
+    end
+    return ability_table_ref(self, ...)
 end
 
 local function roll_other_cards(card)
