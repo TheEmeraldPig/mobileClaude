@@ -151,7 +151,7 @@ end
 local NOTES = {
     "Min and Max multiply the normal value (1 = normal; type any number, negative too).",
     "Values roll when a card first appears; poker hands roll at the start of a run.",
-    "Tarots, Planets and Spectrals also roll what they turn cards into or level up.",
+    "Tarots and Spectrals roll their numbers, like how many cards they select.",
 }
 
 MOD.config_tab = function()

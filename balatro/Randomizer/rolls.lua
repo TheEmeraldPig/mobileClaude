@@ -127,33 +127,6 @@ local function copy_config(t)
     return out
 end
 
-local function keys_of(list, field)
-    local out = {}
-    for _, v in ipairs(list or {}) do
-        local k = field and type(v) == "table" and v[field] or v
-        if type(k) == "string" then out[#out + 1] = k end
-    end
-    return out
-end
-
--- What a card can turn into: enhancements, suits, seals, poker hands
-local function enhancements()
-    local list = keys_of(G.P_CENTER_POOLS and G.P_CENTER_POOLS.Enhanced, "key")
-    return #list > 0 and list or { "m_bonus", "m_mult", "m_wild", "m_glass", "m_steel", "m_stone", "m_gold", "m_lucky" }
-end
-local function suits()
-    local list = keys_of(SMODS.Suit and SMODS.Suit.obj_buffer)
-    return #list > 0 and list or { "Spades", "Hearts", "Clubs", "Diamonds" }
-end
-local function seals()
-    local list = keys_of(SMODS.Seal and SMODS.Seal.obj_buffer)
-    return #list > 0 and list or { "Gold", "Red", "Blue", "Purple" }
-end
-local function is_seal(v)
-    for _, s in ipairs(seals()) do if s == v then return true end end
-    return false
-end
-
 -- Every number is multiplied by the rolled factor (whole numbers stay whole)
 local function scale_all(t, factor)
     for k, v in pairs(t) do
@@ -167,8 +140,9 @@ local function scale_all(t, factor)
     end
 end
 
--- A Voucher's or consumable's whole setup rolled: every number (amounts, slots, cards to
--- select, odds), and what it turns cards into (enhancement, suit, seal) or levels up
+-- A Voucher's or consumable's numbers rolled (amounts, slots, how many cards it selects,
+-- odds). What it turns cards into (enhancement, suit, seal) and which hand a Planet
+-- levels up stay the same
 local function roll_card_numbers(card, option, seed)
     local a = card.ability
     local center = card.config.center
@@ -176,18 +150,6 @@ local function roll_card_numbers(card, option, seed)
     a.rnd_factor = factor
     local cfg = copy_config(center.config or {})
     scale_all(cfg, factor)
-    if type(cfg.mod_conv) == "string" and cfg.mod_conv:sub(1, 2) == "m_" then
-        cfg.mod_conv = pseudorandom_element(enhancements(), pseudoseed("rnd_enhance"))
-    end
-    if type(cfg.suit_conv) == "string" then
-        cfg.suit_conv = pseudorandom_element(suits(), pseudoseed("rnd_suit"))
-    end
-    if type(cfg.extra) == "string" and is_seal(cfg.extra) then
-        cfg.extra = pseudorandom_element(seals(), pseudoseed("rnd_seal"))
-    end
-    if type(cfg.hand_type) == "string" and G.handlist and #G.handlist > 0 then
-        cfg.hand_type = pseudorandom_element(G.handlist, pseudoseed("rnd_planet"))
-    end
     a.rnd_config = cfg
     -- The card's own copies: its extra, and (consumables) the setup the game reads
     a.extra = copy_config(cfg.extra)
@@ -205,6 +167,11 @@ function R.with_rolled_center(card, fn, ...)
     if not (center and center.config and rolled) then return fn(...) end
     local saved = center.config
     if a.rnd_config then
+        -- Cards rolled by 1.16.0 may have rolled what they turn cards into; that goes back
+        for _, k in ipairs({ "mod_conv", "suit_conv", "hand_type" }) do
+            if saved[k] ~= nil then a.rnd_config[k] = saved[k] end
+        end
+        if type(saved.extra) == "string" then a.rnd_config.extra, a.extra = saved.extra, saved.extra end
         center.config = a.rnd_config
     else
         -- Rolled by an older version: only its extra was rolled
