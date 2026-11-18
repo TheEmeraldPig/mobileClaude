@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <RootNamespace>BuyableBuffs</RootNamespace>
+        <AssemblyName>BuyableBuffs</AssemblyName>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <Optimize>false</Optimize>
+        <DebugType>embedded</DebugType>
+        <!-- Point this at your BTD6 install, or pass -p:BloonsTD6="D:\Games\BloonsTD6" -->
+        <BloonsTD6 Condition="'$(BloonsTD6)' == ''">C:\Program Files (x86)\Steam\steamapps\common\BloonsTD6</BloonsTD6>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Reference Include="$(BloonsTD6)\MelonLoader\net6\*.dll" Private="false" />
+        <Reference Include="$(BloonsTD6)\MelonLoader\Il2CppAssemblies\*.dll" Private="false" />
+        <Reference Include="$(BloonsTD6)\Mods\Btd6ModHelper.dll" Private="false" />
+    </ItemGroup>
+
+    <!-- Copy the built mod straight into the game's Mods folder -->
+    <Target Name="CopyToMods" AfterTargets="Build" Condition="Exists('$(BloonsTD6)\Mods')">
+        <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(BloonsTD6)\Mods" />
+    </Target>
+</Project>
