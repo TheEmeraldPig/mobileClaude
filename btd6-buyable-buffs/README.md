@@ -1,66 +1,69 @@
 # Buyable Buffs (BTD6 mod)
 
-A [BTD6 Mod Helper](https://github.com/gurrenm3/BTD-Mod-Helper) mod. Select any placed tower and a
-**BUFFS** button appears at the top of the screen. It opens a shop where you spend in-game cash on buffs
-for that tower. Bought buffs:
+A [BTD6 Mod Helper](https://github.com/gurrenm3/BTD-Mod-Helper) mod that puts every buff in the game in the
+tower shop. Buy one like any tower, then drag it onto one of your towers, and that tower gets the real buff
+for the rest of the game.
 
-- last for the rest of the game,
-- stay on after upgrades, hero level-ups and paragon degree changes (they're put back on the new model),
-- are saved with the tower, so they come back when you continue a saved game,
-- stack with the normal game buffs (Village, Alchemist and so on), which still work on top.
+- **Every buff that one thing gives to another tower**: Monkey Village buffs (Jungle Drums, Primary Training,
+  Radar Scanner, MIB...), Alchemist brews, Shinobi Tactics, Energizer, Sub Commander, Trade Empire, Elite Sniper,
+  Banana Central, Call to Arms, Homeland Defense, Overclock and Ultraboost, hero buffs (Pat Fusty, Obyn, Striker,
+  Gwendolin, Brickell, Etienne, Benjamin...), Geraldo's items, and any newer ones. The mod isn't working from a
+  list I typed. When the game starts, it goes through each buff icon in the game and finds the upgrade, hero
+  level or item that gives that buff, so new buffs from game updates show up too.
+- **The shop icon is the buff's own icon**, the one you see on a buffed tower.
+- **Price** is the price of the upgrade that gives the buff (for heroes, the hero's price; for Geraldo
+  items, the item's price). The usual difficulty price changes apply.
+- **The description** is the game's own text for that upgrade or item. It's shown in the upgrade/info screen
+  only.
+- **Exact buff, kept forever.** The bought buff is the game's own buff, with the same numbers, the buff icon
+  on the tower and the same stacking. It stays through upgrades and is saved with the game.
+- **Stacking follows the game.** Buffs that stack in the game (like Shinobi Tactics or Ultraboost) can be
+  dropped on the same tower again, up to the game's limit. Ones that don't stack are refused, and you get your
+  money back.
 
-## What you can buy
+## How it works
 
-**Stat buffs** cover every stat that a buff in the game changes: attack speed, range, damage, pierce,
-pierce %, MOAB/ceramic/boss/fortified/lead bonus damage, burn/poison damage, projectile speed, distance and
-size, ability cooldown, income, camo detection, popping lead/black/white/frozen/purple, and ignoring
-line of sight.
+A bought buff is a hidden, unselectable "carrier" that sits on the tower you dropped it on. It holds the
+same behavior the real upgrade uses, shrunk so it only reaches that tower. The game's own code applies the
+buff. The details for each kind of buff:
 
-**Tower, hero and power buffs** are buyable versions of the buffs other things give in the normal game.
-They're built from the same stat effects:
+- **Auras** (Village buffs, Shinobi, Energizer...) are copied as they are. Tower-type limits are removed, so
+  the buff works on whatever tower you choose.
+- **Ability buffs** (Call to Arms, Homeland Defense, Rallying Roar...) are cast on that tower again
+  whenever they wear off, so they're always active.
+- **Brews** are thrown at that tower over and over by the hidden carrier.
+- **Overclock / Ultraboost** normally target a tower you pick, so their attack speed boost is given as a
+  permanent aura with the same numbers and icon.
+- **Geraldo's items** (Sharpening Stone, Jar of Pickles, Fertilizer) have their numbers moved onto the
+  matching aura.
 
-- Towers: Village Range, Jungle Drums, Primary Training, Primary Mentoring, Radar Scanner, MIB,
-  Homeland Defense, Call To Arms, Acidic Mixture Dip, Berserker Brew, Stronger Stimulant, Overclock,
-  Ultraboost, Shinobi Tactics, Trade Empire, Banana Central, Druidic Reach, Embrittlement
-- Heroes: Rallying Roar, Heat It Up, Nature's Ward, Artillery Command, Bank Hack, UAV Uplink,
-  Blood Sacrifice, Naval Tactics, Sharpening Stone, Jar of Pickles, See-Through Glasses, Spirit Brew
-- Powers and other: Monkey Boost, Paragon Power Totem, and some Monkey Knowledge-style buffs
+If you drop a buff somewhere with no tower, you get your money back. If you sell a buffed tower, its buffs
+are sold with it.
 
-The numbers are close to the game's but not exact copies, and buffs that only last a while in the
-normal game (Homeland Defense, Overclock, Monkey Boost...) are permanent here, so they cost more. Each
-row in the shop lists exactly what the buff does. To add a buff, or change its price or effects, edit
-`Buffs.cs`. The effects themselves are in `Effects.cs`.
-
-On/off buffs (camo, popping a bloon type) can be bought once. Stacking buffs can be bought up to
-**Max Stacks** times (default 5; Ultraboost goes to 10 and Shinobi Tactics to 20). The mod's settings in
-Mod Helper also have **Price Multiplier** and **Prices Rise With Stacks** (on by default: the nth stack
-costs n × the base price).
+When the game starts, the MelonLoader console lists every buff that was found, its source, price and
+whether it stacks. It also lists the icons that were skipped because nothing gives that buff to another
+tower.
 
 ## Installing
 
 1. Install [MelonLoader](https://github.com/LavaGang/MelonLoader/releases) into BTD6, then put
    [`Btd6ModHelper.dll`](https://github.com/gurrenm3/BTD-Mod-Helper/releases) in the game's `Mods` folder.
 2. Start BTD6 once, wait for the main menu, and close it.
-3. Double-click **`Install.bat`** in this folder. It finds the game, downloads the .NET SDK if you don't
-   have it, builds the mod and puts `BuyableBuffs.dll` in `Mods`.
+3. Either copy a prebuilt `BuyableBuffs.dll` into `Mods`, or double-click **`Install.bat`** in this folder. It
+   builds the mod against your copy of the game and puts it in `Mods`.
 
 ## Building by hand
-
-You need BTD6 with MelonLoader and BTD6 Mod Helper installed, plus the .NET 6 SDK or newer.
 
 ```bash
 dotnet build -p:BloonsTD6="C:\Program Files (x86)\Steam\steamapps\common\BloonsTD6"
 ```
 
-If you leave out `-p:BloonsTD6=...`, the default Steam path above is used. The build copies
-`BuyableBuffs.dll` into the game's `Mods` folder. You can also make an empty mod with Mod Helper's
-in-game **Mod Sources → Create Mod** and drop these `.cs` files into it.
+## Files
 
-## Notes
+- `BuffTower.cs`: one shop entry per buff icon in the game.
+- `Discovery.cs`: finds which upgrade, hero level or item gives each buff, and its name, description and price.
+- `Carrier.cs`: builds the hidden carrier and attaches it to the tower you drop it on.
+- `Reflect.cs`: reads game fields by name, so a renamed field in a game update is skipped instead of crashing.
 
-- Run the game at least once with MelonLoader first, so that `MelonLoader/Il2CppAssemblies` exists.
-- `ModHelperData.WorksOnVersion` is set to 50.0. Ninja Kiwi renames internals now and then, so if a
-  game update breaks the build, the usual culprits are field names in `Effects.cs`, such as
-  `AbilityModel.Cooldown` or the `DamageModifierForTagModel` constructor.
-- Only use this in single-player. Don't use it in co-op, races, odysseys or other leaderboard modes, where
-  modding can get your account flagged.
+Only use this in single-player. Using mods in co-op, races, odysseys or other leaderboard modes can get your
+account flagged.
