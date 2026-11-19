@@ -1,78 +1,80 @@
 using System.Collections.Generic;
-using System.Reflection;
+using System.Linq;
 using BTD_Mod_Helper.Api;
-using BTD_Mod_Helper.Api.Enums;
 using BTD_Mod_Helper.Api.Towers;
+using BTD_Mod_Helper.Extensions;
+using Il2CppAssets.Scripts.Models;
 using Il2CppAssets.Scripts.Models.Towers;
 using Il2CppAssets.Scripts.Models.TowerSets;
 using Il2CppAssets.Scripts.Simulation.Towers;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using Il2CppNinjaKiwi.Common.ResourceUtils;
 
 namespace BuyableBuffs;
 
 /// <summary>
-/// One shop entry per buff in the game. There's one for every buff icon BTD6 has; the ones that no tower, hero or
-/// Geraldo item gives to other towers are left out of the shop. You buy it like a tower and drop it on the tower to
-/// buff.
+/// A buff in the tower shop (Support section). You buy it like a tower and drop it on the tower to buff; it then
+/// disappears and the tower keeps the buff.
 /// </summary>
 public class BuffTower : ModTower
 {
-    public const string Prefix = "BuyableBuffs-Buff_";
-
-    private readonly string iconName;
-    private readonly string iconGuid;
+    private readonly BuffLine? line;
 
     public BuffTower()
     {
-        iconName = "";
-        iconGuid = "";
     }
 
-    public BuffTower(string iconName, string iconGuid)
-    {
-        this.iconName = iconName;
-        this.iconGuid = iconGuid;
-    }
+    public BuffTower(BuffLine line) => this.line = line;
 
-    /// <summary>Makes one BuffTower per "BuffIcon..." sprite in the game.</summary>
     public override IEnumerable<ModContent> Load()
     {
-        foreach (var field in typeof(VanillaSprites).GetFields(BindingFlags.Public | BindingFlags.Static))
-        {
-            if (field.IsLiteral && field.Name.StartsWith("BuffIcon") && field.GetValue(null) is string guid)
-                yield return new BuffTower(field.Name, guid);
-        }
+        foreach (var l in Buffs.Lines) yield return new BuffTower(l);
     }
 
-    public override string Name => "Buff_" + iconName;
+    public override string Name => "Buff_" + (line?.Id ?? "");
 
-    internal BuffInfo? Info => iconName == "" ? null : Discovery.Get(iconName, iconGuid);
+    internal BuffLine? Line => line;
+
+    private bool Found => line != null && Buffs.Levels(line).Count > 0;
 
     public override TowerSet TowerSet => TowerSet.Support;
 
-    public override string BaseTower => Info?.SourceTower?.baseId is { Length: > 0 } id ? id : "DartMonkey";
+    public override string BaseTower => "DartMonkey";
 
-    public override int Cost => Info?.Cost ?? 0;
+    public override int Cost => Buffs.Price(1);
 
-    public override bool DontAddToShop => Info == null;
+    public override bool DontAddToShop => !Found;
 
     public override bool IncludeInMonkeyTeams => false;
 
-    public override string DisplayName => Info?.Name ?? iconName;
+    public override string DisplayName => line?.Name ?? "";
 
-    // The real in-game description of the upgrade (or item) that gives this buff.
-    // Mod Helper shows it in the tower's upgrade/info screen.
-    public override string Description => Info?.Description ?? "";
+    // Shown in the upgrade/info screen: what every level does, with the numbers.
+    public override string Description => line == null ? "" : Buffs.Describe(line);
 
-    public override SpriteReference IconReference => CreateSpriteReference(iconGuid);
+    public override SpriteReference IconReference => CreateSpriteReference(line == null ? "" : Icons.Guid(line));
 
-    public override SpriteReference PortraitReference => CreateSpriteReference(iconGuid);
-
-    public override TowerModel GetBaseTowerModel(params int[] tiers) => Carrier.BuildModel(Info, Id);
+    public override SpriteReference PortraitReference => IconReference;
 
     public override void ModifyBaseTowerModel(TowerModel towerModel)
     {
+        // nothing to shoot with; it only needs to be droppable on top of another tower
+        var keep = R.Items(R.Get(towerModel, "behaviors"))
+            .Where(b => R.TypeName(b) is "DisplayModel" or "CreateSoundOnTowerPlaceModel")
+            .Cast<Model>()
+            .ToArray();
+        R.Set(towerModel, "behaviors", new Il2CppReferenceArray<Model>(keep));
+        R.Set(towerModel, "range", 1f);
+        R.Set(towerModel, "footprint", R.New("Assets.Scripts.Models.Towers.Behaviors.CircleFootprintModel",
+            new Dictionary<string, object?>
+            {
+                ["name"] = "BuyableBuffsFootprint",
+                ["radius"] = 0f,
+                ["doesntBlockTowerPlacement"] = true,
+                ["ignoresPlacementCheck"] = true,
+                ["ignoresTowerOverlap"] = true
+            }));
     }
 
-    public override void OnPlaced(Tower tower) => Carrier.OnPlaced(tower);
+    public override void OnPlaced(Tower tower) => Placement.OnPlaced(tower);
 }

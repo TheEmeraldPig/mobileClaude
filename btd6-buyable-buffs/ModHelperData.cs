@@ -3,7 +3,7 @@ namespace BuyableBuffs;
 public static class ModHelperData
 {
     public const string WorksOnVersion = "50.0";
-    public const string Version = "2.0.0";
+    public const string Version = "3.0.0";
     public const string Name = "Buyable Buffs";
 
     public const string Description =

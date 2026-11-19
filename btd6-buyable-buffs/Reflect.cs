@@ -307,3 +307,71 @@ internal static class Il2CppListExt
         return list;
     }
 }
+
+internal static class R2
+{
+    /// <summary>Calls a method, passing the first argument by position and the rest by parameter name
+    /// (anything not given keeps its default).</summary>
+    public static object? CallNamed(object? o, string method, object? first, Dictionary<string, object?> named)
+    {
+        if (o == null) return null;
+        var typed = R.Typed(o);
+        var m = typed.GetType()
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy)
+            .Where(x => x.Name == method && x.GetParameters().Length >= 1)
+            .OrderByDescending(x => x.GetParameters().Count(p => named.ContainsKey(p.Name ?? "")))
+            .FirstOrDefault();
+        if (m == null) return null;
+        var ps = m.GetParameters();
+        var args = new object?[ps.Length];
+        args[0] = first;
+        for (var i = 1; i < ps.Length; i++)
+        {
+            if (ps[i].Name != null && named.TryGetValue(ps[i].Name!, out var v))
+                args[i] = System.Convert.ChangeType(v, ps[i].ParameterType);
+            else if (ps[i].HasDefaultValue)
+                args[i] = ps[i].DefaultValue;
+            else
+                args[i] = ps[i].ParameterType.IsValueType ? Activator.CreateInstance(ps[i].ParameterType) : null;
+        }
+        return m.Invoke(typed, args);
+    }
+
+    /// <summary>Adds an item to an array field such as "behaviors", keeping the array's real type.</summary>
+    public static void Append(object? o, string field, object item)
+    {
+        if (o == null) return;
+        var typed = R.Typed(o);
+        var prop = typed.GetType().GetProperty(field, BindingFlags.Public | BindingFlags.Instance);
+        if (prop == null) return;
+        var old = prop.GetValue(typed);
+        var items = R.Items(old);
+        var type = prop.PropertyType;
+        object array;
+        if (type.IsArray)
+        {
+            var a = Array.CreateInstance(type.GetElementType()!, items.Count + 1);
+            for (var i = 0; i < items.Count; i++) a.SetValue(items[i], i);
+            a.SetValue(item, items.Count);
+            array = a;
+        }
+        else
+        {
+            array = Activator.CreateInstance(type, (long) (items.Count + 1))!;
+            var indexer = type.GetProperties().First(p => p.GetIndexParameters().Length == 1);
+            var elementType = indexer.PropertyType;
+            var indexType = indexer.GetIndexParameters()[0].ParameterType;
+            object Index(int i) => System.Convert.ChangeType(i, indexType);
+            for (var i = 0; i < items.Count; i++) indexer.SetValue(array, Cast(items[i], elementType), new[] { Index(i) });
+            indexer.SetValue(array, Cast(item, elementType), new[] { Index(items.Count) });
+        }
+        prop.SetValue(typed, array);
+        R.Call(typed, "AddChildDependant", item);
+    }
+
+    private static object Cast(object item, Type to)
+    {
+        if (to.IsInstanceOfType(item) || item is not Il2CppObjectBase b) return item;
+        return Activator.CreateInstance(to, b.Pointer)!;
+    }
+}

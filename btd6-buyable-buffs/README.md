@@ -1,48 +1,45 @@
 # Buyable Buffs (BTD6 mod)
 
-A [BTD6 Mod Helper](https://github.com/gurrenm3/BTD-Mod-Helper) mod that puts every buff in the game in the
-tower shop. Buy one like any tower, then drag it onto one of your towers, and that tower gets the real buff
-for the rest of the game.
+A [BTD6 Mod Helper](https://github.com/gurrenm3/BTD-Mod-Helper) mod that puts the game's tower buffs in the
+tower shop (Support section). Buy one like a tower and drop it on one of your towers, and that tower keeps the
+buff for the rest of the game.
 
-- **Every buff that one thing gives to another tower**: Monkey Village buffs (Jungle Drums, Primary Training,
-  Radar Scanner, MIB...), Alchemist brews, Shinobi Tactics, Energizer, Sub Commander, Trade Empire, Elite Sniper,
-  Banana Central, Call to Arms, Homeland Defense, Overclock and Ultraboost, hero buffs (Pat Fusty, Obyn, Striker,
-  Gwendolin, Brickell, Etienne, Benjamin...), Geraldo's items, and any newer ones. The mod isn't working from a
-  list I typed. When the game starts, it goes through each buff icon in the game and finds the upgrade, hero
-  level or item that gives that buff, so new buffs from game updates show up too.
-- **The shop icon is the buff's own icon**, the one you see on a buffed tower.
-- **Price** is the price of the upgrade that gives the buff (for heroes, the hero's price; for Geraldo
-  items, the item's price). The usual difficulty price changes apply.
-- **The description** is the game's own text for that upgrade or item. It's shown in the upgrade/info screen
-  only.
-- **Exact buff, kept forever.** The bought buff is the game's own buff, with the same numbers, the buff icon
-  on the tower and the same stacking. It stays through upgrades and is saved with the game.
-- **Stacking follows the game.** Buffs that stack in the game (like Shinobi Tactics or Ultraboost) can be
-  dropped on the same tower again, up to the game's limit. Ones that don't stack are refused, and you get your
-  money back.
+## Buffs and levels
 
-## How it works
+Each buff follows an upgrade path. Dropping the same buff on the same tower again raises it one level:
 
-A bought buff is a hidden, unselectable "carrier" that sits on the tower you dropped it on. It holds the
-same behavior the real upgrade uses, shrunk so it only reaches that tower. The game's own code applies the
-buff. The details for each kind of buff:
+| Buff | Levels |
+| --- | --- |
+| Village Drums | Jungle Drums, Primary Training, Primary Mentoring, Primary Expertise |
+| Village Intelligence | Radar Scanner, Monkey Intelligence Bureau, Call to Arms, Homeland Defense |
+| Alchemist Brew | Acidic Mixture Dip, Berserker Brew, Stronger Stimulant, Permanent Brew |
+| Overclock | Overclock, Ultraboost |
+| Shinobi Tactics | 1 to 5 stacks |
+| Energizer | Energizer |
+| Trade Empire | Favored Trades, Trade Empire |
+| Elite Sniper | Elite Sniper |
+| Banana Central | Banana Central |
+| Rallying Roar (Pat Fusty) | Rallying Roar, Rawr+ |
+| Heat It Up (Gwendolin) | Heat It Up, +range, +damage |
+| Nature's Ward (Obyn) | levels 4, 8 and 15 |
+| Bomb Expert (Striker Jones) | Bomb Expert, Artillery Command, Artillery Command 2 |
+| Sharpening Stone (Geraldo) | 1 level |
+| Jar of Pickles (Geraldo) | 1 level |
 
-- **Auras** (Village buffs, Shinobi, Energizer...) are copied as they are. Tower-type limits are removed, so
-  the buff works on whatever tower you choose.
-- **Ability buffs** (Call to Arms, Homeland Defense, Rallying Roar...) are cast on that tower again
-  whenever they wear off, so they're always active.
-- **Brews** are thrown at that tower over and over by the hidden carrier.
-- **Overclock / Ultraboost** normally target a tower you pick, so their attack speed boost is given as a
-  permanent aura with the same numbers and icon.
-- **Geraldo's items** (Sharpening Stone, Jar of Pickles, Fertilizer) have their numbers moved onto the
-  matching aura.
+Every level costs the same: level 1 is $1,000, level 2 is $2,000, and so on. The shop price covers level 1, and
+dropping it again charges the rest.
 
-If you drop a buff somewhere with no tower, you get your money back. If you sell a buffed tower, its buffs
-are sold with it.
+The numbers come from the game itself. The tower's info screen lists each level with its exact percentages,
+for example "+15% attack speed, +10% range". To change the buffs or prices, edit the list at the top of
+`Buffs.cs`.
 
-When the game starts, the MelonLoader console lists every buff that was found, its source, price and
-whether it stacks. It also lists the icons that were skipped because nothing gives that buff to another
-tower.
+## How the buff is given
+
+The buff is a mutator put directly on the tower, the same way Geraldo's items, brews and Village auras buff a
+tower. It shows the buff's icon on the tower, is re-applied after every upgrade, never runs out, and is saved
+with the game. The item you dropped disappears.
+
+When the game starts, the MelonLoader console lists every buff and level it found, with their effects.
 
 ## Installing
 
@@ -60,9 +57,10 @@ dotnet build -p:BloonsTD6="C:\Program Files (x86)\Steam\steamapps\common\BloonsT
 
 ## Files
 
-- `BuffTower.cs`: one shop entry per buff icon in the game.
-- `Discovery.cs`: finds which upgrade, hero level or item gives each buff, and its name, description and price.
-- `Carrier.cs`: builds the hidden carrier and attaches it to the tower you drop it on.
+- `Buffs.cs`: the list of buffs and their levels, and how the game's numbers become stat changes.
+- `BuffTower.cs`: the shop item.
+- `BuffMutator.cs`: the buff on the tower.
+- `Placement.cs`: what happens when you drop a buff on a tower.
 - `Reflect.cs`: reads game fields by name, so a renamed field in a game update is skipped instead of crashing.
 
 Only use this in single-player. Using mods in co-op, races, odysseys or other leaderboard modes can get your
