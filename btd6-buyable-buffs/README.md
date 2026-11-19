@@ -36,7 +36,15 @@ On/off buffs (camo, popping a bloon type) can be bought once. Stacking buffs can
 Mod Helper also have **Price Multiplier** and **Prices Rise With Stacks** (on by default: the nth stack
 costs n × the base price).
 
-## Building
+## Installing
+
+1. Install [MelonLoader](https://github.com/LavaGang/MelonLoader/releases) into BTD6, then put
+   [`Btd6ModHelper.dll`](https://github.com/gurrenm3/BTD-Mod-Helper/releases) in the game's `Mods` folder.
+2. Start BTD6 once, wait for the main menu, and close it.
+3. Double-click **`Install.bat`** in this folder. It finds the game, downloads the .NET SDK if you don't
+   have it, builds the mod and puts `BuyableBuffs.dll` in `Mods`.
+
+## Building by hand
 
 You need BTD6 with MelonLoader and BTD6 Mod Helper installed, plus the .NET 6 SDK or newer.
 
